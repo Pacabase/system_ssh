@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - run: dart pub get
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart analyze --fatal-infos
+      - run: dart pub publish --dry-run
+      # The lowest versions pubspec.yaml allows; test's own dependencies have no working lowest set.
+      - run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints
+      - run: dart analyze --fatal-infos && dart test --exclude-tags integration
+
+  # The oldest supported SDK on each OS; integration runs the newest.
+  unit:
+    name: unit (${{ matrix.os }}, 3.5)
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+        with:
+          sdk: '3.5'
+      - run: dart pub get
+      - run: dart test --exclude-tags integration
+
+  # Real ssh against a real sshd; each image ships its own OpenSSH.
+  integration:
+    name: integration (${{ matrix.os }})
+    needs: [analyze, unit]
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04, macos-15, macos-26, windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    env:
+      SSH_TEST_PORT: 2222
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start sshd
+        id: sshd
+        uses: ./.github/actions/sshd
+        with:
+          port: ${{ env.SSH_TEST_PORT }}
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - run: dart pub get
+      - run: ssh -V
+      # Git for Windows has an ssh too; the tests must run Windows' own OpenSSH.
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: if ((Get-Command ssh).Source -notlike "$env:windir\System32\OpenSSH\*") { throw (Get-Command ssh).Source }
+      # The unit job runs the oldest SDK; this is the newest.
+      - run: dart test --exclude-tags integration
+      # --run-skipped fails loudly if sshd's settings never reached the tests.
+      - run: dart test --tags integration --run-skipped
+      - name: Show sshd log
+        if: failure() && steps.sshd.outputs.log
+        shell: bash
+        env:
+          LOG: ${{ steps.sshd.outputs.log }}
+        run: cat "$LOG"
+
+  # The one required check, so the matrix can change without touching branch rules.
+  ci:
+    if: always()
+    needs: [analyze, unit, integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
