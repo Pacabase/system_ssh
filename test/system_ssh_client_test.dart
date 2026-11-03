@@ -34,7 +34,7 @@ void main() {
     Future<SshTunnel> open({
       SshTarget target = server,
       String remoteHost = 'db.example.com',
-    }) =>
+    }) async =>
         openSystemTunnel(
           target,
           remoteHost: remoteHost,

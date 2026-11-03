@@ -45,9 +45,9 @@ jobs:
           sdk: '3.5'
       - run: dart pub get
       - run: dart test --exclude-tags integration
-      # The lowest dependency versions pubspec.yaml allows.
+      # The lowest versions pubspec.yaml allows; test's own dependencies have no working lowest set.
       - if: runner.os == 'Linux'
-        run: dart pub downgrade && dart analyze && dart test --exclude-tags integration
+        run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints && dart analyze --fatal-infos && dart test --exclude-tags integration
 
   # Real ssh against a real sshd.
   integration:
