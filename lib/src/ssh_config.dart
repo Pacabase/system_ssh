@@ -18,7 +18,7 @@ Future<Map<String, String>> resolveConfig(
   unawaited(abortTrigger?.then((_) => aborted.complete(), onError: (_) {}));
 
   final process =
-      await startDirect([executable, '-G', ...destinationArguments(server)]);
+      await startWatched([executable, '-G', ...destinationArguments(server)]);
   unawaited(process.stderr.drain<void>());
   final output = process.stdout
       .transform(const Utf8Decoder(allowMalformed: true))
@@ -33,7 +33,7 @@ Future<Map<String, String>> resolveConfig(
 
     return code == 0 ? parseConfig(await output) : const {};
   } on TimeoutException {
-    // A `Match exec` in ~/.ssh/config can hang; it must not outlive the connect.
+    // A `Match exec` in ~/.ssh/config can hang; neither it nor ssh may outlive the connect.
     process.kill();
     return const {};
   } on SshTunnelAbortedException {

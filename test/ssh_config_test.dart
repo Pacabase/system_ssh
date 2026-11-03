@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:system_ssh/src/ssh_config.dart';
 import 'package:system_ssh/system_ssh.dart';
@@ -14,11 +15,40 @@ void main() {
 
     setUp(() async => fake = await FakeSsh.create());
 
-    test('throws SshNotFoundException when ssh is missing', () async {
-      await expectLater(
-        resolveConfig(server, executable: '/nonexistent/ssh'),
-        throwsA(isA<SshNotFoundException>()),
+    test(
+      'reads nothing when ssh is missing, so the tunnel reports it',
+      skip: Platform.isWindows ? 'Windows fails at start instead' : null,
+      () async {
+        expect(
+          await resolveConfig(server, executable: '/nonexistent/ssh'),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      'throws SshNotFoundException when ssh is missing',
+      skip: Platform.isWindows ? null : '/bin/sh reports it as exit code 127',
+      () async {
+        await expectLater(
+          resolveConfig(server, executable: r'C:\nonexistent\ssh.exe'),
+          throwsA(isA<SshNotFoundException>()),
+        );
+      },
+    );
+
+    test('a timeout also stops what a hung ssh -G started', () async {
+      fake.hangOnConfigWithChild();
+
+      final config = resolveConfig(
+        server,
+        executable: fake.path,
+        timeout: const Duration(seconds: 1),
       );
+      final childPid = await fake.configChildPid;
+
+      expect(await config, isEmpty);
+      expect(await stops(childPid), isTrue);
     });
 
     test('runs ssh -G for the destination', () async {

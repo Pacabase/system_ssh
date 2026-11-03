@@ -108,6 +108,9 @@ Future<void> _ssh(String directory, List<String> arguments) async {
     switch (read('config_mode')) {
       case 'hang':
         return _run(['hang']);
+      case 'hang-with-child':
+        return _run(
+            ['record:${file('config_children').path}', 'spawn', 'hang']);
       case 'fail':
         return _run(['err:fake ssh: -G failed', 'exit:1']);
     }

@@ -37,6 +37,10 @@ final class FakeSsh {
   /// Has `ssh -G` hang.
   void hangOnConfig() => _file('config_mode').writeAsStringSync('hang');
 
+  /// Has `ssh -G` start a child, as a `Match exec` does, then hang.
+  void hangOnConfigWithChild() =>
+      _file('config_mode').writeAsStringSync('hang-with-child');
+
   /// Has `ssh -G` fail.
   void failConfig() => _file('config_mode').writeAsStringSync('fail');
 
@@ -52,6 +56,14 @@ final class FakeSsh {
 
   /// The pid of `ssh -G`, once it has started.
   Future<int> get configPid => eventually(() => _pid('config_pid'));
+
+  /// The pid of the child [hangOnConfigWithChild] makes `ssh -G` start.
+  Future<int> get configChildPid => eventually(() {
+        final file = _file('config_children');
+        return file.existsSync()
+            ? file.readAsLinesSync().map(int.tryParse).elementAtOrNull(1)
+            : null;
+      });
 
   /// The arguments of each tunnel attempt, in order.
   List<List<String>> get attempts => [
@@ -72,8 +84,9 @@ final class FakeSsh {
   }
 
   void _dispose() {
-    final pids = _file('pids');
-    if (pids.existsSync()) {
+    for (final pids in [_file('pids'), _file('config_children')]) {
+      if (!pids.existsSync()) continue;
+
       for (final pid in pids.readAsLinesSync().map(int.tryParse).nonNulls) {
         Process.killPid(pid, ProcessSignal.sigkill);
       }
