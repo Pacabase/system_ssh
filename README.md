@@ -74,7 +74,13 @@ by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it started.
 
 ## Platforms
 
-Linux, macOS and Windows 10 1809 or later, with OpenSSH 7.6 or later.
+Tested in CI against a real `sshd`, with each runner's own OpenSSH:
+
+| Runner | OpenSSH |
+|---|---|
+| Ubuntu 22.04, 24.04, 26.04 | 8.9, 9.6, 10.2 |
+| macOS 15, 26 | 9.9, 10.3 |
+| Windows Server 2022, 2025 | 9.5 |
 
 ## Testing
 
