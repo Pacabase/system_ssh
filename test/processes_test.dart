@@ -164,54 +164,6 @@ void main() {
     },
   );
 
-  group('startDirect', () {
-    Future<Process> start(List<String> steps) async {
-      final process = await startDirect((await fakeCommand(steps)).arguments);
-      addTearDown(process.kill);
-      return process;
-    }
-
-    test("passes the command's output and exit code through", () async {
-      final process = await start(['out:3', 'exit:3']);
-
-      expect(await process.stdout.expand((chunk) => chunk).toList(), [0, 0, 0]);
-      expect(await exitCodeOf(process), 3);
-    });
-
-    test('kill stops the command', () async {
-      final process = await start(['hang']);
-
-      process.kill();
-
-      expect(await exitCodeOf(process), terminated);
-    });
-
-    test(
-      'kill also stops what the command started',
-      skip: Platform.isWindows ? null : 'only Windows runs it in a job',
-      () async {
-        final command = await fakeCommand(['spawn', 'hang']);
-        final process = await startDirect(command.arguments);
-        addTearDown(process.kill);
-        final childPid = await command.childPid;
-
-        process.kill();
-
-        expect(await stops(childPid), isTrue);
-      },
-    );
-
-    test('throws SshNotFoundException for a command that does not exist',
-        () async {
-      await expectLater(
-        startDirect([
-          Platform.isWindows ? r'C:\nonexistent\ssh.exe' : '/nonexistent/ssh',
-        ]),
-        throwsA(isA<SshNotFoundException>()),
-      );
-    });
-  });
-
   group('resolveExecutable', () {
     for (final executable in [
       '/usr/bin/ssh',

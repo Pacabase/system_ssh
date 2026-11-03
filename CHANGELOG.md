@@ -1,3 +1,8 @@
+## 0.1.1
+
+- `ssh -G` also stops when your process dies, and with it any `Match exec`
+  command it started, on every platform.
+
 ## 0.1.0
 
 - `SystemSshClient.openTunnel` forwards a free `127.0.0.1` port through the

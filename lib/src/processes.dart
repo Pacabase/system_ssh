@@ -12,14 +12,6 @@ Future<Process> startWatched(List<String> command) => _start(
           : Process.start('/bin/sh', ['-c', _dieWithParent, 'sh', ...command]),
     );
 
-/// Starts [command] as is, but on Windows in a job, so [Process.kill] also
-/// stops what it started.
-Future<Process> startDirect(List<String> command) => _start(
-      () => Platform.isWindows
-          ? startInJob(command)
-          : Process.start(command.first, command.sublist(1)),
-    );
-
 /// [executable] as an absolute path on Windows, where a bare name would be
 /// looked up in the working directory before the `PATH`.
 String resolveExecutable(String executable) {
