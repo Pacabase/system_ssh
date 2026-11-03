@@ -24,31 +24,31 @@ Future<String> compileExecutable(String source) async {
   ]).toRadixString(16);
   final directory = Directory(
     '${Directory.systemTemp.path}/system_ssh_${name}_$fingerprint',
-  )..createSync(recursive: true);
-  final executable = File(
-    '${directory.path}/$name${Platform.isWindows ? '.exe' : ''}',
   );
+  final executableName = '$name${Platform.isWindows ? '.exe' : ''}';
+  final executable = File('${directory.path}/$executableName');
   if (executable.existsSync()) return executable.path;
 
-  // Test files compile in parallel; each writes its own file, then one wins.
-  final output = File(
-    '${executable.path}.$pid.${DateTime.now().microsecondsSinceEpoch}',
-  );
+  // Test files compile in parallel. Renaming a directory onto a non-empty one
+  // fails everywhere, so the first build wins and a running one is never replaced.
+  final build = Directory(
+    '${directory.path}.$pid.${DateTime.now().microsecondsSinceEpoch}',
+  )..createSync(recursive: true);
   final result = await Process.run(Platform.resolvedExecutable, [
     'compile',
     'exe',
     '-o',
-    output.path,
+    '${build.path}/$executableName',
     file.path,
   ]);
   if (result.exitCode != 0) {
     throw StateError('Could not compile $source:\n${result.stdout}');
   }
   try {
-    output.renameSync(executable.path);
+    build.renameSync(directory.path);
   } on FileSystemException {
     if (!executable.existsSync()) rethrow;
-    output.deleteSync();
+    build.deleteSync(recursive: true);
   }
 
   return executable.path;
