@@ -26,6 +26,9 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze --fatal-infos
       - run: dart pub publish --dry-run
+      # The lowest versions pubspec.yaml allows; test's own dependencies have no working lowest set.
+      - run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints
+      - run: dart analyze --fatal-infos && dart test --exclude-tags integration
 
   # The oldest supported SDK on each OS; integration runs the newest.
   unit:
@@ -45,9 +48,6 @@ jobs:
           sdk: '3.5'
       - run: dart pub get
       - run: dart test --exclude-tags integration
-      # The lowest versions pubspec.yaml allows; test's own dependencies have no working lowest set.
-      - if: runner.os == 'Linux'
-        run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints && dart analyze --fatal-infos && dart test --exclude-tags integration
 
   # Real ssh against a real sshd.
   integration:
