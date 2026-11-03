@@ -1,0 +1,43 @@
+name: Bug report
+description: A tunnel doesn't open, or behaves differently than `ssh -L` does.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you called, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: system_ssh version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.1, Ubuntu 24.04, Windows 11 24H2
+    validations:
+      required: true
+  - type: input
+    id: ssh
+    attributes:
+      label: Output of `ssh -V`
+    validations:
+      required: true
+  - type: input
+    id: dart
+    attributes:
+      label: Output of `dart --version`
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: ssh's log
+      description: The lines `onLog` received, or the exception's `log`. Remove host names and user names you don't want to share.
+      render: text
