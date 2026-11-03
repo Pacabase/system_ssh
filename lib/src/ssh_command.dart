@@ -38,6 +38,8 @@ List<String> sshCommand(
       'ForkAfterAuthentication=no',
     ],
     ...['-o', 'ControlPath=none'],
+    // No terminal answers a password prompt here; fail instead of waiting.
+    if (isDefault('batchmode', 'no')) ...['-o', 'BatchMode=yes'],
     // No terminal answers ssh's unknown-host prompt; a changed key still fails.
     if (isDefault('stricthostkeychecking', 'ask')) ...[
       '-o',
