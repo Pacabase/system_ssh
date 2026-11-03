@@ -453,6 +453,7 @@ void main() {
       expect(
         fake.attempts.single,
         containsAll([
+          'BatchMode=yes',
           'StrictHostKeyChecking=accept-new',
           'ConnectTimeout=15',
           'ServerAliveInterval=15',
@@ -489,6 +490,7 @@ void main() {
       expect(
         fake.attempts.single,
         containsAll([
+          'BatchMode=yes',
           'StrictHostKeyChecking=accept-new',
           'ConnectTimeout=15',
           'ServerAliveInterval=15',

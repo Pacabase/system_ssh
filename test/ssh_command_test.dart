@@ -7,6 +7,7 @@ void main() {
   const server = SshTarget('ssh.example.com');
 
   Map<String, String> resolvedConfig({
+    String batchMode = 'no',
     String strictHostKeyChecking = 'ask',
     String connectTimeout = 'none',
     String serverAliveInterval = '0',
@@ -16,7 +17,7 @@ void main() {
         'user alice',
         'hostname ssh.example.com',
         'port 22',
-        'batchmode no',
+        'batchmode $batchMode',
         'connecttimeout $connectTimeout',
         'controlmaster false',
         'controlpath none',
@@ -94,6 +95,7 @@ void main() {
         command(
           target: const SshTarget('ssh.example.com', port: 2222, user: 'alice'),
           config: resolvedConfig(
+            batchMode: 'yes',
             strictHostKeyChecking: 'yes',
             connectTimeout: '30',
             serverAliveInterval: '60',
@@ -133,6 +135,7 @@ void main() {
         ...['-L', '127.0.0.1:50000:db.example.com:3306'],
         ...['-o', 'ExitOnForwardFailure=yes'],
         ...['-o', 'ControlPath=none'],
+        ...['-o', 'BatchMode=yes'],
         ...['-o', 'StrictHostKeyChecking=accept-new'],
         ...['-o', 'ConnectTimeout=15'],
         ...['-o', 'ServerAliveInterval=15'],
@@ -144,6 +147,7 @@ void main() {
     test('applies every default when the config leaves them all unset', () {
       final result = command(config: resolvedConfig());
 
+      expect(result, containsAllInOrder(['-o', 'BatchMode=yes']));
       expect(
         result,
         containsAllInOrder(['-o', 'StrictHostKeyChecking=accept-new']),
@@ -156,6 +160,7 @@ void main() {
     test('keeps the fixed options when the config overrides every default', () {
       final result = command(
         config: resolvedConfig(
+          batchMode: 'yes',
           strictHostKeyChecking: 'true',
           connectTimeout: '30',
           serverAliveInterval: '60',
@@ -213,6 +218,26 @@ void main() {
         expect(
           command(remoteHost: '10.0.0.5'),
           containsAllInOrder(['-L', '127.0.0.1:50000:10.0.0.5:3306']),
+        );
+      });
+    });
+
+    group('batch mode', () {
+      test("is turned on for ssh's default no", () {
+        expect(
+          command(config: resolvedConfig()),
+          containsAllInOrder(['-o', 'BatchMode=yes']),
+        );
+      });
+
+      test('is turned on when the config is empty', () {
+        expect(command(), containsAllInOrder(['-o', 'BatchMode=yes']));
+      });
+
+      test('is left alone when the config sets yes', () {
+        expect(
+          command(config: resolvedConfig(batchMode: 'yes')),
+          isNot(contains('BatchMode=yes')),
         );
       });
     });

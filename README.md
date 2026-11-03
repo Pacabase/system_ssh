@@ -55,6 +55,7 @@ unattended tunnel needs:
 | Option | When |
 |---|---|
 | `ExitOnForwardFailure=yes`, `ControlPath=none` | always |
+| `BatchMode=yes` | your config leaves it at `no` |
 | `StrictHostKeyChecking=accept-new` | your config leaves it at `ask`; a changed key still fails |
 | `ConnectTimeout=15` | your config sets none |
 | `ServerAliveInterval=15` | your config sets none |
@@ -67,8 +68,9 @@ by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it started.
 
 - A `ProxyJump` host doesn't get these options; ssh doesn't pass them on.
 - Forwards your config sets for the host open too.
-- ssh still asks for a password on a terminal or through `SSH_ASKPASS`; pass
-  an `abortTrigger` so the caller can give up.
+- Password and keyboard-interactive logins aren't supported yet, and a key
+  with a passphrase needs an agent. A config that sets `BatchMode no` looks
+  like the default, so it doesn't bring prompts back.
 - On Windows, a child ssh starts in the instant before it joins its job object
   can outlive a crash.
 

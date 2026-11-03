@@ -1,3 +1,9 @@
+## 0.2.0
+
+- ssh runs with `BatchMode=yes` unless your config sets it, so a password or
+  passphrase prompt fails at once with an `SshTunnelException` instead of
+  waiting on a terminal. Use keys through an agent.
+
 ## 0.1.1
 
 - `ssh -G` also stops when your process dies, and with it any `Match exec`
