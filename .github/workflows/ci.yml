@@ -49,7 +49,7 @@ jobs:
       - run: dart pub get
       - run: dart test --exclude-tags integration
 
-  # Real ssh against a real sshd.
+  # Real ssh against a real sshd; each image ships its own OpenSSH.
   integration:
     name: integration (${{ matrix.os }})
     needs: [analyze, unit]
@@ -57,9 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        # Older images ship older OpenSSH versions:
-        # os: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04, macos-15, macos-26, windows-2022, windows-2025]
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04, macos-15, macos-26, windows-2022, windows-2025]
     runs-on: ${{ matrix.os }}
     env:
       SSH_TEST_PORT: 2222
