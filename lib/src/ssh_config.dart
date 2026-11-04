@@ -11,14 +11,17 @@ import 'ssh_target.dart';
 Future<Map<String, String>> resolveConfig(
   SshTarget server, {
   String executable = 'ssh',
+  Map<String, String> environment = const {},
   Duration timeout = const Duration(seconds: 5),
   Future<void>? abortTrigger,
 }) async {
   final aborted = Completer<void>();
   unawaited(abortTrigger?.then((_) => aborted.complete(), onError: (_) {}));
 
-  final process =
-      await startWatched([executable, '-G', ...destinationArguments(server)]);
+  final process = await startWatched(
+    [executable, '-G', ...destinationArguments(server)],
+    environment: environment,
+  );
   unawaited(process.stderr.drain<void>());
   final output = process.stdout
       .transform(const Utf8Decoder(allowMalformed: true))

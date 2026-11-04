@@ -14,8 +14,11 @@ import 'fakes/fakes.dart';
 void main() {
   const server = SshTarget('ssh.example.com');
 
-  test('SystemSshClient runs ssh by default', () {
-    expect(const SystemSshClient().executable, 'ssh');
+  test('SystemSshClient runs ssh by default, in the inherited environment', () {
+    const client = SystemSshClient();
+
+    expect(client.executable, 'ssh');
+    expect(client.environment, isEmpty);
   });
 
   test('throws SshNotFoundException when ssh is missing', () async {
@@ -147,12 +150,15 @@ void main() {
       Future<void>? abortTrigger,
       void Function(String line)? onLog,
       Duration configTimeout = const Duration(seconds: 5),
+      String? executable,
+      Map<String, String> environment = const {},
     }) async {
       final tunnel = await openSystemTunnel(
         target,
         remoteHost: remoteHost,
         remotePort: 3306,
-        executable: fake.path,
+        executable: executable ?? fake.path,
+        environment: environment,
         freePort: (ports ?? CountingPorts()).next,
         abortTrigger: abortTrigger,
         onLog: onLog,
@@ -194,6 +200,65 @@ void main() {
         remotePort: 3306,
       );
       addTearDown(tunnel.close);
+
+      expect(fake.configArguments, isNotNull);
+      expect(fake.attempts, hasLength(1));
+    });
+
+    test('SystemSshClient runs ssh in its environment', () async {
+      fake.attemptModes([AttemptMode.ready]);
+
+      final tunnel = await SystemSshClient(
+        executable: fake.path,
+        environment: const {'SYSTEM_SSH_ADDED': 'added'},
+      ).openTunnel(server, remoteHost: 'db.example.com', remotePort: 3306);
+      addTearDown(tunnel.close);
+
+      expect(fake.configEnvironment, containsPair('SYSTEM_SSH_ADDED', 'added'));
+      expect(
+        fake.attemptEnvironments.single,
+        containsPair('SYSTEM_SSH_ADDED', 'added'),
+      );
+    });
+
+    test('adds the environment to the inherited one in every attempt',
+        () async {
+      fake.attemptModes([AttemptMode.bindFailure, AttemptMode.ready]);
+      final ports = CountingPorts(
+        (pick) async => pick == 1 ? taken.port : pickFreePort(),
+      );
+      const environment = {
+        'SYSTEM_SSH_ADDED': 'one\ntwo',
+        'SSH_AUTH_SOCK': '/tmp/agent.sock',
+      };
+      final inherited = Platform.isWindows ? 'SystemRoot' : 'HOME';
+
+      await open(ports: ports, environment: environment);
+
+      for (final recorded in [
+        fake.configEnvironment!,
+        ...fake.attemptEnvironments,
+      ]) {
+        expect(recorded, containsPair('SYSTEM_SSH_ADDED', 'one\ntwo'));
+        expect(recorded, containsPair('SSH_AUTH_SOCK', '/tmp/agent.sock'));
+        expect(
+          recorded,
+          containsPair(inherited, Platform.environment[inherited]),
+        );
+      }
+      expect(fake.attemptEnvironments, hasLength(2));
+    });
+
+    test('finds a bare executable on the PATH the environment sets', () async {
+      fake.attemptModes([AttemptMode.ready]);
+
+      await open(
+        executable: 'ssh',
+        environment: {
+          'PATH': [fake.directory, Platform.environment['PATH']]
+              .join(Platform.isWindows ? ';' : ':'),
+        },
+      );
 
       expect(fake.configArguments, isNotNull);
       expect(fake.attempts, hasLength(1));

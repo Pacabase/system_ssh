@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 /// How the fake plays one tunnel attempt.
@@ -12,6 +13,7 @@ enum AttemptMode { ready, fail, notFound, bindFailure }
 /// - `record:<file>` appends this process's pid to the file, then the pid of
 ///   each child a later step starts.
 /// - `err:<line>`, `echo:<text>` or `out:<bytes>` writes to stderr or stdout.
+/// - `env:<name>` writes the variable's value, or `<unset>`, to stdout.
 /// - `sleep:<milliseconds>`, `exit:<code>` or `hang`.
 /// - `spawn` starts a child that hangs.
 /// - `late:<line>` starts a child sharing stderr that writes the line
@@ -65,6 +67,8 @@ Future<void> _run(List<String> steps) async {
         stderr.writeln(value);
       case 'echo':
         stdout.writeln(value);
+      case 'env':
+        stdout.writeln(Platform.environment[value] ?? '<unset>');
       case 'out':
         stdout.add(List.filled(int.parse(value), 0));
       case 'sleep':
@@ -104,6 +108,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
   if (arguments.first == '-G') {
     file('config_argv').writeAsStringSync(arguments.join('\n'));
     file('config_pid').writeAsStringSync('$pid');
+    file('config_env').writeAsStringSync(jsonEncode(Platform.environment));
 
     switch (read('config_mode')) {
       case 'hang':
@@ -125,6 +130,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
   }
   file('argv.$attempt').writeAsStringSync(arguments.join('\n'));
   file('pid.$attempt').writeAsStringSync('$pid');
+  file('env.$attempt').writeAsStringSync(jsonEncode(Platform.environment));
 
   final modes = (read('modes') ?? AttemptMode.ready.name)
       .split('\n')

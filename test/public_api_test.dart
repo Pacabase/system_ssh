@@ -38,6 +38,16 @@ void main() {
     expect(tunnel.localPort, 50000);
   });
 
+  test('takes the login shell and extra variables for ssh', () {
+    const client = SystemSshClient(
+      loginShell: true,
+      environment: {'AWS_PROFILE': 'staging'},
+    );
+
+    expect(client.loginShell, isTrue);
+    expect(client.environment, {'AWS_PROFILE': 'staging'});
+  });
+
   test('exports every exception as an SshException with a message', () {
     final exceptions = <SshException>[
       const SshException('boom'),

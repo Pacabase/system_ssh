@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -25,6 +26,8 @@ final class FakeSsh {
     File(await fakeSshExecutable).copySync(fake.path);
     return fake;
   }
+
+  String get directory => _directory.path;
 
   /// The fake's executable.
   String get path =>
@@ -54,6 +57,14 @@ final class FakeSsh {
     return file.existsSync() ? file.readAsLinesSync() : null;
   }
 
+  /// The environment `ssh -G` ran with, or null if it didn't run.
+  Map<String, String>? get configEnvironment => _environment('config_env');
+
+  List<Map<String, String>> get attemptEnvironments => [
+        for (var attempt = 1; _file('env.$attempt').existsSync(); attempt++)
+          _environment('env.$attempt')!,
+      ];
+
   /// The pid of `ssh -G`, once it has started.
   Future<int> get configPid => eventually(() => _pid('config_pid'));
 
@@ -75,6 +86,14 @@ final class FakeSsh {
   int? attemptPid(int attempt) => _pid('pid.$attempt');
 
   File _file(String name) => File('${_directory.path}/$name');
+
+  Map<String, String>? _environment(String name) {
+    final file = _file(name);
+    return file.existsSync()
+        ? (jsonDecode(file.readAsStringSync()) as Map<String, dynamic>)
+            .cast<String, String>()
+        : null;
+  }
 
   int? _pid(String name) {
     final file = _file(name);

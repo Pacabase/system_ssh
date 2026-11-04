@@ -34,6 +34,24 @@ void main() {
       );
     });
 
+    test('adds the environment to the inherited one', () async {
+      final command = await fakeCommand([
+        'env:SYSTEM_SSH_ADDED',
+        'env:PATH',
+        'exit:0',
+      ]);
+      final process = await startWatched(
+        command.arguments,
+        environment: {'SYSTEM_SSH_ADDED': 'one\ntwo'},
+      );
+      addTearDown(process.kill);
+
+      expect(
+        await process.stdout.transform(utf8.decoder).join(),
+        'one\ntwo\n${Platform.environment['PATH']}\n',
+      );
+    });
+
     test("exits with the command's exit code", () async {
       final process = await startSteps(['exit:3']);
 
@@ -181,6 +199,8 @@ void main() {
       skip: Platform.isWindows ? 'Windows resolves it' : null,
       () {
         expect(resolveExecutable('ssh'), 'ssh');
+        expect(
+            resolveExecutable('ssh', environment: {'PATH': '/opt/bin'}), 'ssh');
         expect(resolveExecutable('system_ssh_no_such_tool'),
             'system_ssh_no_such_tool');
       },
@@ -196,6 +216,31 @@ void main() {
           expect(File(resolved).existsSync(), isTrue);
         });
       }
+
+      for (final name in ['PATH', 'Path']) {
+        test('finds a bare name on the $name the environment sets', () {
+          final directory =
+              Directory.systemTemp.createTempSync('resolve_executable');
+          addTearDown(() => deleteSoon(directory));
+          File('${directory.path}\\tool.exe').createSync();
+
+          expect(
+            resolveExecutable('tool', environment: {name: directory.path}),
+            '${directory.path}\\tool.exe',
+          );
+        });
+      }
+
+      test('looks only on the PATH the environment sets', () {
+        final directory =
+            Directory.systemTemp.createTempSync('resolve_executable');
+        addTearDown(() => deleteSoon(directory));
+
+        expect(
+          () => resolveExecutable('cmd', environment: {'PATH': directory.path}),
+          throwsA(isA<SshNotFoundException>()),
+        );
+      });
 
       test('throws SshNotFoundException for a name not on the PATH', () {
         expect(

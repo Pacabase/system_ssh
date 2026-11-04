@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'exceptions.dart';
 import 'logger.dart';
+import 'login_shell.dart';
 import 'ports.dart';
 import 'processes.dart';
 import 'ssh_client.dart';
@@ -13,10 +14,23 @@ import 'system_ssh_tunnel.dart';
 /// Tunnels through the system's OpenSSH client, with `~/.ssh/config` and its
 /// agent applying as they do in a terminal.
 final class SystemSshClient implements SshClient {
-  const SystemSshClient({this.executable = 'ssh'});
+  const SystemSshClient({
+    this.executable = 'ssh',
+    this.loginShell = false,
+    this.environment = const {},
+  });
 
   /// The OpenSSH client to run: a path, or a name looked up on the `PATH`.
   final String executable;
+
+  /// Whether ssh also gets the `PATH`, `HOME`, `DISPLAY` and `SSH_` variables
+  /// the user's login shell sets, which a GUI app doesn't inherit. The shell
+  /// runs once per process, on the first tunnel.
+  final bool loginShell;
+
+  /// Variables ssh gets on top of the rest, such as an `AWS_PROFILE` for a
+  /// `ProxyCommand`.
+  final Map<String, String> environment;
 
   @override
   Future<SshTunnel> openTunnel(
@@ -25,7 +39,7 @@ final class SystemSshClient implements SshClient {
     required int remotePort,
     void Function(String line)? onLog,
     Future<void>? abortTrigger,
-  }) =>
+  }) async =>
       openSystemTunnel(
         server,
         remoteHost: remoteHost,
@@ -33,6 +47,10 @@ final class SystemSshClient implements SshClient {
         onLog: onLog,
         abortTrigger: abortTrigger,
         executable: executable,
+        environment: {
+          if (loginShell) ...await cachedLoginShellEnvironment(),
+          ...environment,
+        },
       );
 }
 
@@ -48,6 +66,7 @@ Future<SshTunnel> openSystemTunnel(
   void Function(String line)? onLog,
   Future<void>? abortTrigger,
   String executable = 'ssh',
+  Map<String, String> environment = const {},
   Future<int> Function() freePort = pickFreePort,
   Duration configTimeout = const Duration(seconds: 5),
 }) async {
@@ -65,10 +84,11 @@ Future<SshTunnel> openSystemTunnel(
   var isAborted = false;
   unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
 
-  final ssh = resolveExecutable(executable);
+  final ssh = resolveExecutable(executable, environment: environment);
   final config = await resolveConfig(
     server,
     executable: ssh,
+    environment: environment,
     timeout: configTimeout,
     abortTrigger: abortTrigger,
   );
@@ -97,7 +117,7 @@ Future<SshTunnel> openSystemTunnel(
 
     try {
       return await SystemSshTunnel.attach(
-        await startWatched(command),
+        await startWatched(command, environment: environment),
         localPort: localPort,
         onLog: onLog,
         abortTrigger: abortTrigger,

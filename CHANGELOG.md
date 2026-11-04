@@ -5,6 +5,9 @@
   waiting on a terminal. Use keys through an agent.
 - On Windows, `SshNotFoundException` says to add "OpenSSH Client" under
   Optional features in Settings. It can no longer be created with `const`.
+- `SystemSshClient(loginShell: true)` gives ssh your login shell's `PATH` and
+  `SSH_AUTH_SOCK`, for GUI apps that start without them, and `environment`
+  adds variables of your own.
 
 ## 0.1.1
 
