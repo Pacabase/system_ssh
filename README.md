@@ -41,7 +41,7 @@ ssh's output and the full command also go to the `system_ssh` logger of
 
 | Exception | When |
 |---|---|
-| `SshNotFoundException` | no `ssh` could be started |
+| `SshNotFoundException` | no `ssh` could be started; on Windows the message says how to add OpenSSH Client |
 | `SshTunnelAbortedException` | `abortTrigger` completed first |
 | `SshTunnelException` | ssh exited before the tunnel opened; `log` and `exitCode` say why |
 | `SshException` | anything else, such as `ClearAllForwardings` in your config |

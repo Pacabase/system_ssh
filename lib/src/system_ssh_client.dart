@@ -104,7 +104,7 @@ Future<SshTunnel> openSystemTunnel(
       );
     } on SshTunnelException catch (exception) {
       // sh's code for a missing command; Windows fails to start instead.
-      if (exception.exitCode == 127) throw const SshNotFoundException();
+      if (exception.exitCode == 127) throw SshNotFoundException();
       // Another process can take the port before ssh binds it.
       if (attempt == 3 || await isPortFree(localPort)) rethrow;
     }
