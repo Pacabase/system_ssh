@@ -69,4 +69,17 @@ void main() {
       expect(exception.exitCode, isNull);
     });
   });
+
+  group('SshPortInUseException', () {
+    test('keeps its port and says it is in use', () {
+      const exception = SshPortInUseException(5432);
+
+      expect(exception, isA<SshException>());
+      expect(exception.port, 5432);
+      expect(
+        exception.toString(),
+        'SshPortInUseException: 127.0.0.1:5432 is already in use',
+      );
+    });
+  });
 }

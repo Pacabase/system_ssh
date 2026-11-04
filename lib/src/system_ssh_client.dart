@@ -37,6 +37,7 @@ final class SystemSshClient implements SshClient {
     SshTarget server, {
     required String remoteHost,
     required int remotePort,
+    int? localPort,
     void Function(String line)? onLog,
     Future<void>? abortTrigger,
   }) async =>
@@ -44,6 +45,7 @@ final class SystemSshClient implements SshClient {
         server,
         remoteHost: remoteHost,
         remotePort: remotePort,
+        localPort: localPort,
         onLog: onLog,
         abortTrigger: abortTrigger,
         executable: executable,
@@ -63,11 +65,13 @@ Future<SshTunnel> openSystemTunnel(
   SshTarget server, {
   required String remoteHost,
   required int remotePort,
+  int? localPort,
   void Function(String line)? onLog,
   Future<void>? abortTrigger,
   String executable = 'ssh',
   Map<String, String> environment = const {},
   Future<int> Function() freePort = pickFreePort,
+  Future<bool> Function(int port) portIsFree = isPortFree,
   Duration configTimeout = const Duration(seconds: 5),
 }) async {
   if (server.host.startsWith('-') || server.host.contains(_unsafeInHost)) {
@@ -79,6 +83,9 @@ Future<SshTunnel> openSystemTunnel(
   }
   if (remoteHost.contains(_unsafeInHost)) {
     throw ArgumentError.value(remoteHost, 'remoteHost', 'is not a valid host');
+  }
+  if (localPort case final port? when port < 1 || port > 65535) {
+    throw RangeError.range(port, 1, 65535, 'localPort');
   }
 
   var isAborted = false;
@@ -99,17 +106,12 @@ Future<SshTunnel> openSystemTunnel(
     );
   }
 
-  for (var attempt = 1;; attempt++) {
-    if (isAborted) throw const SshTunnelAbortedException();
-
-    final localPort = await freePort();
-    if (isAborted) throw const SshTunnelAbortedException();
-
+  Future<SshTunnel> start(int port) async {
     final command = sshCommand(
       server,
       remoteHost: remoteHost,
       remotePort: remotePort,
-      localPort: localPort,
+      localPort: port,
       config: config,
       executable: ssh,
     );
@@ -118,15 +120,41 @@ Future<SshTunnel> openSystemTunnel(
     try {
       return await SystemSshTunnel.attach(
         await startWatched(command, environment: environment),
-        localPort: localPort,
+        localPort: port,
         onLog: onLog,
         abortTrigger: abortTrigger,
       );
     } on SshTunnelException catch (exception) {
       // sh's code for a missing command; Windows fails to start instead.
       if (exception.exitCode == 127) throw SshNotFoundException();
+      rethrow;
+    }
+  }
+
+  if (localPort != null) {
+    if (isAborted) throw const SshTunnelAbortedException();
+    if (!await portIsFree(localPort)) throw SshPortInUseException(localPort);
+    if (isAborted) throw const SshTunnelAbortedException();
+
+    try {
+      return await start(localPort);
+    } on SshTunnelException {
+      if (await portIsFree(localPort)) rethrow;
+      throw SshPortInUseException(localPort);
+    }
+  }
+
+  for (var attempt = 1;; attempt++) {
+    if (isAborted) throw const SshTunnelAbortedException();
+
+    final port = await freePort();
+    if (isAborted) throw const SshTunnelAbortedException();
+
+    try {
+      return await start(port);
+    } on SshTunnelException {
       // Another process can take the port before ssh binds it.
-      if (attempt == 3 || await isPortFree(localPort)) rethrow;
+      if (attempt == 3 || await portIsFree(port)) rethrow;
     }
   }
 }

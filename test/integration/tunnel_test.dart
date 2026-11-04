@@ -41,6 +41,7 @@ void main() {
     Future<SshTunnel> open({
       SshTarget? via,
       int? remotePort,
+      int? localPort,
       CountingPorts? ports,
       void Function(String line)? onLog,
       Future<void>? abortTrigger,
@@ -49,6 +50,7 @@ void main() {
         via ?? fixture.target,
         remoteHost: fixture.echoHost,
         remotePort: remotePort ?? fixture.echoPort,
+        localPort: localPort,
         onLog: logged(onLog),
         abortTrigger: abortTrigger,
         executable: fixture.ssh,
@@ -128,6 +130,28 @@ void main() {
         sshFailure('cannot listen to port'),
       );
       expect(ports.picks, 3);
+    });
+
+    test('forwards a fixed local port', () async {
+      final port = await pickFreePort();
+
+      final tunnel = await open(localPort: port);
+
+      expect(tunnel.localPort, port);
+      expect(await fixture.echoThrough(port, 'ping'), 'ping');
+    });
+
+    test('fails on a fixed local port that is taken', () async {
+      final taken = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(taken.close);
+
+      await expectLater(
+        open(localPort: taken.port),
+        throwsA(
+          isA<SshPortInUseException>()
+              .having((exception) => exception.port, 'port', taken.port),
+        ),
+      );
     });
 
     test('opens to a port that refuses, and each connection ends', () async {

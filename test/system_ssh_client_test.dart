@@ -37,15 +37,18 @@ void main() {
     Future<SshTunnel> open({
       SshTarget target = server,
       String remoteHost = 'db.example.com',
+      int? localPort,
     }) async =>
         openSystemTunnel(
           target,
           remoteHost: remoteHost,
           remotePort: 3306,
+          localPort: localPort,
           executable: '/nonexistent/ssh',
+          portIsFree: (_) async => true,
         );
 
-    Matcher throwsInvalid(String name, String value) => throwsA(
+    Matcher throwsInvalid(String name, Object value) => throwsA(
           isArgumentError
               .having((error) => error.name, 'name', name)
               .having((error) => error.invalidValue, 'invalidValue', value),
@@ -131,6 +134,24 @@ void main() {
         );
       });
     }
+
+    for (final port in [-1, 0, 65536]) {
+      test('rejects local port $port', () async {
+        await expectLater(
+          open(localPort: port),
+          throwsInvalid('localPort', port),
+        );
+      });
+    }
+
+    for (final port in [1, 65535]) {
+      test('accepts local port $port', () async {
+        await expectLater(
+          open(localPort: port),
+          throwsA(isA<SshNotFoundException>()),
+        );
+      });
+    }
   });
 
   group('with a fake ssh', () {
@@ -146,7 +167,9 @@ void main() {
     Future<SshTunnel> open({
       SshTarget target = server,
       String remoteHost = 'db.example.com',
+      int? localPort,
       CountingPorts? ports,
+      Future<bool> Function(int port) portIsFree = isPortFree,
       Future<void>? abortTrigger,
       void Function(String line)? onLog,
       Duration configTimeout = const Duration(seconds: 5),
@@ -157,9 +180,11 @@ void main() {
         target,
         remoteHost: remoteHost,
         remotePort: 3306,
+        localPort: localPort,
         executable: executable ?? fake.path,
         environment: environment,
         freePort: (ports ?? CountingPorts()).next,
+        portIsFree: portIsFree,
         abortTrigger: abortTrigger,
         onLog: onLog,
         configTimeout: configTimeout,
@@ -422,6 +447,117 @@ void main() {
       );
       expect(ports.picks, 2);
       expect(fake.attempts, hasLength(2));
+    });
+
+    group('with a fixed local port', () {
+      Matcher throwsPortInUse(int port) => throwsA(
+            isA<SshPortInUseException>()
+                .having((exception) => exception.port, 'port', port),
+          );
+
+      test('forwards it without picking one', () async {
+        fake.attemptModes([AttemptMode.ready]);
+        final port = await pickFreePort();
+        final ports = CountingPorts();
+
+        final tunnel = await open(localPort: port, ports: ports);
+
+        expect(tunnel.localPort, port);
+        expect(ports.picks, 0);
+        expect(fake.attempts, [
+          sshCommand(
+            server,
+            remoteHost: 'db.example.com',
+            remotePort: 3306,
+            localPort: port,
+          ).sublist(1),
+        ]);
+      });
+
+      test('SystemSshClient passes it to ssh', () async {
+        fake.attemptModes([AttemptMode.ready]);
+        final port = await pickFreePort();
+
+        final tunnel = await SystemSshClient(executable: fake.path).openTunnel(
+          server,
+          remoteHost: 'db.example.com',
+          remotePort: 3306,
+          localPort: port,
+        );
+        addTearDown(tunnel.close);
+
+        expect(tunnel.localPort, port);
+        expect(
+          fake.attempts.single,
+          contains('127.0.0.1:$port:db.example.com:3306'),
+        );
+      });
+
+      test('fails without starting ssh when it is taken', () async {
+        fake.attemptModes([AttemptMode.ready]);
+        final ports = CountingPorts();
+
+        await expectLater(
+          open(localPort: taken.port, ports: ports),
+          throwsPortInUse(taken.port),
+        );
+        expect(ports.picks, 0);
+        expect(fake.attempts, isEmpty);
+      });
+
+      test('reads a bind failure as taken once the port is', () async {
+        fake.attemptModes([AttemptMode.bindFailure, AttemptMode.ready]);
+        var checks = 0;
+
+        await expectLater(
+          open(
+            localPort: taken.port,
+            portIsFree: (port) async => ++checks == 1 || await isPortFree(port),
+          ),
+          throwsPortInUse(taken.port),
+        );
+        expect(checks, 2);
+        expect(fake.attempts, hasLength(1));
+      });
+
+      test('rethrows an ssh failure while it is free, without retrying',
+          () async {
+        fake.attemptModes([AttemptMode.fail, AttemptMode.ready]);
+        final ports = CountingPorts();
+
+        await expectLater(
+          open(localPort: await pickFreePort(), ports: ports),
+          throwsA(
+            isA<SshTunnelException>().having(
+              (exception) => exception.exitCode,
+              'exitCode',
+              255,
+            ),
+          ),
+        );
+        expect(ports.picks, 0);
+        expect(fake.attempts, hasLength(1));
+      });
+
+      test("reads sh's exit code 127 as ssh not found", () async {
+        fake.attemptModes([AttemptMode.notFound]);
+
+        await expectLater(
+          open(localPort: await pickFreePort()),
+          throwsA(isA<SshNotFoundException>()),
+        );
+        expect(fake.attempts, hasLength(1));
+      });
+
+      test('throws SshTunnelAbortedException when aborted first', () async {
+        fake.attemptModes([AttemptMode.ready]);
+
+        await expectLater(
+          open(localPort: await pickFreePort(), abortTrigger: Future.value()),
+          throwsA(isA<SshTunnelAbortedException>()),
+        );
+        expect(fake.attempts, isEmpty);
+      });
     });
 
     test('refuses a config that sets ClearAllForwardings', () async {

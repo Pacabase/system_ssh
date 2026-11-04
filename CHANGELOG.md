@@ -8,6 +8,9 @@
 - `SystemSshClient(loginShell: true)` gives ssh your login shell's `PATH` and
   `SSH_AUTH_SOCK`, for GUI apps that start without them, and `environment`
   adds variables of your own.
+- `openTunnel` takes an optional `localPort` to forward a fixed `127.0.0.1`
+  port. A taken one fails with the new `SshPortInUseException`, before ssh
+  starts when it can, and isn't retried.
 
 ## 0.1.1
 

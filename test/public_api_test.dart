@@ -2,8 +2,10 @@ import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
 class _FakeTunnel implements SshTunnel {
+  _FakeTunnel(this.localPort);
+
   @override
-  int get localPort => 50000;
+  final int localPort;
 
   @override
   Future<void> get done => Future.value();
@@ -18,10 +20,11 @@ class _FakeSshClient implements SshClient {
     SshTarget server, {
     required String remoteHost,
     required int remotePort,
+    int? localPort,
     void Function(String line)? onLog,
     Future<void>? abortTrigger,
   }) async =>
-      _FakeTunnel();
+      _FakeTunnel(localPort ?? 50000);
 }
 
 void main() {
@@ -48,12 +51,24 @@ void main() {
     expect(client.environment, {'AWS_PROFILE': 'staging'});
   });
 
+  test('takes a fixed local port', () async {
+    final tunnel = await _FakeSshClient().openTunnel(
+      const SshTarget('ssh.example.com'),
+      remoteHost: 'db.example.com',
+      remotePort: 5432,
+      localPort: 15432,
+    );
+
+    expect(tunnel.localPort, 15432);
+  });
+
   test('exports every exception as an SshException with a message', () {
     final exceptions = <SshException>[
       const SshException('boom'),
       SshNotFoundException(),
       const SshTunnelAbortedException(),
       const SshTunnelException('boom', exitCode: 255),
+      const SshPortInUseException(5432),
     ];
 
     expect(
@@ -68,6 +83,18 @@ void main() {
         const SshTarget('-oProxyCommand=false'),
         remoteHost: 'db.example.com',
         remotePort: 5432,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects a local port outside 1 to 65535', () async {
+    await expectLater(
+      const SystemSshClient().openTunnel(
+        const SshTarget('ssh.example.com'),
+        remoteHost: 'db.example.com',
+        remotePort: 5432,
+        localPort: 0,
       ),
       throwsArgumentError,
     );

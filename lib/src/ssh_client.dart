@@ -18,8 +18,8 @@ abstract interface class SshTunnel {
 /// Opens SSH tunnels (local port forwards). An interface, so an app can swap
 /// in a fake in its tests.
 abstract interface class SshClient {
-  /// Forwards a free `127.0.0.1` port through [server] to
-  /// [remoteHost]:[remotePort], as [server] sees them.
+  /// Forwards [localPort] on `127.0.0.1`, or a free port when it is null,
+  /// through [server] to [remoteHost]:[remotePort], as [server] sees them.
   ///
   /// ```dart
   /// final tunnel = await client.openTunnel(
@@ -37,13 +37,16 @@ abstract interface class SshClient {
   /// - [SshNotFoundException] when no `ssh` can be started.
   /// - [SshTunnelException] when ssh exits before the forward is up.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
+  /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshException] when the tunnel can't be set up for another reason.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
-  ///   starting with `-` or holding spaces or shell characters.
+  ///   starting with `-` or holding spaces or shell characters, or a
+  ///   [localPort] outside 1 to 65535.
   Future<SshTunnel> openTunnel(
     SshTarget server, {
     required String remoteHost,
     required int remotePort,
+    int? localPort,
     void Function(String line)? onLog,
     Future<void>? abortTrigger,
   });
