@@ -241,9 +241,16 @@ void main() {
       ]) {
         expect(recorded, containsPair('SYSTEM_SSH_ADDED', 'one\ntwo'));
         expect(recorded, containsPair('SSH_AUTH_SOCK', '/tmp/agent.sock'));
+        // Windows variable names are case-insensitive, and the child may spell them in capitals.
         expect(
-          recorded,
-          containsPair(inherited, Platform.environment[inherited]),
+          {
+            for (final entry in recorded.entries)
+              entry.key.toUpperCase(): entry.value,
+          },
+          containsPair(
+            inherited.toUpperCase(),
+            Platform.environment[inherited],
+          ),
         );
       }
       expect(fake.attemptEnvironments, hasLength(2));
