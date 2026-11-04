@@ -39,11 +39,11 @@ void main() {
   });
 
   test('exports every exception as an SshException with a message', () {
-    const exceptions = <SshException>[
-      SshException('boom'),
+    final exceptions = <SshException>[
+      const SshException('boom'),
       SshNotFoundException(),
-      SshTunnelAbortedException(),
-      SshTunnelException('boom', exitCode: 255),
+      const SshTunnelAbortedException(),
+      const SshTunnelException('boom', exitCode: 255),
     ];
 
     expect(

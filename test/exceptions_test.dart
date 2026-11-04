@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
@@ -12,16 +14,25 @@ void main() {
   });
 
   group('SshNotFoundException', () {
-    test('says to install OpenSSH', () {
-      const exception = SshNotFoundException();
+    test('is an SshException', () {
+      expect(SshNotFoundException(), isA<SshException>());
+    });
 
-      expect(exception, isA<SshException>());
+    test('says to install OpenSSH', () {
       expect(
-        exception.toString(),
+        SshNotFoundException().toString(),
         'SshNotFoundException: '
         'ssh was not found; install OpenSSH and put it on the PATH',
       );
-    });
+    }, skip: Platform.isWindows ? 'Windows has its own hint' : false);
+
+    test('says to add the OpenSSH Client feature on Windows', () {
+      expect(
+        SshNotFoundException().toString(),
+        'SshNotFoundException: ssh was not found; '
+        'add "OpenSSH Client" in Settings under Optional features',
+      );
+    }, skip: Platform.isWindows ? false : 'Windows only');
   });
 
   group('SshTunnelAbortedException', () {

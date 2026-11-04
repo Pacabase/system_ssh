@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'ssh_client.dart';
 
 /// Something went wrong opening a tunnel.
@@ -16,8 +18,16 @@ class SshException implements Exception {
 
 /// No `ssh` executable could be started.
 final class SshNotFoundException extends SshException {
-  const SshNotFoundException()
-      : super('ssh was not found; install OpenSSH and put it on the PATH');
+  factory SshNotFoundException() => Platform.isWindows
+      ? const SshNotFoundException._(
+          'ssh was not found; add "OpenSSH Client" in Settings under '
+          'Optional features',
+        )
+      : const SshNotFoundException._(
+          'ssh was not found; install OpenSSH and put it on the PATH',
+        );
+
+  const SshNotFoundException._(super.message);
 
   @override
   String toString() => 'SshNotFoundException: $message';

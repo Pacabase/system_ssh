@@ -29,7 +29,7 @@ String resolveExecutable(String executable) {
       .map((directory) => '$directory\\$name')
       .where((path) => File(path).existsSync())
       .firstOrNull;
-  if (found == null) throw const SshNotFoundException();
+  if (found == null) throw SshNotFoundException();
 
   return found;
 }
@@ -38,7 +38,7 @@ Future<Process> _start(Future<Process> Function() start) async {
   try {
     return await start();
   } on ProcessException {
-    throw const SshNotFoundException();
+    throw SshNotFoundException();
   }
 }
 

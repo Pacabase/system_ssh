@@ -3,6 +3,8 @@
 - ssh runs with `BatchMode=yes` unless your config sets it, so a password or
   passphrase prompt fails at once with an `SshTunnelException` instead of
   waiting on a terminal. Use keys through an agent.
+- On Windows, `SshNotFoundException` says to add "OpenSSH Client" under
+  Optional features in Settings. It can no longer be created with `const`.
 
 ## 0.1.1
 
