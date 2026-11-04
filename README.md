@@ -80,6 +80,20 @@ const client = SystemSshClient(
 );
 ```
 
+### macOS App Sandbox
+
+A macOS app that uses `system_ssh` has to run without the App Sandbox: leave
+`com.apple.security.app-sandbox` out of its entitlements, or set it to
+`false`. Flutter's macOS template turns it on in both
+`DebugProfile.entitlements` and `Release.entitlements`. ssh inherits the
+sandbox, so it can't read your `~/.ssh` config, keys or `known_hosts`, or
+reach your agent's socket, and a `ProxyCommand` it starts is confined too.
+
+The Mac App Store requires the sandbox, so such an app can't ship there.
+Distribute it outside the store, signed with a Developer ID and notarized.
+Notarizing needs the hardened runtime, which is separate from the sandbox and
+doesn't get in ssh's way. A command-line tool isn't affected.
+
 ## Failures
 
 | Exception | When |
