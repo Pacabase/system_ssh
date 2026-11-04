@@ -9,11 +9,18 @@ import 'logger.dart';
 
 /// Starts [command] in a job object that Windows kills when this process
 /// exits, however it exits. [Process.kill] on the result kills the whole job.
-Future<Process> startInJob(List<String> command) async {
+Future<Process> startInJob(
+  List<String> command, {
+  Map<String, String> environment = const {},
+}) async {
   final job = _createJob();
   final Process process;
   try {
-    process = await Process.start(command.first, command.sublist(1));
+    process = await Process.start(
+      command.first,
+      command.sublist(1),
+      environment: environment,
+    );
   } catch (_) {
     _closeHandle(job);
     rethrow;

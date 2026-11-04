@@ -6,33 +6,50 @@ import 'windows_job.dart';
 /// Starts [command] so it, and the ProxyCommand or ProxyJump ssh it runs, dies
 /// with this process, even a killed or crashed one. [Process.kill] on the
 /// result stops them.
-Future<Process> startWatched(List<String> command) => _start(
+Future<Process> startWatched(
+  List<String> command, {
+  Map<String, String> environment = const {},
+}) =>
+    _start(
       () => Platform.isWindows
-          ? startInJob(command)
-          : Process.start('/bin/sh', ['-c', _dieWithParent, 'sh', ...command]),
+          ? startInJob(command, environment: environment)
+          : Process.start(
+              '/bin/sh',
+              ['-c', _dieWithParent, 'sh', ...command],
+              environment: environment,
+            ),
     );
 
-/// [executable] as an absolute path on Windows, where a bare name would be
-/// looked up in the working directory before the `PATH`.
-String resolveExecutable(String executable) {
+/// An absolute path on Windows, where a bare name is looked up in the working
+/// directory first.
+String resolveExecutable(
+  String executable, {
+  Map<String, String> environment = const {},
+}) {
   if (!Platform.isWindows || executable.contains(RegExp(r'[\\/]'))) {
     return executable;
   }
 
+  // Windows variable names are case-insensitive.
+  final path = environment.entries
+      .where((entry) => entry.key.toUpperCase() == 'PATH')
+      .lastOrNull
+      ?.value;
+
   final name = executable.toLowerCase().endsWith('.exe')
       ? executable
       : '$executable.exe';
-  final found = (Platform.environment['PATH'] ?? '')
-      .split(';')
-      .map((directory) => directory.replaceAll('"', ''))
-      .where((directory) => directory.isNotEmpty && File(directory).isAbsolute)
-      .map((directory) => '$directory\\$name')
-      .where((path) => File(path).existsSync())
-      .firstOrNull;
-  if (found == null) throw SshNotFoundException();
-
-  return found;
+  return _find(name, path ?? Platform.environment['PATH'] ?? '') ??
+      (throw SshNotFoundException());
 }
+
+String? _find(String name, String path) => path
+    .split(';')
+    .map((directory) => directory.replaceAll('"', ''))
+    .where((directory) => directory.isNotEmpty && File(directory).isAbsolute)
+    .map((directory) => '$directory\\$name')
+    .where((candidate) => File(candidate).existsSync())
+    .firstOrNull;
 
 Future<Process> _start(Future<Process> Function() start) async {
   try {

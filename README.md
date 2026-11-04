@@ -33,9 +33,37 @@ Future<void> main() async {
 - `abortTrigger` gives up while it connects.
 - `tunnel.done` completes when ssh exits, for example when the connection drops.
 - `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
+- `SystemSshClient(environment: ...)` adds variables to the environment ssh
+  inherits; a bare `executable` is looked up on the `PATH` it sets.
 
 ssh's output and the full command also go to the `system_ssh` logger of
 [`package:logging`](https://pub.dev/packages/logging).
+
+## GUI apps
+
+An app started from the macOS Dock or Finder gets none of what your shell
+profile sets: its `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`. On Linux a
+desktop launcher usually reads `~/.profile`, but not `~/.bashrc`, `~/.zshrc`
+or `~/.zprofile`. A `ProxyCommand` running `cloudflared` or `aws` from
+Homebrew then isn't found, and an `SSH_AUTH_SOCK` exported in your shell
+profile isn't used. Turn on
+`loginShell` to give ssh your login shell's `PATH`, `HOME`, `DISPLAY` and
+`SSH_` variables:
+
+```dart
+const client = SystemSshClient(loginShell: true);
+```
+
+It runs your shell once, on the first tunnel, gives up after 5 seconds, and
+does nothing on Windows, where apps already get your `PATH`. `environment`
+adds variables on top, and wins on a clash:
+
+```dart
+const client = SystemSshClient(
+  loginShell: true,
+  environment: {'AWS_PROFILE': 'staging'},
+);
+```
 
 ## Failures
 
