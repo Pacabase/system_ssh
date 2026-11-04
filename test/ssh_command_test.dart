@@ -35,9 +35,7 @@ void main() {
   }) =>
       sshCommand(
         target,
-        remoteHost: remoteHost,
-        remotePort: 3306,
-        localPort: 50000,
+        forward: localForward(50000, remoteHost: remoteHost, remotePort: 3306),
         config: config,
       );
 
@@ -119,9 +117,8 @@ void main() {
       expect(
         sshCommand(
           server,
-          remoteHost: 'db.example.com',
-          remotePort: 3306,
-          localPort: 50000,
+          forward: localForward(50000,
+              remoteHost: 'db.example.com', remotePort: 3306),
           executable: '/opt/openssh/bin/ssh',
         ).first,
         '/opt/openssh/bin/ssh',
@@ -175,6 +172,22 @@ void main() {
       expect(result, containsAllInOrder(['-o', 'ExitOnForwardFailure=yes']));
       expect(result, containsAllInOrder(['-o', 'ControlPath=none']));
       expect(result.last, 'ssh.example.com');
+    });
+
+    test('serves SOCKS on the local port for a dynamic forward', () {
+      expect(sshCommand(server, forward: dynamicForward(50000)), [
+        'ssh',
+        '-nNTv',
+        ...['-D', '127.0.0.1:50000'],
+        ...['-o', 'ExitOnForwardFailure=yes'],
+        ...['-o', 'ControlPath=none'],
+        ...['-o', 'BatchMode=yes'],
+        ...['-o', 'StrictHostKeyChecking=accept-new'],
+        ...['-o', 'ConnectTimeout=15'],
+        ...['-o', 'ServerAliveInterval=15'],
+        '--',
+        'ssh.example.com',
+      ]);
     });
 
     group('fork after authentication', () {

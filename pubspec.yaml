@@ -1,6 +1,6 @@
 name: system_ssh
 description: SSH tunnels for Dart through the system's own ssh, so ~/.ssh/config, agents such as 1Password, and ProxyJump just work.
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/Pacabase/system_ssh
 issue_tracker: https://github.com/Pacabase/system_ssh/issues
 topics:
