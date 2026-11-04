@@ -29,6 +29,7 @@ Future<void> main() async {
 ```
 
 - `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
+- `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
 - `onLog` gets ssh's output while it connects.
 - `abortTrigger` gives up while it connects.
 - `tunnel.done` completes when ssh exits, for example when the connection drops.
@@ -71,9 +72,10 @@ const client = SystemSshClient(
 |---|---|
 | `SshNotFoundException` | no `ssh` could be started; on Windows the message says how to add OpenSSH Client |
 | `SshTunnelAbortedException` | `abortTrigger` completed first |
+| `SshPortInUseException` | the `localPort` you asked for is taken |
 | `SshTunnelException` | ssh exited before the tunnel opened; `log` and `exitCode` say why |
 | `SshException` | anything else, such as `ClearAllForwardings` in your config |
-| `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…` |
+| `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…`, or a `localPort` outside 1 to 65535 |
 
 ## Options it sets
 
@@ -122,6 +124,7 @@ class FakeSshClient implements SshClient {
   Future<SshTunnel> openTunnel(SshTarget server,
           {required String remoteHost,
           required int remotePort,
+          int? localPort,
           void Function(String line)? onLog,
           Future<void>? abortTrigger}) =>
       throw const SshTunnelException('Permission denied (publickey).');

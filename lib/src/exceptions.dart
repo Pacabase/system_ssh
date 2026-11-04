@@ -56,3 +56,15 @@ final class SshTunnelException extends SshException {
   @override
   String toString() => 'SshTunnelException: $message';
 }
+
+/// The `127.0.0.1` port asked of [SshClient.openTunnel] is taken.
+final class SshPortInUseException extends SshException {
+  const SshPortInUseException(this.port)
+      : super('127.0.0.1:$port is already in use');
+
+  /// The port that is taken.
+  final int port;
+
+  @override
+  String toString() => 'SshPortInUseException: $message';
+}
