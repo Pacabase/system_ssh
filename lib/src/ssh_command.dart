@@ -11,16 +11,20 @@ List<String> destinationArguments(SshTarget server) => [
       server.host,
     ];
 
-/// The `ssh -L` command forwarding `127.0.0.1:`[localPort] to
-/// [remoteHost]:[remotePort] through [server].
-///
+List<String> localForward(
+  int localPort, {
+  required String remoteHost,
+  required int remotePort,
+}) =>
+    ['-L', '127.0.0.1:$localPort:${bracketIPv6(remoteHost)}:$remotePort'];
+
+List<String> dynamicForward(int localPort) => ['-D', '127.0.0.1:$localPort'];
+
 /// A `-o` beats ~/.ssh/config, so options are set only where [config]
 /// leaves ssh's default, or where it couldn't be read at all.
 List<String> sshCommand(
   SshTarget server, {
-  required String remoteHost,
-  required int remotePort,
-  required int localPort,
+  required List<String> forward,
   Map<String, String> config = const {},
   String executable = 'ssh',
 }) {
@@ -30,7 +34,7 @@ List<String> sshCommand(
   return [
     executable,
     '-nNTv',
-    ...['-L', '127.0.0.1:$localPort:${bracketIPv6(remoteHost)}:$remotePort'],
+    ...forward,
     ...['-o', 'ExitOnForwardFailure=yes'],
     // This process owns ssh: it must not fork away or serve other sessions.
     if (config['forkafterauthentication'] == 'yes') ...[

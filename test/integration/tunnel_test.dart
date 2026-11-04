@@ -2,9 +2,11 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:system_ssh/src/ports.dart';
+import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/system_ssh_client.dart';
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
@@ -189,6 +191,83 @@ void main() {
         Socket.connect(InternetAddress.loopbackIPv4, tunnel.localPort),
         throwsA(isA<SocketException>()),
       );
+    });
+
+    group('SOCKS proxy', () {
+      Future<SshTunnel> openProxy({int? localPort}) async {
+        final proxy = await openSystemForward(
+          fixture.target,
+          forward: dynamicForward,
+          localPort: localPort,
+          onLog: logged(),
+          executable: fixture.ssh,
+        );
+        addTearDown(proxy.close);
+        return proxy;
+      }
+
+      Future<String> echoThroughProxy(int proxyPort, String message) async {
+        final socket =
+            await Socket.connect(InternetAddress.loopbackIPv4, proxyPort);
+        addTearDown(socket.destroy);
+        socket.done.ignore();
+        final bytes = StreamIterator(socket.expand((chunk) => chunk));
+
+        Future<List<int>> read(int count) async {
+          final received = <int>[];
+          while (received.length < count && await bytes.moveNext()) {
+            received.add(bytes.current);
+          }
+          return received;
+        }
+
+        Future<String> talk() async {
+          socket.add([5, 1, 0]);
+          expect(await read(2), [5, 0]);
+
+          final port = fixture.echoPort;
+          socket.add([5, 1, 0, 1, 127, 0, 0, 1, port >> 8, port & 0xff]);
+          expect((await read(10)).take(2), [5, 0]);
+
+          socket.add(utf8.encode(message));
+          return utf8.decode(await read(message.length));
+        }
+
+        return talk().timeout(const Duration(seconds: 5));
+      }
+
+      test('connects through the server to what the client asks for', () async {
+        final proxy = await openProxy();
+
+        expect(await echoThroughProxy(proxy.localPort, 'ping'), 'ping');
+      });
+
+      test('SystemSshClient serves a fixed local port', () async {
+        final port = await pickFreePort();
+
+        final proxy = await const SystemSshClient().openSocksProxy(
+          fixture.bareTarget,
+          localPort: port,
+          onLog: logged(),
+        );
+        addTearDown(proxy.close);
+
+        expect(proxy.localPort, port);
+        expect(await echoThroughProxy(port, 'ping'), 'ping');
+      });
+
+      test('fails on a fixed local port that is taken', () async {
+        final taken = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(taken.close);
+
+        await expectLater(
+          openProxy(localPort: taken.port),
+          throwsA(
+            isA<SshPortInUseException>()
+                .having((exception) => exception.port, 'port', taken.port),
+          ),
+        );
+      });
     });
 
     test('done completes after close', () async {

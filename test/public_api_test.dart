@@ -25,6 +25,15 @@ class _FakeSshClient implements SshClient {
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50000);
+
+  @override
+  Future<SshTunnel> openSocksProxy(
+    SshTarget server, {
+    int? localPort,
+    void Function(String line)? onLog,
+    Future<void>? abortTrigger,
+  }) async =>
+      _FakeTunnel(localPort ?? 50001);
 }
 
 void main() {
@@ -62,6 +71,18 @@ void main() {
     expect(tunnel.localPort, 15432);
   });
 
+  test('opens a SOCKS proxy, on a fixed local port or a free one', () async {
+    final SshClient fake = _FakeSshClient();
+    final proxy = await fake.openSocksProxy(const SshTarget('ssh.example.com'));
+    final fixed = await fake.openSocksProxy(
+      const SshTarget('ssh.example.com'),
+      localPort: 1080,
+    );
+
+    expect(proxy.localPort, 50001);
+    expect(fixed.localPort, 1080);
+  });
+
   test('exports every exception as an SshException with a message', () {
     final exceptions = <SshException>[
       const SshException('boom'),
@@ -95,6 +116,26 @@ void main() {
         remoteHost: 'db.example.com',
         remotePort: 5432,
         localPort: 0,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects a SOCKS proxy server host that ssh would read as an option',
+      () async {
+    await expectLater(
+      const SystemSshClient().openSocksProxy(
+        const SshTarget('-oProxyCommand=false'),
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects a SOCKS proxy port outside 1 to 65535', () async {
+    await expectLater(
+      const SystemSshClient().openSocksProxy(
+        const SshTarget('ssh.example.com'),
+        localPort: 65536,
       ),
       throwsArgumentError,
     );

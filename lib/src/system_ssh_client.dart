@@ -49,11 +49,30 @@ final class SystemSshClient implements SshClient {
         onLog: onLog,
         abortTrigger: abortTrigger,
         executable: executable,
-        environment: {
-          if (loginShell) ...await cachedLoginShellEnvironment(),
-          ...environment,
-        },
+        environment: await _sshEnvironment(),
       );
+
+  @override
+  Future<SshTunnel> openSocksProxy(
+    SshTarget server, {
+    int? localPort,
+    void Function(String line)? onLog,
+    Future<void>? abortTrigger,
+  }) async =>
+      openSystemForward(
+        server,
+        forward: dynamicForward,
+        localPort: localPort,
+        onLog: onLog,
+        abortTrigger: abortTrigger,
+        executable: executable,
+        environment: await _sshEnvironment(),
+      );
+
+  Future<Map<String, String>> _sshEnvironment() async => {
+        if (loginShell) ...await cachedLoginShellEnvironment(),
+        ...environment,
+      };
 }
 
 // ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped.
@@ -74,15 +93,47 @@ Future<SshTunnel> openSystemTunnel(
   Future<bool> Function(int port) portIsFree = isPortFree,
   Duration configTimeout = const Duration(seconds: 5),
 }) async {
+  if (remoteHost.contains(_unsafeInHost)) {
+    throw ArgumentError.value(remoteHost, 'remoteHost', 'is not a valid host');
+  }
+
+  return openSystemForward(
+    server,
+    forward: (port) => localForward(
+      port,
+      remoteHost: remoteHost,
+      remotePort: remotePort,
+    ),
+    localPort: localPort,
+    onLog: onLog,
+    abortTrigger: abortTrigger,
+    executable: executable,
+    environment: environment,
+    freePort: freePort,
+    portIsFree: portIsFree,
+    configTimeout: configTimeout,
+  );
+}
+
+/// [SystemSshClient.openSocksProxy], with the parts tests replace.
+Future<SshTunnel> openSystemForward(
+  SshTarget server, {
+  required List<String> Function(int localPort) forward,
+  int? localPort,
+  void Function(String line)? onLog,
+  Future<void>? abortTrigger,
+  String executable = 'ssh',
+  Map<String, String> environment = const {},
+  Future<int> Function() freePort = pickFreePort,
+  Future<bool> Function(int port) portIsFree = isPortFree,
+  Duration configTimeout = const Duration(seconds: 5),
+}) async {
   if (server.host.startsWith('-') || server.host.contains(_unsafeInHost)) {
     throw ArgumentError.value(server.host, 'server', 'is not a valid host');
   }
   if (server.user case final user?
       when user.startsWith('-') || user.contains(_unsafeInUser)) {
     throw ArgumentError.value(user, 'server', 'is not a valid user');
-  }
-  if (remoteHost.contains(_unsafeInHost)) {
-    throw ArgumentError.value(remoteHost, 'remoteHost', 'is not a valid host');
   }
   if (localPort case final port? when port < 1 || port > 65535) {
     throw RangeError.range(port, 1, 65535, 'localPort');
@@ -109,9 +160,7 @@ Future<SshTunnel> openSystemTunnel(
   Future<SshTunnel> start(int port) async {
     final command = sshCommand(
       server,
-      remoteHost: remoteHost,
-      remotePort: remotePort,
-      localPort: port,
+      forward: forward(port),
       config: config,
       executable: ssh,
     );

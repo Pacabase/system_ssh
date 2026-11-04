@@ -1,3 +1,8 @@
+## 0.3.0
+
+- `openSocksProxy` serves a SOCKS5 proxy (`ssh -D`) on `127.0.0.1`, through
+  the server to whatever each client asks for.
+
 ## 0.2.0
 
 - ssh runs with `BatchMode=yes` unless your config sets it, so a password or

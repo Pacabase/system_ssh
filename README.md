@@ -40,6 +40,20 @@ Future<void> main() async {
 ssh's output and the full command also go to the `system_ssh` logger of
 [`package:logging`](https://pub.dev/packages/logging).
 
+## SOCKS proxy
+
+`openSocksProxy` serves a SOCKS5 proxy (`ssh -D`) whose connections the
+server makes, to whatever host and port each client asks for:
+
+```dart
+final proxy = await client.openSocksProxy(const SshTarget('ssh.example.com'));
+
+print('curl --socks5-hostname 127.0.0.1:${proxy.localPort} https://example.com');
+```
+
+It takes `localPort`, `onLog` and `abortTrigger` as `openTunnel` does. Point a
+browser, or any SOCKS5 client, at the port.
+
 ## GUI apps
 
 An app started from the macOS Dock or Finder gets none of what your shell
@@ -91,8 +105,9 @@ unattended tunnel needs:
 | `ServerAliveInterval=15` | your config sets none |
 | `ForkAfterAuthentication=no` | your config turns it on |
 
-The forward binds `127.0.0.1` only. `close()`, or your process exiting, even
-by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it started.
+The forward or proxy binds `127.0.0.1` only. `close()`, or your process
+exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it
+started.
 
 ## Limits
 
@@ -125,6 +140,13 @@ class FakeSshClient implements SshClient {
           {required String remoteHost,
           required int remotePort,
           int? localPort,
+          void Function(String line)? onLog,
+          Future<void>? abortTrigger}) =>
+      throw const SshTunnelException('Permission denied (publickey).');
+
+  @override
+  Future<SshTunnel> openSocksProxy(SshTarget server,
+          {int? localPort,
           void Function(String line)? onLog,
           Future<void>? abortTrigger}) =>
       throw const SshTunnelException('Permission denied (publickey).');

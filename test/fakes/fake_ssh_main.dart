@@ -137,7 +137,9 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       .map(AttemptMode.values.byName)
       .toList();
   final mode = attempt <= modes.length ? modes[attempt - 1] : modes.last;
-  final port = arguments[arguments.indexOf('-L') + 1].split(':')[1];
+  final forward =
+      arguments.indexWhere((argument) => ['-L', '-D'].contains(argument));
+  final port = arguments[forward + 1].split(':')[1];
   final listening =
       'debug1: Local forwarding listening on 127.0.0.1 port $port.';
 
