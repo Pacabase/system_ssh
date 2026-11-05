@@ -23,15 +23,31 @@ void main() {
     String message, {
     Object? log = anything,
     int exitCode = 255,
+    bool isPermanent = false,
   }) =>
       throwsA(
         isA<SshTunnelException>()
             .having((exception) => exception.message, 'message', message)
             .having((exception) => exception.log, 'log', log)
-            .having((exception) => exception.exitCode, 'exitCode', exitCode),
+            .having((exception) => exception.exitCode, 'exitCode', exitCode)
+            .having(
+              (exception) => exception.isPermanent,
+              'isPermanent',
+              isPermanent,
+            ),
       );
 
   group('attach', () {
+    test('says a refused login is permanent', () async {
+      const denied = 'user@ssh.example.com: Permission denied (publickey).';
+      final process = await startFake(['err:$denied', 'exit:255']);
+
+      await expectLater(
+        SystemSshTunnel.attach(process, localPort: localPort),
+        throwsTunnelException(denied, isPermanent: true),
+      );
+    });
+
     test('returns a tunnel once ssh reports the forward listening', () async {
       final process = await startFake([
         'err:$connectingLine',
@@ -171,7 +187,10 @@ void main() {
 
       await expectLater(
         SystemSshTunnel.attach(process, localPort: localPort),
-        throwsTunnelException('Host key verification failed.'),
+        throwsTunnelException(
+          'Host key verification failed.',
+          isPermanent: true,
+        ),
       );
     });
 
@@ -305,6 +324,22 @@ void main() {
   });
 
   group('done', () {
+    test('says a refused login is permanent', () async {
+      const denied = 'Received disconnect from 10.0.0.1 port 22:2: '
+          'Too many authentication failures';
+      final process = await startFake([...ready, 'err:$denied', 'exit:255']);
+
+      final tunnel = await SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+      );
+
+      await expectLater(
+        tunnel.done.timeout(const Duration(seconds: 10)),
+        throwsTunnelException(denied, isPermanent: true),
+      );
+    });
+
     test('fails with ssh\'s reason when the connection drops', () async {
       const closed = 'Connection to ssh.example.com closed by remote host.';
       final process = await startFake([

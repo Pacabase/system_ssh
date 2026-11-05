@@ -12,6 +12,11 @@ class SshException implements Exception {
   /// What went wrong.
   final String message;
 
+  /// Whether trying again can't work until the user changes something, such
+  /// as a host key, a login, the ssh config or a port in use. A dropped
+  /// connection, a timeout or a host that doesn't resolve while offline isn't.
+  bool get isPermanent => false;
+
   @override
   String toString() => 'SshException: $message';
 }
@@ -30,6 +35,9 @@ final class SshNotFoundException extends SshException {
   const SshNotFoundException._(super.message);
 
   @override
+  bool get isPermanent => true;
+
+  @override
   String toString() => 'SshNotFoundException: $message';
 }
 
@@ -44,7 +52,15 @@ final class SshTunnelAbortedException extends SshException {
 
 /// ssh exited before the tunnel was open.
 final class SshTunnelException extends SshException {
-  const SshTunnelException(super.message, {this.log = const [], this.exitCode});
+  const SshTunnelException(
+    super.message, {
+    this.log = const [],
+    this.exitCode,
+    this.isPermanent = false,
+  });
+
+  @override
+  final bool isPermanent;
 
   /// Everything ssh wrote while it tried, including `-v` progress, as of
   /// when it exited.
@@ -65,6 +81,9 @@ final class SshPortInUseException extends SshException {
 
   /// The port that is taken.
   final int port;
+
+  @override
+  bool get isPermanent => true;
 
   @override
   String toString() => 'SshPortInUseException: $message';

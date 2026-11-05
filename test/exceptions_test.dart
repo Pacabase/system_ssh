@@ -11,11 +11,16 @@ void main() {
       expect(exception.message, 'boom');
       expect(exception.toString(), 'SshException: boom');
     });
+
+    test('is not permanent', () {
+      expect(const SshException('boom').isPermanent, isFalse);
+    });
   });
 
   group('SshNotFoundException', () {
-    test('is an SshException', () {
+    test('is a permanent SshException', () {
       expect(SshNotFoundException(), isA<SshException>());
+      expect(SshNotFoundException().isPermanent, isTrue);
     });
 
     test('says to install OpenSSH', () {
@@ -40,6 +45,7 @@ void main() {
       const exception = SshTunnelAbortedException();
 
       expect(exception, isA<SshException>());
+      expect(exception.isPermanent, isFalse);
       expect(
         exception.toString(),
         'SshTunnelAbortedException: the tunnel was aborted',
@@ -75,6 +81,7 @@ void main() {
       const exception = SshPortInUseException(5432);
 
       expect(exception, isA<SshException>());
+      expect(exception.isPermanent, isTrue);
       expect(exception.port, 5432);
       expect(
         exception.toString(),

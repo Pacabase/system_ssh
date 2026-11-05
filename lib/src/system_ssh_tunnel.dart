@@ -100,6 +100,7 @@ final class SystemSshTunnel implements SshTunnel {
           reason.isEmpty ? 'ssh exited with code $code' : reason,
           log: List.unmodifiable(tail),
           exitCode: code,
+          isPermanent: isPermanentFailure(tail),
         );
       }
 
@@ -109,6 +110,7 @@ final class SystemSshTunnel implements SshTunnel {
           reason.isEmpty ? 'ssh exited with code $code' : reason,
           log: log,
           exitCode: code,
+          isPermanent: isPermanentFailure(log),
         ),
       );
     }

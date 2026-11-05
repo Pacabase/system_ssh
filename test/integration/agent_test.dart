@@ -63,7 +63,13 @@ void main() {
       test('fails at once when the agent is not there', () async {
         await expectLater(
           open(fixture.deadAgentTarget).timeout(const Duration(seconds: 20)),
-          throwsA(isA<SshTunnelException>()),
+          throwsA(
+            isA<SshTunnelException>().having(
+              (exception) => exception.isPermanent,
+              'isPermanent',
+              isTrue,
+            ),
+          ),
         );
       });
     },

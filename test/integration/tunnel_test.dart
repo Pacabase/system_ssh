@@ -24,12 +24,18 @@ void main() {
     setUp(fixture.setUp);
     tearDown(fixture.tearDown);
 
-    Matcher sshFailure(String reason) => throwsA(
-          isA<SshTunnelException>().having(
-            (exception) => exception.message,
-            'message',
-            contains(reason),
-          ),
+    Matcher sshFailure(String reason, {bool isPermanent = true}) => throwsA(
+          isA<SshTunnelException>()
+              .having(
+                (exception) => exception.message,
+                'message',
+                contains(reason),
+              )
+              .having(
+                (exception) => exception.isPermanent,
+                'isPermanent',
+                isPermanent,
+              ),
         );
 
     void Function(String line) logged([void Function(String line)? onLog]) {
@@ -130,7 +136,7 @@ void main() {
 
       await expectLater(
         open(ports: ports),
-        sshFailure('cannot listen to port'),
+        sshFailure('cannot listen to port', isPermanent: false),
       );
       expect(ports.picks, 3);
     });

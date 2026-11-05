@@ -104,6 +104,11 @@ signed with a Developer ID and notarized instead.
 | `SshException` | anything else, such as `ClearAllForwardings` in your config |
 | `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…`, or a `localPort` outside 1 to 65535 |
 
+`isPermanent` says whether trying again can't work until something changes:
+true for a missing ssh, a taken `localPort`, and an `SshTunnelException` for a
+host key, a refused login or a broken ssh config. A dropped connection, a
+timeout or a host that doesn't resolve while offline is worth retrying.
+
 ## Options it sets
 
 `system_ssh` asks `ssh -G` what your config resolves to and only adds what an

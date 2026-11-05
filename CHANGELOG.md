@@ -1,3 +1,11 @@
+## 0.6.0
+
+- `SshException.isPermanent` says whether trying again can't work until
+  something changes, so an app can reconnect a dropped tunnel and stop where
+  that won't help. It is true for `SshNotFoundException`,
+  `SshPortInUseException`, and an `SshTunnelException` when ssh refused a
+  host key or a login, or couldn't read its config.
+
 ## 0.5.0
 
 - `SystemSshClient.configuredHosts()` lists the hosts named in `~/.ssh/config`
