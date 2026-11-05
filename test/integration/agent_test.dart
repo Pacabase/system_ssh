@@ -3,8 +3,6 @@
 @Tags(['integration'])
 library;
 
-import 'dart:io';
-
 import 'package:system_ssh/src/system_ssh_client.dart';
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
@@ -16,8 +14,7 @@ void main() {
 
   group(
     'An ssh agent',
-    skip: fixture.skip ??
-        (Platform.isWindows ? "Windows' ssh-agent is a service" : null),
+    skip: fixture.skip,
     () {
       setUpAll(() async {
         await fixture.setUpAll();
