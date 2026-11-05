@@ -120,7 +120,7 @@ void main() {
 
       expect(
         classify(line),
-        const SshConnectionFailed(line, reason: 'Connection refused'),
+        const SshForwardFailed(line, reason: 'Connection refused'),
       );
     });
 
@@ -130,8 +130,14 @@ void main() {
 
       expect(
         classify(line),
-        const SshConnectionFailed(line, reason: 'administratively prohibited'),
+        const SshForwardFailed(line, reason: 'administratively prohibited'),
       );
+    });
+
+    test('keeps -v progress about a channel as progress', () {
+      const line = 'debug1: channel 3: open failed: connect failed: x';
+
+      expect(classify(line), const SshProgress(line));
     });
 
     test('tells -v progress from anything else', () {
@@ -141,7 +147,7 @@ void main() {
       );
       expect(
         classify('Connection to ssh.example.com closed.'),
-        const SshWarning('Connection to ssh.example.com closed.'),
+        const SshMessage('Connection to ssh.example.com closed.'),
       );
     });
   });

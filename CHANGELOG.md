@@ -1,14 +1,16 @@
 ## Unreleased
 
 - **Breaking:** `onLog` gets an `SshLog` instead of a `String`: an
-  `SshProgress` for ssh's `-v` progress, an `SshWarning` for anything else,
-  or, once the tunnel is open, an `SshConnectionFailed` with the `reason` a
+  `SshProgress` for ssh's `-v` progress, an `SshMessage` for anything else,
+  or, once the tunnel is open, an `SshForwardFailed` with the `reason` a
   connection through it couldn't be forwarded, such as `Connection refused`
-  from the destination or `administratively prohibited` from the server. Each
-  has ssh's `line`, so an app no longer matches ssh's `open failed` lines
-  itself. Blank lines are left out.
+  from the destination or `administratively prohibited` from the server, so
+  an app no longer matches ssh's `open failed` lines itself. To keep logging
+  as before, change `onLog: (line) => …` to `onLog: (log) => …` and use
+  `log.line`. Blank lines are no longer passed on.
 - **Breaking for your own `SshClient` implementations, such as test fakes:**
-  `configuredHosts()` moved from `SystemSshClient` to the `SshClient`
+  `openTunnel` and `openSocksProxy` take `void Function(SshLog log)? onLog`,
+  and `configuredHosts()` moved from `SystemSshClient` to the `SshClient`
   interface, so a fake can offer hosts too.
 - `SshTunnelException`'s documentation says it also comes from `done` when
   the connection drops.

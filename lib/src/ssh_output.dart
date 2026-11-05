@@ -31,9 +31,11 @@ String failureMessage(List<String> log) {
 
 /// Whether [line] is ssh saying it set up the forward on [localPort]; ssh logs
 /// this before it binds, so only a started session after it means ready.
-bool isListeningOn(String line, int localPort) => RegExp(
-      'Local forwarding listening on 127\\.0\\.0\\.1 port $localPort\\b',
-    ).hasMatch(line);
+bool isListeningOn(String line, int localPort) =>
+    _listening.firstMatch(line)?[1] == '$localPort';
+
+final _listening =
+    RegExp(r'Local forwarding listening on 127\.0\.0\.1 port (\d+)\b');
 
 bool isSessionStarted(String line) =>
     line.contains('Entering interactive session');
@@ -41,12 +43,14 @@ bool isSessionStarted(String line) =>
 // "channel 2: open failed: connect failed: Connection refused", or
 // "channel 3: open failed: administratively prohibited: open failed".
 final _refused = RegExp(
-  r'channel \d+: open failed: (?:connect failed: )?(.+?)(?:: open failed)?$',
+  r'^channel \d+: open failed: (?:connect failed: )?(.+?)(?:: open failed)?$',
 );
 
 /// [line] by what it means.
-SshLog classify(String line) => switch (_refused.firstMatch(line)?[1]) {
-      final reason? => SshConnectionFailed(line, reason: reason),
-      _ when isProgress(line) => SshProgress(line),
-      _ => SshWarning(line),
-    };
+SshLog classify(String line) {
+  if (isProgress(line)) return SshProgress(line);
+  if (_refused.firstMatch(line)?[1] case final reason?) {
+    return SshForwardFailed(line, reason: reason);
+  }
+  return SshMessage(line);
+}

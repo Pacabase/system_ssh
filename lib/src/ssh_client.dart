@@ -31,14 +31,15 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [onLog] gets each line ssh writes while it connects, and after that,
-  /// until [SshTunnel.close], its warnings and each [SshConnectionFailed]: a
-  /// connection through the open tunnel that couldn't be forwarded, such as
-  /// one the destination refused. Windows' sshd closes such a connection
-  /// without saying, so there it isn't reported. The tunnel's own failures
-  /// aren't logs: they're thrown, or fail [SshTunnel.done]. Completing
-  /// [abortTrigger] before the tunnel is open stops ssh; after, it is
-  /// ignored, and [SshTunnel.close] stops it instead.
+  /// [onLog] gets an [SshLog] for each non-blank line ssh writes while it
+  /// connects, then, until [SshTunnel.close], everything but [SshProgress]:
+  /// its warnings, and an [SshForwardFailed] for each connection through the
+  /// open tunnel that couldn't be forwarded, such as one the destination
+  /// refused. Windows' sshd closes such a connection without saying, so there
+  /// it isn't reported. The tunnel's own failures aren't logs: they're thrown,
+  /// or fail [SshTunnel.done].
+  /// Completing [abortTrigger] before the tunnel is open stops ssh; after,
+  /// it is ignored, and [SshTunnel.close] stops it instead.
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.

@@ -30,17 +30,16 @@ Future<void> main() async {
 
 - `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
 - `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
-- `onLog` gets what ssh says, as an `SshLog` with ssh's `line`: its progress
-  and errors while it connects, then its warnings until you `close()` the
-  tunnel, and an `SshConnectionFailed` with the `reason` for each connection
-  through the tunnel that couldn't be forwarded, such as `Connection refused`
-  when nothing listens at the destination (Windows' sshd doesn't say). These
-  are information: the tunnel's own failures are thrown, or fail `done`.
+- `onLog` gets what ssh says as an `SshLog` with its `line`: `SshProgress`
+  while it connects, `SshForwardFailed` with a `reason` for a connection
+  through the open tunnel that couldn't be made (Windows' sshd doesn't say),
+  and `SshMessage` for anything else. They're information: the tunnel's own
+  failures are thrown, or fail `done`.
 
   ```dart
   onLog: (log) => switch (log) {
-    SshConnectionFailed(:final reason) => print("Couldn't forward: $reason"),
-    SshProgress() || SshWarning() => print(log.line),
+    SshForwardFailed(:final reason) => print("Couldn't forward: $reason"),
+    SshProgress() || SshMessage() => print(log.line),
   },
   ```
 - `abortTrigger` gives up while it connects.

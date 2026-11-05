@@ -374,13 +374,15 @@ void main() {
 
     test('passes the log to onLog', () async {
       fake.attemptModes([AttemptMode.ready]);
-      final lines = <String>[];
+      final logs = <SshLog>[];
 
-      final tunnel = await open(onLog: (log) => lines.add(log.line));
+      final tunnel = await open(onLog: logs.add);
 
-      expect(lines, [
-        'debug1: Local forwarding listening on 127.0.0.1 port ${tunnel.localPort}.',
-        'debug1: Entering interactive session.',
+      expect(logs, [
+        SshProgress(
+          'debug1: Local forwarding listening on 127.0.0.1 port ${tunnel.localPort}.',
+        ),
+        const SshProgress('debug1: Entering interactive session.'),
       ]);
     });
 
@@ -673,13 +675,15 @@ void main() {
 
       test('passes the log to onLog', () async {
         fake.attemptModes([AttemptMode.ready]);
-        final lines = <String>[];
+        final logs = <SshLog>[];
 
-        final proxy = await openProxy(onLog: (log) => lines.add(log.line));
+        final proxy = await openProxy(onLog: logs.add);
 
-        expect(lines, [
-          'debug1: Local forwarding listening on 127.0.0.1 port ${proxy.localPort}.',
-          'debug1: Entering interactive session.',
+        expect(logs, [
+          SshProgress(
+            'debug1: Local forwarding listening on 127.0.0.1 port ${proxy.localPort}.',
+          ),
+          const SshProgress('debug1: Entering interactive session.'),
         ]);
       });
 

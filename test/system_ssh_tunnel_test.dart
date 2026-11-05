@@ -227,7 +227,7 @@ void main() {
         throwsA(isA<SshTunnelException>()),
       );
 
-      expect(logs, const [SshProgress(connectingLine), SshWarning(denied)]);
+      expect(logs, const [SshProgress(connectingLine), SshMessage(denied)]);
     });
 
     test('passes onLog warnings and failed connections once open', () async {
@@ -258,9 +258,9 @@ void main() {
       expect(logs, const [
         SshProgress(listeningLine),
         SshProgress(sessionLine),
-        SshConnectionFailed(refused, reason: 'Connection refused'),
-        SshConnectionFailed(prohibited, reason: 'administratively prohibited'),
-        SshWarning(warning),
+        SshForwardFailed(refused, reason: 'Connection refused'),
+        SshForwardFailed(prohibited, reason: 'administratively prohibited'),
+        SshMessage(warning),
       ]);
     });
 
@@ -549,8 +549,12 @@ void main() {
     });
 
     test('survives an onLog that throws, and logs it at WARNING', () async {
-      final process =
-          await startFake(['err:$connectingLine', ...ready, 'hang']);
+      final process = await startFake([
+        'err:$connectingLine',
+        ...ready,
+        'err:Warning: something once open',
+        'hang',
+      ]);
       var calls = 0;
 
       final tunnel = await SystemSshTunnel.attach(
@@ -562,8 +566,12 @@ void main() {
         },
       );
 
+      for (var waited = 0; calls < 4 && waited < 50; waited++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+
       expect(tunnel.localPort, localPort);
-      expect(calls, 3);
+      expect(calls, 4);
       expect(
         records.where((record) => record.level == Level.WARNING),
         everyElement(
@@ -574,7 +582,7 @@ void main() {
       );
       expect(
         records.where((record) => record.level == Level.WARNING),
-        hasLength(3),
+        hasLength(4),
       );
     });
   });

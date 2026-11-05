@@ -36,16 +36,16 @@ final class SystemSshTunnel implements SshTunnel {
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async {
-    final log = <String>[];
+    final lines = <String>[];
     final tail = <String>[];
     final ready = Completer<void>();
     var isListening = false;
     final stderrDone = Completer<void>();
 
     late final SystemSshTunnel tunnel;
-    void report(SshLog log) {
+    void report(SshLog entry) {
       try {
-        onLog?.call(log);
+        onLog?.call(entry);
       } catch (exception, stack) {
         logger.warning('onLog threw', exception, stack);
       }
@@ -58,11 +58,13 @@ final class SystemSshTunnel implements SshTunnel {
         if (tail.length > _tailLength) tail.removeAt(0);
         // Once closed, what's left is ssh saying goodbye: "Killed by signal 15."
         if (tunnel._isClosed || line.trim().isEmpty) return;
-        if (classify(line) case final log when log is! SshProgress) report(log);
+        if (classify(line) case final entry when entry is! SshProgress) {
+          report(entry);
+        }
         return;
       }
 
-      log.add(line);
+      lines.add(line);
       if (line.trim().isNotEmpty) report(classify(line));
       if (isListeningOn(line, localPort)) isListening = true;
       if (isListening && isSessionStarted(line)) ready.complete();
@@ -98,13 +100,13 @@ final class SystemSshTunnel implements SshTunnel {
         );
       }
 
-      final reason = failureMessage(log);
+      final reason = failureMessage(lines);
       ready.completeError(
         SshTunnelException(
           reason.isEmpty ? 'ssh exited with code $code' : reason,
-          log: log,
+          log: lines,
           exitCode: code,
-          isPermanent: isPermanentFailure(log),
+          isPermanent: isPermanentFailure(lines),
         ),
       );
     }

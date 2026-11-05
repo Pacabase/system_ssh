@@ -82,12 +82,21 @@ void main() {
     });
 
     test('forwards the local port to host and port once ssh says so', () async {
-      final lines = <String>[];
-      final tunnel = await open(onLog: (log) => lines.add(log.line));
+      final logs = <SshLog>[];
+      final tunnel = await open(onLog: logs.add);
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
-      expect(lines, contains(contains('Local forwarding listening')));
-      expect(lines.last, contains('Entering interactive session'));
+      expect(
+        logs,
+        contains(
+          isA<SshProgress>().having(
+            (log) => log.line,
+            'line',
+            contains('Local forwarding listening'),
+          ),
+        ),
+      );
+      expect(logs.last.line, contains('Entering interactive session'));
     });
 
     test('accepts and remembers a new host key when the config asks', () async {
@@ -189,13 +198,13 @@ void main() {
       // warn about; other servers say the destination refused.
       if (!Platform.isWindows) {
         for (var waited = 0; waited < 50; waited++) {
-          if (logs.any((log) => log is SshConnectionFailed)) break;
+          if (logs.any((log) => log is SshForwardFailed)) break;
           await Future<void>.delayed(const Duration(milliseconds: 100));
         }
         expect(
           logs,
           contains(
-            isA<SshConnectionFailed>()
+            isA<SshForwardFailed>()
                 .having((log) => log.reason, 'reason', 'Connection refused'),
           ),
         );
