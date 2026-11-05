@@ -33,11 +33,10 @@ void main() {
       }) async {
         final log = <String>[];
         addTearDown(() => printOnFailure('ssh log:\n${log.join('\n')}'));
-        final tunnel = await openSystemTunnel(
+        final tunnel = await openSystemForward(
           via,
-          remoteHost: fixture.echoHost,
-          remotePort: fixture.echoPort,
-          onLog: log.add,
+          forward: localForwardTo(fixture.echoHost, fixture.echoPort),
+          onLog: (entry) => log.add(entry.line),
           executable: fixture.ssh,
           environment: environment,
         );

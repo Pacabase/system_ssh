@@ -30,16 +30,26 @@ Future<void> main() async {
 
 - `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
 - `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
-- `onLog` gets ssh's output while it connects, and its warnings until you
-  `close()` the tunnel, such as a forwarded connection the destination refused.
+- `onLog` gets what ssh says as an `SshLog` with its `line`: `SshProgress`
+  while it connects, `SshForwardFailed` with a `reason` for a connection
+  through the open tunnel that couldn't be made (Windows' sshd doesn't say),
+  and `SshMessage` for anything else. They're information: the tunnel's own
+  failures are thrown, or fail `done`.
+
+  ```dart
+  onLog: (log) => switch (log) {
+    SshForwardFailed(:final reason) => print("Couldn't forward: $reason"),
+    SshProgress() || SshMessage() => print(log.line),
+  },
+  ```
 - `abortTrigger` gives up while it connects.
 - `tunnel.done` completes once you `close()` the tunnel, and fails with an
   `SshTunnelException` saying why when the connection drops.
 - `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
 - `SystemSshClient(environment: ...)` adds variables to the environment ssh
   inherits; a bare `executable` is looked up on the `PATH` it sets.
-- `SystemSshClient().configuredHosts()` lists the hosts named in
-  `~/.ssh/config` and the files it includes, for offering them to pick from.
+- `client.configuredHosts()` lists the hosts named in `~/.ssh/config` and the
+  files it includes, for offering them to pick from.
 
 ssh's output and the full command also go to the `system_ssh` logger of
 [`package:logging`](https://pub.dev/packages/logging).
@@ -158,15 +168,18 @@ class FakeSshClient implements SshClient {
           {required String remoteHost,
           required int remotePort,
           int? localPort,
-          void Function(String line)? onLog,
+          void Function(SshLog log)? onLog,
           Future<void>? abortTrigger}) =>
       throw const SshTunnelException('Permission denied (publickey).');
 
   @override
   Future<SshTunnel> openSocksProxy(SshTarget server,
           {int? localPort,
-          void Function(String line)? onLog,
+          void Function(SshLog log)? onLog,
           Future<void>? abortTrigger}) =>
       throw const SshTunnelException('Permission denied (publickey).');
+
+  @override
+  Future<List<String>> configuredHosts() async => const ['ssh.example.com'];
 }
 ```

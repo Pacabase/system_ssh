@@ -1,4 +1,5 @@
-import 'package:system_ssh/src/failure_message.dart';
+import 'package:system_ssh/src/ssh_output.dart';
+import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -111,5 +112,51 @@ void main() {
         isFalse,
       );
     });
+  });
+
+  group('classify', () {
+    test('says a forwarded connection the destination refused failed', () {
+      const line = 'channel 2: open failed: connect failed: Connection refused';
+
+      expect(
+        classify(line),
+        const SshForwardFailed(line, reason: 'Connection refused'),
+      );
+    });
+
+    test('says one the server refused failed', () {
+      const line =
+          'channel 3: open failed: administratively prohibited: open failed';
+
+      expect(
+        classify(line),
+        const SshForwardFailed(line, reason: 'administratively prohibited'),
+      );
+    });
+
+    test('keeps -v progress about a channel as progress', () {
+      const line = 'debug1: channel 3: open failed: connect failed: x';
+
+      expect(classify(line), const SshProgress(line));
+    });
+
+    test('tells -v progress from anything else', () {
+      expect(
+        classify('debug1: channel 3: new [direct-tcpip]'),
+        const SshProgress('debug1: channel 3: new [direct-tcpip]'),
+      );
+      expect(
+        classify('Connection to ssh.example.com closed.'),
+        const SshMessage('Connection to ssh.example.com closed.'),
+      );
+    });
+  });
+
+  test('isListeningOn matches only the port asked for', () {
+    const line = 'debug1: Local forwarding listening on 127.0.0.1 port 5000.';
+
+    expect(isListeningOn(line, 5000), isTrue);
+    expect(isListeningOn(line, 500), isFalse);
+    expect(isListeningOn(line, 50000), isFalse);
   });
 }

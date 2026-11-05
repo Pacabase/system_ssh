@@ -212,43 +212,71 @@ void main() {
       );
     });
 
-    test('passes onLog every line while connecting, and warnings after',
-        () async {
-      const refused =
-          'channel 3: open failed: connect failed: Connection refused';
+    test('passes onLog each line while connecting, by what it means', () async {
+      const denied = 'ssh.example.com: Permission denied (publickey).';
       final process = await startFake([
         'err:$connectingLine',
+        'err:',
+        'err:$denied',
+        'exit:255',
+      ]);
+      final logs = <SshLog>[];
+
+      await expectLater(
+        SystemSshTunnel.attach(process, localPort: localPort, onLog: logs.add),
+        throwsA(isA<SshTunnelException>()),
+      );
+
+      expect(logs, const [SshProgress(connectingLine), SshMessage(denied)]);
+    });
+
+    test('passes onLog warnings and failed connections once open', () async {
+      const refused =
+          'channel 3: open failed: connect failed: Connection refused';
+      const prohibited =
+          'channel 4: open failed: administratively prohibited: open failed';
+      const warning = 'Warning: remote port forwarding failed';
+      final process = await startFake([
         ...ready,
-        'err:debug1: channel 0: new [port listener]',
+        'err:debug1: channel 3: new [direct-tcpip]',
         'err:$refused',
         'err:',
+        'err:$prohibited',
+        'err:$warning',
         'exit:0',
       ]);
-      final lines = <String>[];
+      final logs = <SshLog>[];
 
       final tunnel = await SystemSshTunnel.attach(
         process,
         localPort: localPort,
-        onLog: lines.add,
+        onLog: logs.add,
       );
       await exitCodeOf(process);
       await ended(tunnel);
 
-      expect(lines, [connectingLine, listeningLine, sessionLine, refused]);
+      expect(logs, const [
+        SshProgress(listeningLine),
+        SshProgress(sessionLine),
+        SshForwardFailed(refused, reason: 'Connection refused'),
+        SshForwardFailed(prohibited, reason: 'administratively prohibited'),
+        SshMessage(warning),
+      ]);
     });
 
     test('passes onLog nothing ssh says after close', () async {
       final process = _GoodbyeProcess([listeningLine, sessionLine]);
-      final lines = <String>[];
+      final logs = <SshLog>[];
       final tunnel = await SystemSshTunnel.attach(
         process,
         localPort: localPort,
-        onLog: lines.add,
+        onLog: logs.add,
       );
 
       await tunnel.close();
 
-      expect(lines, [listeningLine, sessionLine]);
+      expect(
+          logs, const [SshProgress(listeningLine), SshProgress(sessionLine)]);
     });
 
     test('drains stdout so a chatty ssh never blocks', () async {
@@ -521,8 +549,12 @@ void main() {
     });
 
     test('survives an onLog that throws, and logs it at WARNING', () async {
-      final process =
-          await startFake(['err:$connectingLine', ...ready, 'hang']);
+      final process = await startFake([
+        'err:$connectingLine',
+        ...ready,
+        'err:Warning: something once open',
+        'hang',
+      ]);
       var calls = 0;
 
       final tunnel = await SystemSshTunnel.attach(
@@ -534,8 +566,12 @@ void main() {
         },
       );
 
+      for (var waited = 0; calls < 4 && waited < 50; waited++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+
       expect(tunnel.localPort, localPort);
-      expect(calls, 3);
+      expect(calls, 4);
       expect(
         records.where((record) => record.level == Level.WARNING),
         everyElement(
@@ -546,7 +582,7 @@ void main() {
       );
       expect(
         records.where((record) => record.level == Level.WARNING),
-        hasLength(3),
+        hasLength(4),
       );
     });
   });

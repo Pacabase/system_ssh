@@ -1,4 +1,5 @@
 import 'exceptions.dart';
+import 'ssh_log.dart';
 import 'ssh_target.dart';
 
 /// An open tunnel: connections to `127.0.0.1:`[localPort] reach the remote
@@ -30,12 +31,15 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [onLog] gets each line ssh writes until the tunnel is open, and after
-  /// that, until [SshTunnel.close], its warnings, such as a forwarded connection the destination
-  /// refused (`channel 2: open failed: connect failed: Connection refused`),
-  /// without the `-v` progress. Completing
-  /// [abortTrigger] before then stops ssh; once the tunnel is open it is
-  /// ignored, and [SshTunnel.close] stops it instead.
+  /// [onLog] gets an [SshLog] for each non-blank line ssh writes while it
+  /// connects, then, until [SshTunnel.close], everything but [SshProgress]:
+  /// its warnings, and an [SshForwardFailed] for each connection through the
+  /// open tunnel that couldn't be forwarded, such as one the destination
+  /// refused. Windows' sshd closes such a connection without saying, so there
+  /// it isn't reported. The tunnel's own failures aren't logs: they're thrown,
+  /// or fail [SshTunnel.done].
+  /// Completing [abortTrigger] before the tunnel is open stops ssh; after,
+  /// it is ignored, and [SshTunnel.close] stops it instead.
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
@@ -51,7 +55,7 @@ abstract interface class SshClient {
     required String remoteHost,
     required int remotePort,
     int? localPort,
-    void Function(String line)? onLog,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   });
 
@@ -78,7 +82,12 @@ abstract interface class SshClient {
   Future<SshTunnel> openSocksProxy(
     SshTarget server, {
     int? localPort,
-    void Function(String line)? onLog,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   });
+
+  /// The hosts named in `~/.ssh/config` and the files it includes, for
+  /// offering them to pick from: aliases, not `*` patterns or `!` negations.
+  /// Empty when there is no config.
+  Future<List<String>> configuredHosts();
 }

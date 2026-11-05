@@ -23,10 +23,9 @@ void main() {
 
   test('throws SshNotFoundException when ssh is missing', () async {
     await expectLater(
-      openSystemTunnel(
+      openSystemForward(
         server,
-        remoteHost: 'db.example.com',
-        remotePort: 3306,
+        forward: localForwardTo('db.example.com', 3306),
         executable: '/nonexistent/ssh',
       ),
       throwsA(isA<SshNotFoundException>()),
@@ -39,10 +38,9 @@ void main() {
       String remoteHost = 'db.example.com',
       int? localPort,
     }) async =>
-        openSystemTunnel(
+        openSystemForward(
           target,
-          remoteHost: remoteHost,
-          remotePort: 3306,
+          forward: localForwardTo(remoteHost, 3306),
           localPort: localPort,
           executable: '/nonexistent/ssh',
           portIsFree: (_) async => true,
@@ -232,15 +230,14 @@ void main() {
       CountingPorts? ports,
       Future<bool> Function(int port) portIsFree = isPortFree,
       Future<void>? abortTrigger,
-      void Function(String line)? onLog,
+      void Function(SshLog log)? onLog,
       Duration configTimeout = const Duration(seconds: 5),
       String? executable,
       Map<String, String> environment = const {},
     }) async {
-      final tunnel = await openSystemTunnel(
+      final tunnel = await openSystemForward(
         target,
-        remoteHost: remoteHost,
-        remotePort: 3306,
+        forward: localForwardTo(remoteHost, 3306),
         localPort: localPort,
         executable: executable ?? fake.path,
         environment: environment,
@@ -377,13 +374,15 @@ void main() {
 
     test('passes the log to onLog', () async {
       fake.attemptModes([AttemptMode.ready]);
-      final lines = <String>[];
+      final logs = <SshLog>[];
 
-      final tunnel = await open(onLog: lines.add);
+      final tunnel = await open(onLog: logs.add);
 
-      expect(lines, [
-        'debug1: Local forwarding listening on 127.0.0.1 port ${tunnel.localPort}.',
-        'debug1: Entering interactive session.',
+      expect(logs, [
+        SshProgress(
+          'debug1: Local forwarding listening on 127.0.0.1 port ${tunnel.localPort}.',
+        ),
+        const SshProgress('debug1: Entering interactive session.'),
       ]);
     });
 
@@ -625,7 +624,7 @@ void main() {
         CountingPorts? ports,
         Future<bool> Function(int port) portIsFree = isPortFree,
         Future<void>? abortTrigger,
-        void Function(String line)? onLog,
+        void Function(SshLog log)? onLog,
       }) async {
         final tunnel = await openSystemForward(
           target,
@@ -676,13 +675,15 @@ void main() {
 
       test('passes the log to onLog', () async {
         fake.attemptModes([AttemptMode.ready]);
-        final lines = <String>[];
+        final logs = <SshLog>[];
 
-        final proxy = await openProxy(onLog: lines.add);
+        final proxy = await openProxy(onLog: logs.add);
 
-        expect(lines, [
-          'debug1: Local forwarding listening on 127.0.0.1 port ${proxy.localPort}.',
-          'debug1: Entering interactive session.',
+        expect(logs, [
+          SshProgress(
+            'debug1: Local forwarding listening on 127.0.0.1 port ${proxy.localPort}.',
+          ),
+          const SshProgress('debug1: Entering interactive session.'),
         ]);
       });
 
