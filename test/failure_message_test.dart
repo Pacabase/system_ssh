@@ -93,6 +93,8 @@ void main() {
       'ssh: Could not resolve hostname ssh.example.com: nodename nor servname provided, or not known',
       'client_loop: send disconnect: Broken pipe',
       'Connection reset by 10.0.0.1 port 22',
+      // How Windows' ssh says a local port is taken.
+      'bind [127.0.0.1]:56882: Permission denied',
     ]) {
       test('is false for "$line"', () {
         expect(isPermanentFailure(['debug1: Connecting', line]), isFalse);

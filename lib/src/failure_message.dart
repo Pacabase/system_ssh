@@ -7,7 +7,7 @@ final _progress = RegExp(
 // What ssh says when only a change to keys, config or the server can help.
 final _permanent = RegExp(
   'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|'
-  'Permission denied|Too many authentication failures|'
+  r'Permission denied \(|Too many authentication failures|'
   'bad configuration option|Bad owner or permissions|'
   'no argument after keyword|garbage at end of line',
   caseSensitive: false,
