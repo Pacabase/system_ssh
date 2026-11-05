@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:logging/logging.dart';
 import 'package:system_ssh/src/ports.dart';
 import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/system_ssh_client.dart';
@@ -161,6 +162,17 @@ void main() {
       final port = closed.port;
       await closed.close();
 
+      final level = Logger.root.level;
+      Logger.root.level = Level.ALL;
+      addTearDown(() => Logger.root.level = level);
+      final everything = <String>[];
+      final listening = Logger('system_ssh').onRecord.listen(
+            (record) => everything.add(record.message),
+          );
+      addTearDown(listening.cancel);
+      addTearDown(
+        () => printOnFailure('all of ssh:\n${everything.join('\n')}'),
+      );
       final warnings = <String>[];
       final tunnel = await open(remotePort: port, onLog: warnings.add);
       warnings.clear();
