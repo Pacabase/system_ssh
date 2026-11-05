@@ -1,3 +1,10 @@
+## 0.4.0
+
+- **Breaking:** `SshTunnel.done` fails with an `SshTunnelException` when ssh
+  exits on its own, with ssh's reason (for example "Connection to … closed by
+  remote host") and its last lines in `log`. It still completes normally after
+  `close()`, and a caller that never listens to it isn't affected.
+
 ## 0.3.0
 
 - `openSocksProxy` serves a SOCKS5 proxy (`ssh -D`) on `127.0.0.1`, through

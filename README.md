@@ -32,7 +32,8 @@ Future<void> main() async {
 - `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
 - `onLog` gets ssh's output while it connects.
 - `abortTrigger` gives up while it connects.
-- `tunnel.done` completes when ssh exits, for example when the connection drops.
+- `tunnel.done` completes once you `close()` the tunnel, and fails with an
+  `SshTunnelException` saying why when the connection drops.
 - `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
 - `SystemSshClient(environment: ...)` adds variables to the environment ssh
   inherits; a bare `executable` is looked up on the `PATH` it sets.
