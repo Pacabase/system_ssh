@@ -1,4 +1,4 @@
-## Unreleased
+## 0.7.0
 
 - `tunnelCommand` and `socksProxyCommand` give the `ssh` command that opens
   the same tunnel or SOCKS proxy from a terminal, quoted for a shell, such as
