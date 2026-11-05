@@ -31,15 +31,18 @@ Future<void> main() async {
 - `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
 - `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
 - `onLog` gets ssh's output while it connects, and its warnings until you
-  `close()` the tunnel, such as a forwarded connection the destination refused.
+  `close()` the tunnel.
+- `onRefused` gets why a connection through the open tunnel couldn't be
+  forwarded, such as `Connection refused` when nothing listens at the
+  destination. Windows' sshd doesn't say, so it isn't called for one.
 - `abortTrigger` gives up while it connects.
 - `tunnel.done` completes once you `close()` the tunnel, and fails with an
   `SshTunnelException` saying why when the connection drops.
 - `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
 - `SystemSshClient(environment: ...)` adds variables to the environment ssh
   inherits; a bare `executable` is looked up on the `PATH` it sets.
-- `SystemSshClient().configuredHosts()` lists the hosts named in
-  `~/.ssh/config` and the files it includes, for offering them to pick from.
+- `client.configuredHosts()` lists the hosts named in `~/.ssh/config` and the
+  files it includes, for offering them to pick from.
 
 ssh's output and the full command also go to the `system_ssh` logger of
 [`package:logging`](https://pub.dev/packages/logging).

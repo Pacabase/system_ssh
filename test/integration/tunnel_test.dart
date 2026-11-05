@@ -53,14 +53,16 @@ void main() {
       int? localPort,
       CountingPorts? ports,
       void Function(String line)? onLog,
+      void Function(String reason)? onRefused,
       Future<void>? abortTrigger,
     }) async {
-      final tunnel = await openSystemTunnel(
+      final tunnel = await openSystemForward(
         via ?? fixture.target,
-        remoteHost: fixture.echoHost,
-        remotePort: remotePort ?? fixture.echoPort,
+        forward:
+            localForwardTo(fixture.echoHost, remotePort ?? fixture.echoPort),
         localPort: localPort,
         onLog: logged(onLog),
+        onRefused: onRefused,
         abortTrigger: abortTrigger,
         executable: fixture.ssh,
         freePort: (ports ?? CountingPorts()).next,
@@ -180,7 +182,12 @@ void main() {
         () => printOnFailure('all of ssh:\n${everything.join('\n')}'),
       );
       final warnings = <String>[];
-      final tunnel = await open(remotePort: port, onLog: warnings.add);
+      final reasons = <String>[];
+      final tunnel = await open(
+        remotePort: port,
+        onLog: warnings.add,
+        onRefused: reasons.add,
+      );
       warnings.clear();
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
@@ -193,6 +200,7 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 100));
         }
         expect(warnings, contains(contains('open failed')));
+        expect(reasons, contains('Connection refused'));
       }
     });
 

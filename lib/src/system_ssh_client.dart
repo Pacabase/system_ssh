@@ -34,9 +34,7 @@ final class SystemSshClient implements SshClient {
   /// `ProxyCommand`.
   final Map<String, String> environment;
 
-  /// The hosts named in `~/.ssh/config` and the files it includes, for
-  /// offering them to pick from: aliases, not `*` patterns or `!` negations.
-  /// Empty when there is no config.
+  @override
   Future<List<String>> configuredHosts() {
     final home = environment['HOME'] ??
         Platform.environment['HOME'] ??
@@ -54,14 +52,15 @@ final class SystemSshClient implements SshClient {
     required int remotePort,
     int? localPort,
     void Function(String line)? onLog,
+    void Function(String reason)? onRefused,
     Future<void>? abortTrigger,
   }) async =>
-      openSystemTunnel(
+      openSystemForward(
         server,
-        remoteHost: remoteHost,
-        remotePort: remotePort,
+        forward: localForwardTo(remoteHost, remotePort),
         localPort: localPort,
         onLog: onLog,
+        onRefused: onRefused,
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
@@ -72,6 +71,7 @@ final class SystemSshClient implements SshClient {
     SshTarget server, {
     int? localPort,
     void Function(String line)? onLog,
+    void Function(String reason)? onRefused,
     Future<void>? abortTrigger,
   }) async =>
       openSystemForward(
@@ -79,6 +79,7 @@ final class SystemSshClient implements SshClient {
         forward: dynamicForward,
         localPort: localPort,
         onLog: onLog,
+        onRefused: onRefused,
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
@@ -94,48 +95,30 @@ final class SystemSshClient implements SshClient {
 final _unsafeInHost = RegExp(r'''[\s'"`$;&|<>(){}\\/]|[\x00-\x1f]''');
 final _unsafeInUser = RegExp(r'''[\s'"`$;&|<>(){}/]|[\x00-\x1f]''');
 
-/// [SystemSshClient.openTunnel], with the parts tests replace.
-Future<SshTunnel> openSystemTunnel(
-  SshTarget server, {
-  required String remoteHost,
-  required int remotePort,
-  int? localPort,
-  void Function(String line)? onLog,
-  Future<void>? abortTrigger,
-  String executable = 'ssh',
-  Map<String, String> environment = const {},
-  Future<int> Function() freePort = pickFreePort,
-  Future<bool> Function(int port) portIsFree = isPortFree,
-  Duration configTimeout = const Duration(seconds: 5),
-}) async {
+/// The `-L` forward to [remoteHost]:[remotePort], for [openSystemForward].
+List<String> Function(int localPort) localForwardTo(
+  String remoteHost,
+  int remotePort,
+) {
   if (remoteHost.contains(_unsafeInHost)) {
     throw ArgumentError.value(remoteHost, 'remoteHost', 'is not a valid host');
   }
 
-  return openSystemForward(
-    server,
-    forward: (port) => localForward(
-      port,
-      remoteHost: remoteHost,
-      remotePort: remotePort,
-    ),
-    localPort: localPort,
-    onLog: onLog,
-    abortTrigger: abortTrigger,
-    executable: executable,
-    environment: environment,
-    freePort: freePort,
-    portIsFree: portIsFree,
-    configTimeout: configTimeout,
-  );
+  return (port) => localForward(
+        port,
+        remoteHost: remoteHost,
+        remotePort: remotePort,
+      );
 }
 
-/// [SystemSshClient.openSocksProxy], with the parts tests replace.
+/// [SystemSshClient.openTunnel] and [SystemSshClient.openSocksProxy], with
+/// the parts tests replace.
 Future<SshTunnel> openSystemForward(
   SshTarget server, {
   required List<String> Function(int localPort) forward,
   int? localPort,
   void Function(String line)? onLog,
+  void Function(String reason)? onRefused,
   Future<void>? abortTrigger,
   String executable = 'ssh',
   Map<String, String> environment = const {},
@@ -186,6 +169,7 @@ Future<SshTunnel> openSystemForward(
         await startWatched(command, environment: environment),
         localPort: port,
         onLog: onLog,
+        onRefused: onRefused,
         abortTrigger: abortTrigger,
       );
     } on SshTunnelException catch (exception) {

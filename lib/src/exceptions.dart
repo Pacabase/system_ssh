@@ -50,7 +50,8 @@ final class SshTunnelAbortedException extends SshException {
   String toString() => 'SshTunnelAbortedException: $message';
 }
 
-/// ssh exited before the tunnel was open.
+/// ssh exited on its own: before the tunnel was open, when opening it, or
+/// after, when the connection dropped (from [SshTunnel.done]).
 final class SshTunnelException extends SshException {
   const SshTunnelException(
     super.message, {

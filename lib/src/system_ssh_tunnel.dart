@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'exceptions.dart';
-import 'failure_message.dart';
 import 'logger.dart';
 import 'ssh_client.dart';
+import 'ssh_output.dart';
 
 const _tailLength = 20;
 
@@ -27,29 +27,28 @@ final class SystemSshTunnel implements SshTunnel {
   bool _isClosed = false;
 
   /// Waits for ssh to have bound the forward. [onLog] gets each stderr line
-  /// until then, and ssh's warnings after; every line also goes to the
+  /// until then, and ssh's warnings after; [onRefused] gets why each
+  /// forwarded connection couldn't be made. Every line also goes to the
   /// `system_ssh` logger.
   static Future<SystemSshTunnel> attach(
     Process process, {
     required int localPort,
     void Function(String line)? onLog,
+    void Function(String reason)? onRefused,
     Future<void>? abortTrigger,
   }) async {
     final log = <String>[];
     final tail = <String>[];
     final ready = Completer<void>();
-    final listening = RegExp(
-      'Local forwarding listening on 127\\.0\\.0\\.1 port $localPort\\b',
-    );
     var isListening = false;
     final stderrDone = Completer<void>();
 
     late final SystemSshTunnel tunnel;
-    void report(String line) {
+    void report<T>(String name, void Function(T value)? callback, T value) {
       try {
-        onLog?.call(line);
+        callback?.call(value);
       } catch (exception, stack) {
-        logger.warning('onLog threw', exception, stack);
+        logger.warning('$name threw', exception, stack);
       }
     }
 
@@ -60,18 +59,18 @@ final class SystemSshTunnel implements SshTunnel {
         if (tail.length > _tailLength) tail.removeAt(0);
         // Once closed, what's left is ssh saying goodbye: "Killed by signal 15."
         if (!tunnel._isClosed && line.trim().isNotEmpty && !isProgress(line)) {
-          report(line);
+          report('onLog', onLog, line);
+          if (refusalReason(line) case final reason?) {
+            report('onRefused', onRefused, reason);
+          }
         }
         return;
       }
 
       log.add(line);
-      report(line);
-      // ssh logs the listener before binding; only a started session means it bound.
-      if (listening.hasMatch(line)) isListening = true;
-      if (isListening && line.contains('Entering interactive session')) {
-        ready.complete();
-      }
+      report('onLog', onLog, line);
+      if (isListeningOn(line, localPort)) isListening = true;
+      if (isListening && isSessionStarted(line)) ready.complete();
     }
 
     process.stderr

@@ -31,10 +31,12 @@ abstract interface class SshClient {
   /// ```
   ///
   /// [onLog] gets each line ssh writes until the tunnel is open, and after
-  /// that, until [SshTunnel.close], its warnings, such as a forwarded connection the destination
-  /// refused (`channel 2: open failed: connect failed: Connection refused`),
-  /// without the `-v` progress. Completing
-  /// [abortTrigger] before then stops ssh; once the tunnel is open it is
+  /// that, until [SshTunnel.close], its warnings without the `-v` progress.
+  /// [onRefused] gets why each connection through the open tunnel couldn't be
+  /// forwarded, such as `Connection refused` from the destination or
+  /// `administratively prohibited` from the server. Windows' sshd closes such
+  /// a connection without saying, so it calls nothing. Completing
+  /// [abortTrigger] before the tunnel is open stops ssh; after, it is
   /// ignored, and [SshTunnel.close] stops it instead.
   ///
   /// Throws:
@@ -52,6 +54,7 @@ abstract interface class SshClient {
     required int remotePort,
     int? localPort,
     void Function(String line)? onLog,
+    void Function(String reason)? onRefused,
     Future<void>? abortTrigger,
   });
 
@@ -64,7 +67,7 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [onLog] and [abortTrigger] work as in [openTunnel].
+  /// [onLog], [onRefused] and [abortTrigger] work as in [openTunnel].
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
@@ -79,6 +82,12 @@ abstract interface class SshClient {
     SshTarget server, {
     int? localPort,
     void Function(String line)? onLog,
+    void Function(String reason)? onRefused,
     Future<void>? abortTrigger,
   });
+
+  /// The hosts named in `~/.ssh/config` and the files it includes, for
+  /// offering them to pick from: aliases, not `*` patterns or `!` negations.
+  /// Empty when there is no config.
+  Future<List<String>> configuredHosts();
 }

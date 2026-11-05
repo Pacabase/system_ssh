@@ -22,6 +22,7 @@ class _FakeSshClient implements SshClient {
     required int remotePort,
     int? localPort,
     void Function(String line)? onLog,
+    void Function(String reason)? onRefused,
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50000);
@@ -31,9 +32,13 @@ class _FakeSshClient implements SshClient {
     SshTarget server, {
     int? localPort,
     void Function(String line)? onLog,
+    void Function(String reason)? onRefused,
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50001);
+
+  @override
+  Future<List<String>> configuredHosts() async => const ['ssh.example.com'];
 }
 
 void main() {
@@ -48,6 +53,7 @@ void main() {
 
     expect(client, isA<SystemSshClient>());
     expect(tunnel.localPort, 50000);
+    expect(await fake.configuredHosts(), ['ssh.example.com']);
   });
 
   test('takes the login shell and extra variables for ssh', () {

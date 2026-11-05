@@ -237,6 +237,29 @@ void main() {
       expect(lines, [connectingLine, listeningLine, sessionLine, refused]);
     });
 
+    test('passes onRefused why each forwarded connection was refused',
+        () async {
+      final process = await startFake([
+        'err:channel 9: open failed: connect failed: Too early',
+        ...ready,
+        'err:channel 3: open failed: connect failed: Connection refused',
+        'err:debug1: channel 4: new [direct-tcpip]',
+        'err:channel 4: open failed: administratively prohibited: open failed',
+        'exit:0',
+      ]);
+      final reasons = <String>[];
+
+      final tunnel = await SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+        onRefused: reasons.add,
+      );
+      await exitCodeOf(process);
+      await ended(tunnel);
+
+      expect(reasons, ['Connection refused', 'administratively prohibited']);
+    });
+
     test('passes onLog nothing ssh says after close', () async {
       final process = _GoodbyeProcess([listeningLine, sessionLine]);
       final lines = <String>[];

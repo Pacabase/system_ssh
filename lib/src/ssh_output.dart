@@ -26,3 +26,22 @@ String failureMessage(List<String> log) {
 
   return reason.join('\n');
 }
+
+/// Whether [line] is ssh saying it set up the forward on [localPort]; ssh logs
+/// this before it binds, so only a started session after it means ready.
+bool isListeningOn(String line, int localPort) => RegExp(
+      'Local forwarding listening on 127\\.0\\.0\\.1 port $localPort\\b',
+    ).hasMatch(line);
+
+bool isSessionStarted(String line) =>
+    line.contains('Entering interactive session');
+
+// "channel 2: open failed: connect failed: Connection refused", or
+// "channel 3: open failed: administratively prohibited: open failed".
+final _refused = RegExp(
+  r'channel \d+: open failed: (?:connect failed: )?(.+?)(?:: open failed)?$',
+);
+
+/// Why a connection through an open tunnel couldn't be forwarded, when [line]
+/// says one couldn't.
+String? refusalReason(String line) => _refused.firstMatch(line)?[1];

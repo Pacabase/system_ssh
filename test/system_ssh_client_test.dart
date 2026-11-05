@@ -23,10 +23,9 @@ void main() {
 
   test('throws SshNotFoundException when ssh is missing', () async {
     await expectLater(
-      openSystemTunnel(
+      openSystemForward(
         server,
-        remoteHost: 'db.example.com',
-        remotePort: 3306,
+        forward: localForwardTo('db.example.com', 3306),
         executable: '/nonexistent/ssh',
       ),
       throwsA(isA<SshNotFoundException>()),
@@ -39,10 +38,9 @@ void main() {
       String remoteHost = 'db.example.com',
       int? localPort,
     }) async =>
-        openSystemTunnel(
+        openSystemForward(
           target,
-          remoteHost: remoteHost,
-          remotePort: 3306,
+          forward: localForwardTo(remoteHost, 3306),
           localPort: localPort,
           executable: '/nonexistent/ssh',
           portIsFree: (_) async => true,
@@ -237,10 +235,9 @@ void main() {
       String? executable,
       Map<String, String> environment = const {},
     }) async {
-      final tunnel = await openSystemTunnel(
+      final tunnel = await openSystemForward(
         target,
-        remoteHost: remoteHost,
-        remotePort: 3306,
+        forward: localForwardTo(remoteHost, 3306),
         localPort: localPort,
         executable: executable ?? fake.path,
         environment: environment,
