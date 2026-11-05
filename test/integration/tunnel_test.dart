@@ -167,7 +167,11 @@ void main() {
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
-      await Future<void>.delayed(const Duration(milliseconds: 500));
+      // Windows refuses a closed local port only after its connect retries.
+      for (var waited = 0; waited < 100; waited++) {
+        if (warnings.any((line) => line.contains('open failed'))) break;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
       expect(warnings, contains(contains('open failed')));
     });
 
