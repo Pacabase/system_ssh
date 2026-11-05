@@ -7,9 +7,6 @@ final _keyword = RegExp(r'^(\S+?)(?:\s*=\s*|\s+)(.*)$');
 final _argument = RegExp(r'"([^"]*)"|(\S+)');
 final _pattern = RegExp(r'[*?!]');
 
-/// The host aliases in the ssh config at [path] and the files it includes, in
-/// order and once each: names you can type after `ssh`, not patterns (`*`,
-/// `?`) or negations (`!`). Relative includes are read from [sshDirectory].
 Future<List<String>> readConfigHosts(
   String path, {
   required String sshDirectory,
