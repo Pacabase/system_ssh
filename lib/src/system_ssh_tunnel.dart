@@ -7,9 +7,13 @@ import 'failure_message.dart';
 import 'logger.dart';
 import 'ssh_client.dart';
 
+const _tailLength = 20;
+
 final class SystemSshTunnel implements SshTunnel {
   SystemSshTunnel._(this.localPort, this._process, this.done) {
     unawaited(_process.exitCode.then((_) => _hasExited = true));
+    // A caller that never listens to done must not crash on a dropped tunnel.
+    done.ignore();
   }
 
   @override
@@ -31,6 +35,7 @@ final class SystemSshTunnel implements SshTunnel {
     Future<void>? abortTrigger,
   }) async {
     final log = <String>[];
+    final tail = <String>[];
     final ready = Completer<void>();
     final listening = RegExp(
       'Local forwarding listening on 127\\.0\\.0\\.1 port $localPort\\b',
@@ -40,7 +45,11 @@ final class SystemSshTunnel implements SshTunnel {
 
     void onLine(String line) {
       logger.fine(line);
-      if (ready.isCompleted) return;
+      if (ready.isCompleted) {
+        tail.add(line);
+        if (tail.length > _tailLength) tail.removeAt(0);
+        return;
+      }
 
       log.add(line);
       try {
@@ -65,6 +74,7 @@ final class SystemSshTunnel implements SshTunnel {
         );
     unawaited(process.stdout.drain<void>());
 
+    late final SystemSshTunnel tunnel;
     Future<void> waitForExit() async {
       final code = await process.exitCode;
       // ssh's last lines, the ones that say why, can land after its exit code.
@@ -73,7 +83,16 @@ final class SystemSshTunnel implements SshTunnel {
         onTimeout: () {},
       );
       logger.info('ssh exited with code $code');
-      if (ready.isCompleted) return;
+      if (ready.isCompleted) {
+        if (tunnel._isClosed) return;
+
+        final reason = failureMessage(tail);
+        throw SshTunnelException(
+          reason.isEmpty ? 'ssh exited with code $code' : reason,
+          log: List.unmodifiable(tail),
+          exitCode: code,
+        );
+      }
 
       final reason = failureMessage(log);
       ready.completeError(
@@ -85,7 +104,7 @@ final class SystemSshTunnel implements SshTunnel {
       );
     }
 
-    final tunnel = SystemSshTunnel._(localPort, process, waitForExit());
+    tunnel = SystemSshTunnel._(localPort, process, waitForExit());
     unawaited(
       abortTrigger?.then((_) {
         if (!ready.isCompleted) {
@@ -113,6 +132,10 @@ final class SystemSshTunnel implements SshTunnel {
     logger.info('Closing tunnel on 127.0.0.1:$localPort');
     // Once exited, the pid may already belong to another process.
     if (!_hasExited) _process.kill();
-    await done.timeout(const Duration(seconds: 2), onTimeout: () {});
+    try {
+      await done.timeout(const Duration(seconds: 2), onTimeout: () {});
+    } on SshTunnelException {
+      // It had already dropped; done says why.
+    }
   }
 }

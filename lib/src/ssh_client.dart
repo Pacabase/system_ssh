@@ -8,8 +8,8 @@ abstract interface class SshTunnel {
   /// The `127.0.0.1` port to connect to.
   int get localPort;
 
-  /// Completes, never with an error, when ssh exits, whether through [close]
-  /// or because the connection dropped.
+  /// Completes when [close] stops ssh. When ssh exits on its own, because the
+  /// connection dropped, it fails with an [SshTunnelException] saying why.
   Future<void> get done;
 
   /// Stops ssh. Closing again does nothing.

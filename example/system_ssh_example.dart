@@ -24,6 +24,11 @@ Future<void> main() async {
   }
 
   print('db.example.com:5432 is on 127.0.0.1:${tunnel.localPort}');
-  await Future.any([ProcessSignal.sigint.watch().first, tunnel.done]);
+  try {
+    await Future.any([ProcessSignal.sigint.watch().first, tunnel.done]);
+  } on SshTunnelException catch (exception) {
+    stderr.writeln('The tunnel dropped: ${exception.message}');
+    exitCode = 1;
+  }
   await tunnel.close();
 }
