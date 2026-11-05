@@ -37,6 +37,8 @@ Future<void> main() async {
 - `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
 - `SystemSshClient(environment: ...)` adds variables to the environment ssh
   inherits; a bare `executable` is looked up on the `PATH` it sets.
+- `SystemSshClient().configuredHosts()` lists the hosts named in
+  `~/.ssh/config` and the files it includes, for offering them to pick from.
 
 ssh's output and the full command also go to the `system_ssh` logger of
 [`package:logging`](https://pub.dev/packages/logging).

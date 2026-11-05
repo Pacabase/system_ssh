@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'config_hosts.dart';
 import 'exceptions.dart';
 import 'logger.dart';
 import 'login_shell.dart';
@@ -31,6 +33,19 @@ final class SystemSshClient implements SshClient {
   /// Variables ssh gets on top of the rest, such as an `AWS_PROFILE` for a
   /// `ProxyCommand`.
   final Map<String, String> environment;
+
+  /// The hosts named in `~/.ssh/config` and the files it includes, for
+  /// offering them to pick from: aliases, not `*` patterns or `!` negations.
+  /// Empty when there is no config.
+  Future<List<String>> configuredHosts() {
+    final home = environment['HOME'] ??
+        Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '';
+    final ssh = '${home.replaceAll(r'\', '/')}/.ssh';
+
+    return readConfigHosts('$ssh/config', sshDirectory: ssh);
+  }
 
   @override
   Future<SshTunnel> openTunnel(
