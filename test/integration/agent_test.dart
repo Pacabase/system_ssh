@@ -1,3 +1,5 @@
+// Windows' ssh-agent is a service, not a socket a test can start.
+@TestOn('!windows')
 @Tags(['integration'])
 library;
 
