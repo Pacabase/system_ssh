@@ -193,11 +193,16 @@ void main() {
       );
     });
 
-    test('passes stderr lines to onLog only until the tunnel is up', () async {
+    test('passes onLog every line while connecting, and warnings after',
+        () async {
+      const refused =
+          'channel 3: open failed: connect failed: Connection refused';
       final process = await startFake([
         'err:$connectingLine',
         ...ready,
         'err:debug1: channel 0: new [port listener]',
+        'err:$refused',
+        'err:',
         'exit:0',
       ]);
       final lines = <String>[];
@@ -210,7 +215,7 @@ void main() {
       await exitCodeOf(process);
       await ended(tunnel);
 
-      expect(lines, [connectingLine, listeningLine, sessionLine]);
+      expect(lines, [connectingLine, listeningLine, sessionLine, refused]);
     });
 
     test('drains stdout so a chatty ssh never blocks', () async {

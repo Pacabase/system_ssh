@@ -27,7 +27,8 @@ final class SystemSshTunnel implements SshTunnel {
   bool _isClosed = false;
 
   /// Waits for ssh to have bound the forward. [onLog] gets each stderr line
-  /// until then; every line also goes to the `system_ssh` logger.
+  /// until then, and ssh's warnings after; every line also goes to the
+  /// `system_ssh` logger.
   static Future<SystemSshTunnel> attach(
     Process process, {
     required int localPort,
@@ -43,20 +44,25 @@ final class SystemSshTunnel implements SshTunnel {
     var isListening = false;
     final stderrDone = Completer<void>();
 
-    void onLine(String line) {
-      logger.fine(line);
-      if (ready.isCompleted) {
-        tail.add(line);
-        if (tail.length > _tailLength) tail.removeAt(0);
-        return;
-      }
-
-      log.add(line);
+    void report(String line) {
       try {
         onLog?.call(line);
       } catch (exception, stack) {
         logger.warning('onLog threw', exception, stack);
       }
+    }
+
+    void onLine(String line) {
+      logger.fine(line);
+      if (ready.isCompleted) {
+        tail.add(line);
+        if (tail.length > _tailLength) tail.removeAt(0);
+        if (line.trim().isNotEmpty && !isProgress(line)) report(line);
+        return;
+      }
+
+      log.add(line);
+      report(line);
       // ssh logs the listener before binding; only a started session means it bound.
       if (listening.hasMatch(line)) isListening = true;
       if (isListening && line.contains('Entering interactive session')) {

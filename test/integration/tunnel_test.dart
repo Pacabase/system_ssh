@@ -161,10 +161,14 @@ void main() {
       final port = closed.port;
       await closed.close();
 
-      final tunnel = await open(remotePort: port);
+      final warnings = <String>[];
+      final tunnel = await open(remotePort: port, onLog: warnings.add);
+      warnings.clear();
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(warnings, contains(contains('open failed')));
     });
 
     test('aborts through abortTrigger while ssh connects', () async {
