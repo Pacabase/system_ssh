@@ -16,6 +16,9 @@ void main() {
   const sessionLine = 'debug1: Entering interactive session.';
   const ready = ['err:$listeningLine', 'err:$sessionLine'];
 
+  Future<void> ended(SshTunnel tunnel) =>
+      tunnel.done.then((_) {}, onError: (Object _) {});
+
   Matcher throwsTunnelException(
     String message, {
     Object? log = anything,
@@ -205,7 +208,7 @@ void main() {
         onLog: lines.add,
       );
       await exitCodeOf(process);
-      await tunnel.done;
+      await ended(tunnel);
 
       expect(lines, [connectingLine, listeningLine, sessionLine]);
     });
@@ -283,8 +286,14 @@ void main() {
   });
 
   group('done', () {
-    test('completes when ssh exits on its own', () async {
-      final process = await startFake([...ready, 'exit:0']);
+    test('fails with ssh\'s reason when the connection drops', () async {
+      const closed = 'Connection to ssh.example.com closed by remote host.';
+      final process = await startFake([
+        ...ready,
+        'err:debug1: channel 0: new [port listener]',
+        'err:$closed',
+        'exit:255',
+      ]);
 
       final tunnel = await SystemSshTunnel.attach(
         process,
@@ -293,8 +302,57 @@ void main() {
 
       await expectLater(
         tunnel.done.timeout(const Duration(seconds: 10)),
-        completes,
+        throwsTunnelException(
+          closed,
+          log: ['debug1: channel 0: new [port listener]', closed],
+        ),
       );
+    });
+
+    test('names the exit code when ssh drops without a reason', () async {
+      final process = await startFake([...ready, 'exit:255']);
+
+      final tunnel = await SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+      );
+
+      await expectLater(
+        tunnel.done.timeout(const Duration(seconds: 10)),
+        throwsTunnelException('ssh exited with code 255', log: isEmpty),
+      );
+    });
+
+    test('keeps only ssh\'s last lines after the tunnel is up', () async {
+      final process = await startFake([
+        ...ready,
+        for (var line = 1; line <= 30; line++) 'err:debug1: line $line',
+        'exit:255',
+      ]);
+
+      final tunnel = await SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+      );
+
+      await expectLater(
+        tunnel.done.timeout(const Duration(seconds: 10)),
+        throwsA(
+          isA<SshTunnelException>().having(
+            (exception) => exception.log,
+            'log',
+            [for (var line = 11; line <= 30; line++) 'debug1: line $line'],
+          ),
+        ),
+      );
+    });
+
+    test('does not crash a caller that never listens to it', () async {
+      final process = await startFake([...ready, 'exit:255']);
+
+      await SystemSshTunnel.attach(process, localPort: localPort);
+      await exitCodeOf(process);
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
     });
 
     test('completes after close', () async {
@@ -348,7 +406,7 @@ void main() {
   test('close does not kill an ssh that already exited', () async {
     final process = _KillCounting(await startFake([...ready, 'exit:0']));
     final tunnel = await SystemSshTunnel.attach(process, localPort: localPort);
-    await tunnel.done.timeout(const Duration(seconds: 10));
+    await ended(tunnel).timeout(const Duration(seconds: 10));
 
     await tunnel.close();
 
@@ -393,7 +451,7 @@ void main() {
         process,
         localPort: localPort,
       );
-      await tunnel.done.timeout(const Duration(seconds: 10));
+      await ended(tunnel).timeout(const Duration(seconds: 10));
 
       expect(
         records
