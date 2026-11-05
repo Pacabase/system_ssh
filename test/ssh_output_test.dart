@@ -1,4 +1,5 @@
 import 'package:system_ssh/src/ssh_output.dart';
+import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -113,28 +114,35 @@ void main() {
     });
   });
 
-  group('refusalReason', () {
-    test('is why the destination refused', () {
+  group('classify', () {
+    test('says a forwarded connection the destination refused failed', () {
+      const line = 'channel 2: open failed: connect failed: Connection refused';
+
       expect(
-        refusalReason(
-          'channel 2: open failed: connect failed: Connection refused',
-        ),
-        'Connection refused',
+        classify(line),
+        const SshConnectionFailed(line, reason: 'Connection refused'),
       );
     });
 
-    test('is why the server refused', () {
+    test('says one the server refused failed', () {
+      const line =
+          'channel 3: open failed: administratively prohibited: open failed';
+
       expect(
-        refusalReason(
-          'channel 3: open failed: administratively prohibited: open failed',
-        ),
-        'administratively prohibited',
+        classify(line),
+        const SshConnectionFailed(line, reason: 'administratively prohibited'),
       );
     });
 
-    test('is null for any other line', () {
-      expect(refusalReason('debug1: channel 3: new [direct-tcpip]'), isNull);
-      expect(refusalReason('Connection to ssh.example.com closed.'), isNull);
+    test('tells -v progress from anything else', () {
+      expect(
+        classify('debug1: channel 3: new [direct-tcpip]'),
+        const SshProgress('debug1: channel 3: new [direct-tcpip]'),
+      );
+      expect(
+        classify('Connection to ssh.example.com closed.'),
+        const SshWarning('Connection to ssh.example.com closed.'),
+      );
     });
   });
 

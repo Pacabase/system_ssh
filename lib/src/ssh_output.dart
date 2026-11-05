@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'ssh_log.dart';
+
 final _progress = RegExp(
   r'^(debug\d|OpenSSH_|Authenticated to |Transferred: |Bytes per second: |Warning: Permanently added )',
 );
@@ -42,6 +44,9 @@ final _refused = RegExp(
   r'channel \d+: open failed: (?:connect failed: )?(.+?)(?:: open failed)?$',
 );
 
-/// Why a connection through an open tunnel couldn't be forwarded, when [line]
-/// says one couldn't.
-String? refusalReason(String line) => _refused.firstMatch(line)?[1];
+/// [line] by what it means.
+SshLog classify(String line) => switch (_refused.firstMatch(line)?[1]) {
+      final reason? => SshConnectionFailed(line, reason: reason),
+      _ when isProgress(line) => SshProgress(line),
+      _ => SshWarning(line),
+    };

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'exceptions.dart';
 import 'logger.dart';
 import 'ssh_client.dart';
+import 'ssh_log.dart';
 import 'ssh_output.dart';
 
 const _tailLength = 20;
@@ -26,15 +27,13 @@ final class SystemSshTunnel implements SshTunnel {
   bool _hasExited = false;
   bool _isClosed = false;
 
-  /// Waits for ssh to have bound the forward. [onLog] gets each stderr line
-  /// until then, and ssh's warnings after; [onRefused] gets why each
-  /// forwarded connection couldn't be made. Every line also goes to the
-  /// `system_ssh` logger.
+  /// Waits for ssh to have bound the forward. [onLog] gets each line ssh
+  /// writes until then, and its warnings and failed connections after. Every
+  /// line also goes to the `system_ssh` logger.
   static Future<SystemSshTunnel> attach(
     Process process, {
     required int localPort,
-    void Function(String line)? onLog,
-    void Function(String reason)? onRefused,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async {
     final log = <String>[];
@@ -44,11 +43,11 @@ final class SystemSshTunnel implements SshTunnel {
     final stderrDone = Completer<void>();
 
     late final SystemSshTunnel tunnel;
-    void report<T>(String name, void Function(T value)? callback, T value) {
+    void report(SshLog log) {
       try {
-        callback?.call(value);
+        onLog?.call(log);
       } catch (exception, stack) {
-        logger.warning('$name threw', exception, stack);
+        logger.warning('onLog threw', exception, stack);
       }
     }
 
@@ -58,17 +57,13 @@ final class SystemSshTunnel implements SshTunnel {
         tail.add(line);
         if (tail.length > _tailLength) tail.removeAt(0);
         // Once closed, what's left is ssh saying goodbye: "Killed by signal 15."
-        if (!tunnel._isClosed && line.trim().isNotEmpty && !isProgress(line)) {
-          report('onLog', onLog, line);
-          if (refusalReason(line) case final reason?) {
-            report('onRefused', onRefused, reason);
-          }
-        }
+        if (tunnel._isClosed || line.trim().isEmpty) return;
+        if (classify(line) case final log when log is! SshProgress) report(log);
         return;
       }
 
       log.add(line);
-      report('onLog', onLog, line);
+      if (line.trim().isNotEmpty) report(classify(line));
       if (isListeningOn(line, localPort)) isListening = true;
       if (isListening && isSessionStarted(line)) ready.complete();
     }

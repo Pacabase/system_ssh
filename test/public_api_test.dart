@@ -21,8 +21,7 @@ class _FakeSshClient implements SshClient {
     required String remoteHost,
     required int remotePort,
     int? localPort,
-    void Function(String line)? onLog,
-    void Function(String reason)? onRefused,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50000);
@@ -31,8 +30,7 @@ class _FakeSshClient implements SshClient {
   Future<SshTunnel> openSocksProxy(
     SshTarget server, {
     int? localPort,
-    void Function(String line)? onLog,
-    void Function(String reason)? onRefused,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50001);

@@ -230,7 +230,7 @@ void main() {
       CountingPorts? ports,
       Future<bool> Function(int port) portIsFree = isPortFree,
       Future<void>? abortTrigger,
-      void Function(String line)? onLog,
+      void Function(SshLog log)? onLog,
       Duration configTimeout = const Duration(seconds: 5),
       String? executable,
       Map<String, String> environment = const {},
@@ -376,7 +376,7 @@ void main() {
       fake.attemptModes([AttemptMode.ready]);
       final lines = <String>[];
 
-      final tunnel = await open(onLog: lines.add);
+      final tunnel = await open(onLog: (log) => lines.add(log.line));
 
       expect(lines, [
         'debug1: Local forwarding listening on 127.0.0.1 port ${tunnel.localPort}.',
@@ -622,7 +622,7 @@ void main() {
         CountingPorts? ports,
         Future<bool> Function(int port) portIsFree = isPortFree,
         Future<void>? abortTrigger,
-        void Function(String line)? onLog,
+        void Function(SshLog log)? onLog,
       }) async {
         final tunnel = await openSystemForward(
           target,
@@ -675,7 +675,7 @@ void main() {
         fake.attemptModes([AttemptMode.ready]);
         final lines = <String>[];
 
-        final proxy = await openProxy(onLog: lines.add);
+        final proxy = await openProxy(onLog: (log) => lines.add(log.line));
 
         expect(lines, [
           'debug1: Local forwarding listening on 127.0.0.1 port ${proxy.localPort}.',

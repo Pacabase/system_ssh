@@ -1,4 +1,5 @@
 import 'exceptions.dart';
+import 'ssh_log.dart';
 import 'ssh_target.dart';
 
 /// An open tunnel: connections to `127.0.0.1:`[localPort] reach the remote
@@ -30,12 +31,12 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [onLog] gets each line ssh writes until the tunnel is open, and after
-  /// that, until [SshTunnel.close], its warnings without the `-v` progress.
-  /// [onRefused] gets why each connection through the open tunnel couldn't be
-  /// forwarded, such as `Connection refused` from the destination or
-  /// `administratively prohibited` from the server. Windows' sshd closes such
-  /// a connection without saying, so it calls nothing. Completing
+  /// [onLog] gets each line ssh writes while it connects, and after that,
+  /// until [SshTunnel.close], its warnings and each [SshConnectionFailed]: a
+  /// connection through the open tunnel that couldn't be forwarded, such as
+  /// one the destination refused. Windows' sshd closes such a connection
+  /// without saying, so there it isn't reported. The tunnel's own failures
+  /// aren't logs: they're thrown, or fail [SshTunnel.done]. Completing
   /// [abortTrigger] before the tunnel is open stops ssh; after, it is
   /// ignored, and [SshTunnel.close] stops it instead.
   ///
@@ -53,8 +54,7 @@ abstract interface class SshClient {
     required String remoteHost,
     required int remotePort,
     int? localPort,
-    void Function(String line)? onLog,
-    void Function(String reason)? onRefused,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   });
 
@@ -67,7 +67,7 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [onLog], [onRefused] and [abortTrigger] work as in [openTunnel].
+  /// [onLog] and [abortTrigger] work as in [openTunnel].
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
@@ -81,8 +81,7 @@ abstract interface class SshClient {
   Future<SshTunnel> openSocksProxy(
     SshTarget server, {
     int? localPort,
-    void Function(String line)? onLog,
-    void Function(String reason)? onRefused,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   });
 

@@ -30,11 +30,19 @@ Future<void> main() async {
 
 - `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
 - `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
-- `onLog` gets ssh's output while it connects, and its warnings until you
-  `close()` the tunnel.
-- `onRefused` gets why a connection through the open tunnel couldn't be
-  forwarded, such as `Connection refused` when nothing listens at the
-  destination. Windows' sshd doesn't say, so it isn't called for one.
+- `onLog` gets what ssh says, as an `SshLog` with ssh's `line`: its progress
+  and errors while it connects, then its warnings until you `close()` the
+  tunnel, and an `SshConnectionFailed` with the `reason` for each connection
+  through the tunnel that couldn't be forwarded, such as `Connection refused`
+  when nothing listens at the destination (Windows' sshd doesn't say). These
+  are information: the tunnel's own failures are thrown, or fail `done`.
+
+  ```dart
+  onLog: (log) => switch (log) {
+    SshConnectionFailed(:final reason) => print("Couldn't forward: $reason"),
+    SshProgress() || SshWarning() => print(log.line),
+  },
+  ```
 - `abortTrigger` gives up while it connects.
 - `tunnel.done` completes once you `close()` the tunnel, and fails with an
   `SshTunnelException` saying why when the connection drops.
@@ -161,15 +169,18 @@ class FakeSshClient implements SshClient {
           {required String remoteHost,
           required int remotePort,
           int? localPort,
-          void Function(String line)? onLog,
+          void Function(SshLog log)? onLog,
           Future<void>? abortTrigger}) =>
       throw const SshTunnelException('Permission denied (publickey).');
 
   @override
   Future<SshTunnel> openSocksProxy(SshTarget server,
           {int? localPort,
-          void Function(String line)? onLog,
+          void Function(SshLog log)? onLog,
           Future<void>? abortTrigger}) =>
       throw const SshTunnelException('Permission denied (publickey).');
+
+  @override
+  Future<List<String>> configuredHosts() async => const ['ssh.example.com'];
 }
 ```

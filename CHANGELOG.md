@@ -1,13 +1,15 @@
 ## Unreleased
 
-- `onRefused` on `openTunnel` and `openSocksProxy` gets why each connection
-  through the open tunnel couldn't be forwarded, such as `Connection refused`
-  from the destination or `administratively prohibited` from the server,
-  instead of an app matching ssh's `open failed` lines in `onLog`.
+- **Breaking:** `onLog` gets an `SshLog` instead of a `String`: an
+  `SshProgress` for ssh's `-v` progress, an `SshWarning` for anything else,
+  or, once the tunnel is open, an `SshConnectionFailed` with the `reason` a
+  connection through it couldn't be forwarded, such as `Connection refused`
+  from the destination or `administratively prohibited` from the server. Each
+  has ssh's `line`, so an app no longer matches ssh's `open failed` lines
+  itself. Blank lines are left out.
 - **Breaking for your own `SshClient` implementations, such as test fakes:**
-  `openTunnel` and `openSocksProxy` take `onRefused`, and `configuredHosts()`
-  moved from `SystemSshClient` to the `SshClient` interface, so a fake can
-  offer hosts too.
+  `configuredHosts()` moved from `SystemSshClient` to the `SshClient`
+  interface, so a fake can offer hosts too.
 - `SshTunnelException`'s documentation says it also comes from `done` when
   the connection drops.
 

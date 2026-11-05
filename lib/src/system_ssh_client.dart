@@ -10,6 +10,7 @@ import 'processes.dart';
 import 'ssh_client.dart';
 import 'ssh_command.dart';
 import 'ssh_config.dart';
+import 'ssh_log.dart';
 import 'ssh_target.dart';
 import 'system_ssh_tunnel.dart';
 
@@ -51,8 +52,7 @@ final class SystemSshClient implements SshClient {
     required String remoteHost,
     required int remotePort,
     int? localPort,
-    void Function(String line)? onLog,
-    void Function(String reason)? onRefused,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
       openSystemForward(
@@ -60,7 +60,6 @@ final class SystemSshClient implements SshClient {
         forward: localForwardTo(remoteHost, remotePort),
         localPort: localPort,
         onLog: onLog,
-        onRefused: onRefused,
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
@@ -70,8 +69,7 @@ final class SystemSshClient implements SshClient {
   Future<SshTunnel> openSocksProxy(
     SshTarget server, {
     int? localPort,
-    void Function(String line)? onLog,
-    void Function(String reason)? onRefused,
+    void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
       openSystemForward(
@@ -79,7 +77,6 @@ final class SystemSshClient implements SshClient {
         forward: dynamicForward,
         localPort: localPort,
         onLog: onLog,
-        onRefused: onRefused,
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
@@ -117,8 +114,7 @@ Future<SshTunnel> openSystemForward(
   SshTarget server, {
   required List<String> Function(int localPort) forward,
   int? localPort,
-  void Function(String line)? onLog,
-  void Function(String reason)? onRefused,
+  void Function(SshLog log)? onLog,
   Future<void>? abortTrigger,
   String executable = 'ssh',
   Map<String, String> environment = const {},
@@ -169,7 +165,6 @@ Future<SshTunnel> openSystemForward(
         await startWatched(command, environment: environment),
         localPort: port,
         onLog: onLog,
-        onRefused: onRefused,
         abortTrigger: abortTrigger,
       );
     } on SshTunnelException catch (exception) {

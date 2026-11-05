@@ -38,12 +38,12 @@ void main() {
               ),
         );
 
-    void Function(String line) logged([void Function(String line)? onLog]) {
-      final log = <String>[];
-      addTearDown(() => printOnFailure('ssh log:\n${log.join('\n')}'));
-      return (line) {
-        log.add(line);
-        onLog?.call(line);
+    void Function(SshLog log) logged([void Function(SshLog log)? onLog]) {
+      final lines = <String>[];
+      addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
+      return (log) {
+        lines.add(log.line);
+        onLog?.call(log);
       };
     }
 
@@ -52,8 +52,7 @@ void main() {
       int? remotePort,
       int? localPort,
       CountingPorts? ports,
-      void Function(String line)? onLog,
-      void Function(String reason)? onRefused,
+      void Function(SshLog log)? onLog,
       Future<void>? abortTrigger,
     }) async {
       final tunnel = await openSystemForward(
@@ -62,7 +61,6 @@ void main() {
             localForwardTo(fixture.echoHost, remotePort ?? fixture.echoPort),
         localPort: localPort,
         onLog: logged(onLog),
-        onRefused: onRefused,
         abortTrigger: abortTrigger,
         executable: fixture.ssh,
         freePort: (ports ?? CountingPorts()).next,
@@ -85,7 +83,7 @@ void main() {
 
     test('forwards the local port to host and port once ssh says so', () async {
       final lines = <String>[];
-      final tunnel = await open(onLog: lines.add);
+      final tunnel = await open(onLog: (log) => lines.add(log.line));
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
       expect(lines, contains(contains('Local forwarding listening')));
@@ -181,14 +179,9 @@ void main() {
       addTearDown(
         () => printOnFailure('all of ssh:\n${everything.join('\n')}'),
       );
-      final warnings = <String>[];
-      final reasons = <String>[];
-      final tunnel = await open(
-        remotePort: port,
-        onLog: warnings.add,
-        onRefused: reasons.add,
-      );
-      warnings.clear();
+      final logs = <SshLog>[];
+      final tunnel = await open(remotePort: port, onLog: logs.add);
+      logs.clear();
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
@@ -196,11 +189,16 @@ void main() {
       // warn about; other servers say the destination refused.
       if (!Platform.isWindows) {
         for (var waited = 0; waited < 50; waited++) {
-          if (warnings.any((line) => line.contains('open failed'))) break;
+          if (logs.any((log) => log is SshConnectionFailed)) break;
           await Future<void>.delayed(const Duration(milliseconds: 100));
         }
-        expect(warnings, contains(contains('open failed')));
-        expect(reasons, contains('Connection refused'));
+        expect(
+          logs,
+          contains(
+            isA<SshConnectionFailed>()
+                .having((log) => log.reason, 'reason', 'Connection refused'),
+          ),
+        );
       }
     });
 

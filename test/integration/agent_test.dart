@@ -36,7 +36,7 @@ void main() {
         final tunnel = await openSystemForward(
           via,
           forward: localForwardTo(fixture.echoHost, fixture.echoPort),
-          onLog: log.add,
+          onLog: (entry) => log.add(entry.line),
           executable: fixture.ssh,
           environment: environment,
         );
