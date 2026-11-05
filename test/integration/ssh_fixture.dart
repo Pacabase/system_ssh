@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -22,6 +23,7 @@ final class SshFixture {
   Directory? _directory;
   ServerSocket? _echo;
   final _accepted = <Socket>[];
+  Process? _agent;
 
   /// Why the tests can't run here, or null when they can.
   String? get skip => switch ((_port, _isCi)) {
@@ -42,6 +44,21 @@ final class SshFixture {
 
   /// Same server, but `StrictHostKeyChecking yes` in the config.
   SshTarget get strictTarget => const SshTarget('strict-host-keys');
+
+  /// Same server, with only a key file that doesn't exist, so ssh can log in
+  /// only through the agent at SSH_AUTH_SOCK.
+  SshTarget get agentOnlyTarget => const SshTarget('agent-only');
+
+  /// Like [agentOnlyTarget], but the config names the agent with
+  /// `IdentityAgent`, as 1Password and others set up.
+  SshTarget get identityAgentTarget => const SshTarget('identity-agent');
+
+  /// Like [identityAgentTarget], but nothing listens on the agent's socket.
+  SshTarget get deadAgentTarget => const SshTarget('dead-agent');
+
+  /// The socket of the agent [startAgent] runs.
+  String get agentSocket =>
+      '${_require(_directory, 'setUpAll').path}/agent.sock';
 
   /// The ssh that reads the fixture's config, for `executable:`.
   String get ssh =>
@@ -66,7 +83,18 @@ final class SshFixture {
     final directory = Directory.systemTemp.createTempSync('system_ssh_test');
     _directory = directory;
     final knownHosts = _knownHosts.path.replaceAll(r'\', '/');
+    String agentHost(String name, String? agent) => '''
+Host $name
+  HostName 127.0.0.1
+  Port $_port
+  IdentityFile ${directory.path}/no_such_key
+${agent == null ? '' : '  IdentityAgent $agent\n'}  StrictHostKeyChecking accept-new
+  UserKnownHostsFile $knownHosts
+''';
     File('${directory.path}/config').writeAsStringSync('''
+${agentHost('agent-only', null)}
+${agentHost('identity-agent', '${directory.path}/agent.sock')}
+${agentHost('dead-agent', '${directory.path}/dead.sock')}
 Host strict-host-keys
   HostName 127.0.0.1
   Port $_port
@@ -97,6 +125,33 @@ exec ssh -F '${directory.path}/config' "\$@"
         await Future<void>.delayed(const Duration(milliseconds: 200));
       }
     }
+  }
+
+  /// Runs an ssh-agent on [agentSocket] holding the key the sshd trusts.
+  Future<void> startAgent() async {
+    final agent = await Process.start('ssh-agent', ['-D', '-a', agentSocket]);
+    _agent = agent;
+    unawaited(agent.stdout.drain<void>());
+    unawaited(agent.stderr.drain<void>());
+    for (var attempt = 1; !File(agentSocket).existsSync(); attempt++) {
+      if (attempt == 50) throw StateError('ssh-agent did not start');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+
+    final home = Platform.environment['HOME'];
+    final added = await Process.run(
+      'ssh-add',
+      ['$home/.ssh/id_ed25519'],
+      environment: {'SSH_AUTH_SOCK': agentSocket},
+    );
+    if (added.exitCode != 0) throw StateError('ssh-add: ${added.stderr}');
+  }
+
+  /// Stops the agent [startAgent] ran.
+  Future<void> stopAgent() async {
+    _agent?.kill();
+    await _agent?.exitCode;
+    _agent = null;
   }
 
   /// Deletes the config and the ssh that reads it.
