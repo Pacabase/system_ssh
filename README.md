@@ -48,6 +48,9 @@ Future<void> main() async {
 - `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
 - `SystemSshClient(environment: ...)` adds variables to the environment ssh
   inherits; a bare `executable` is looked up on the `PATH` it sets.
+- `tunnelCommand(...)` and `socksProxyCommand(...)` give the `ssh` command
+  that opens the same tunnel from a terminal, for an app to offer to copy:
+  `ssh -N -L 127.0.0.1:15432:db.example.com:5432 ssh.example.com`.
 - `client.configuredHosts()` lists the hosts named in `~/.ssh/config` and the
   files it includes, for offering them to pick from.
 
