@@ -1,5 +1,9 @@
-## Unreleased
+## 0.7.0
 
+- `tunnelCommand` and `socksProxyCommand` give the `ssh` command that opens
+  the same tunnel or SOCKS proxy from a terminal, quoted for a shell, such as
+  `ssh -N -L 127.0.0.1:15432:db.example.com:5432 ssh.example.com`, for an app
+  to offer to copy.
 - **Breaking:** `onLog` gets an `SshLog` instead of a `String`: an
   `SshProgress` for ssh's `-v` progress, an `SshMessage` for anything else,
   or, once the tunnel is open, an `SshForwardFailed` with the `reason` a
