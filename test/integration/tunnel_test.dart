@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:logging/logging.dart';
 import 'package:system_ssh/src/ports.dart';
 import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/system_ssh_client.dart';
@@ -161,10 +162,32 @@ void main() {
       final port = closed.port;
       await closed.close();
 
-      final tunnel = await open(remotePort: port);
+      final level = Logger.root.level;
+      Logger.root.level = Level.ALL;
+      addTearDown(() => Logger.root.level = level);
+      final everything = <String>[];
+      final listening = Logger('system_ssh').onRecord.listen(
+            (record) => everything.add(record.message),
+          );
+      addTearDown(listening.cancel);
+      addTearDown(
+        () => printOnFailure('all of ssh:\n${everything.join('\n')}'),
+      );
+      final warnings = <String>[];
+      final tunnel = await open(remotePort: port, onLog: warnings.add);
+      warnings.clear();
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
+      // Windows' sshd opens the channel and closes it, so ssh has nothing to
+      // warn about; other servers say the destination refused.
+      if (!Platform.isWindows) {
+        for (var waited = 0; waited < 50; waited++) {
+          if (warnings.any((line) => line.contains('open failed'))) break;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        expect(warnings, contains(contains('open failed')));
+      }
     });
 
     test('aborts through abortTrigger while ssh connects', () async {

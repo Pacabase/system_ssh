@@ -3,6 +3,9 @@
 - `SystemSshClient.configuredHosts()` lists the hosts named in `~/.ssh/config`
   and the files it includes (`Include`, globs too), in order and once each,
   leaving out `*` and `?` patterns and `!` negations.
+- `onLog` also gets ssh's warnings while the tunnel is open, such as
+  `channel 2: open failed: connect failed: Connection refused` when the
+  destination refuses a forwarded connection, without the `-v` progress.
 
 ## 0.4.0
 

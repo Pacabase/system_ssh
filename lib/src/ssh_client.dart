@@ -30,7 +30,10 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [onLog] gets each line ssh writes until the tunnel is open. Completing
+  /// [onLog] gets each line ssh writes until the tunnel is open, and after
+  /// that, until [SshTunnel.close], its warnings, such as a forwarded connection the destination
+  /// refused (`channel 2: open failed: connect failed: Connection refused`),
+  /// without the `-v` progress. Completing
   /// [abortTrigger] before then stops ssh; once the tunnel is open it is
   /// ignored, and [SshTunnel.close] stops it instead.
   ///
