@@ -1,3 +1,9 @@
+## 0.5.0
+
+- `SystemSshClient.configuredHosts()` lists the hosts named in `~/.ssh/config`
+  and the files it includes (`Include`, globs too), in order and once each,
+  leaving out `*` and `?` patterns and `!` negations.
+
 ## 0.4.0
 
 - **Breaking:** `SshTunnel.done` fails with an `SshTunnelException` when ssh
