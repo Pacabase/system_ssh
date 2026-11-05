@@ -30,8 +30,8 @@ Future<void> main() async {
 
 - `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
 - `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
-- `onLog` gets ssh's output while it connects, and its warnings after, such
-  as a forwarded connection the destination refused.
+- `onLog` gets ssh's output while it connects, and its warnings until you
+  `close()` the tunnel, such as a forwarded connection the destination refused.
 - `abortTrigger` gives up while it connects.
 - `tunnel.done` completes once you `close()` the tunnel, and fails with an
   `SshTunnelException` saying why when the connection drops.

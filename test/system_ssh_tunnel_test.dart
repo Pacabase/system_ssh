@@ -218,6 +218,20 @@ void main() {
       expect(lines, [connectingLine, listeningLine, sessionLine, refused]);
     });
 
+    test('passes onLog nothing ssh says after close', () async {
+      final process = _GoodbyeProcess([listeningLine, sessionLine]);
+      final lines = <String>[];
+      final tunnel = await SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+        onLog: lines.add,
+      );
+
+      await tunnel.close();
+
+      expect(lines, [listeningLine, sessionLine]);
+    });
+
     test('drains stdout so a chatty ssh never blocks', () async {
       final process = await startFake(['out:1000000', ...ready, 'hang']);
 
@@ -529,5 +543,39 @@ final class _KillCounting implements Process {
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     kills++;
     return _process.kill(signal);
+  }
+}
+
+// An ssh that, like the real one, says "Killed by signal 15." as it is killed.
+class _GoodbyeProcess implements Process {
+  _GoodbyeProcess(List<String> lines) {
+    lines.forEach(_stderr.add);
+  }
+
+  final _stderr = StreamController<String>();
+  final _exitCode = Completer<int>();
+
+  @override
+  Stream<List<int>> get stderr =>
+      _stderr.stream.map((line) => '$line\n'.codeUnits);
+
+  @override
+  Stream<List<int>> get stdout => const Stream.empty();
+
+  @override
+  IOSink get stdin => throw UnimplementedError();
+
+  @override
+  int get pid => 0;
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    _stderr.add('Killed by signal 15.');
+    unawaited(_stderr.close());
+    _exitCode.complete(255);
+    return true;
   }
 }
