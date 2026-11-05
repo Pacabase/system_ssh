@@ -179,12 +179,15 @@ void main() {
 
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
-      // Windows refuses a closed local port only after its connect retries.
-      for (var waited = 0; waited < 100; waited++) {
-        if (warnings.any((line) => line.contains('open failed'))) break;
-        await Future<void>.delayed(const Duration(milliseconds: 100));
+      // Windows' sshd opens the channel and closes it, so ssh has nothing to
+      // warn about; other servers say the destination refused.
+      if (!Platform.isWindows) {
+        for (var waited = 0; waited < 50; waited++) {
+          if (warnings.any((line) => line.contains('open failed'))) break;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        expect(warnings, contains(contains('open failed')));
       }
-      expect(warnings, contains(contains('open failed')));
     });
 
     test('aborts through abortTrigger while ssh connects', () async {
