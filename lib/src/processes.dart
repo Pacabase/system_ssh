@@ -35,17 +35,9 @@ final class _WatchedChild extends WrappedProcess {
     List<String> command, {
     required Map<String, String> environment,
   }) async {
-    // sh waits for the watcher, then becomes the command in the same process,
-    // which exits 127 if the command is missing. Like a background job, it
-    // reads /dev/null and ignores a terminal's Ctrl-C.
     final process = await Process.start(
       '/bin/sh',
-      [
-        '-c',
-        r'''trap '' INT QUIT; read _ || exit 1; exec "$@" </dev/null''',
-        'sh',
-        ...command,
-      ],
+      ['-c', _execOnceWatched, 'sh', ...command],
       environment: environment,
     );
 
@@ -101,6 +93,16 @@ final class _WatchedChild extends WrappedProcess {
   static void _close(IOSink stdin) =>
       unawaited(stdin.close().then((_) {}, onError: (Object _) {}));
 }
+
+// Waits for the watcher, then becomes the command in the same process. Like a
+// background job, it ignores a terminal's Ctrl-C and reads /dev/null. macOS's
+// sh exits 126 when exec finds no command, so the 127 is checked for first.
+const _execOnceWatched = r'''
+trap '' INT QUIT
+read _ || exit 1
+command -v "$1" >/dev/null || exit 127
+exec "$@" </dev/null
+''';
 
 // Waits for this process to die or kill the command, either of which closes
 // the shell's stdin, then stops $1.
