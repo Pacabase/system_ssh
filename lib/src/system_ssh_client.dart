@@ -17,6 +17,8 @@ import 'system_ssh_tunnel.dart';
 /// Tunnels through the system's OpenSSH client, with `~/.ssh/config` and its
 /// agent applying as they do in a terminal.
 final class SystemSshClient implements SshClient {
+  /// A client that runs `ssh` from the `PATH` with the app's own environment,
+  /// unless [executable], [loginShell] or [environment] say otherwise.
   const SystemSshClient({
     this.executable = 'ssh',
     this.loginShell = false,
@@ -92,7 +94,6 @@ final class SystemSshClient implements SshClient {
 final _unsafeInHost = RegExp(r'''[\s'"`$;&|<>(){}\\/]|[\x00-\x1f]''');
 final _unsafeInUser = RegExp(r'''[\s'"`$;&|<>(){}/]|[\x00-\x1f]''');
 
-/// The `-L` forward to [remoteHost]:[remotePort], for [openSystemForward].
 List<String> Function(int localPort) localForwardTo(
   String remoteHost,
   int remotePort,
@@ -129,9 +130,7 @@ Future<SshTunnel> openSystemForward(
       when user.startsWith('-') || user.contains(_unsafeInUser)) {
     throw ArgumentError.value(user, 'server', 'is not a valid user');
   }
-  if (localPort case final port? when port < 1 || port > 65535) {
-    throw RangeError.range(port, 1, 65535, 'localPort');
-  }
+  if (localPort != null) checkLocalPort(localPort);
 
   var isAborted = false;
   unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
@@ -145,7 +144,7 @@ Future<SshTunnel> openSystemForward(
     abortTrigger: abortTrigger,
   );
   if (config['clearallforwardings'] == 'yes') {
-    throw SshException(
+    throw SshConfigException(
       '~/.ssh/config sets ClearAllForwardings for ${server.host}, '
       'which drops the tunnel',
     );

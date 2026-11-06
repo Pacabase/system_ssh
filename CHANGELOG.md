@@ -1,5 +1,16 @@
 ## Unreleased
 
+- When the user's ssh config sets `ClearAllForwardings yes` for the host,
+  `openTunnel` and `openSocksProxy` throw an `SshConfigException`, whose
+  `isPermanent` is true, instead of a plain `SshException`, so an app that
+  reconnects on failures stops retrying and can tell the user to change their
+  config:
+
+  ```dart
+  } on SshConfigException catch (exception) {
+    showError('Check your ssh config: ${exception.message}');
+  }
+  ```
 - On Linux and macOS, ssh is now a child of your app itself rather than of a
   `/bin/sh` wrapper, so a prompt that names the process asking, such as
   1Password's SSH agent approval on Linux, names your app instead of `/bin/sh`.
@@ -10,6 +21,10 @@
   `SshClient` that needs to act out a failure throws an `SshTunnelException`,
   such as `throw const SshTunnelException('Connection refused');`, and an
   app's own errors use its own exception type.
+- `tunnelCommand` and `socksProxyCommand` throw an `ArgumentError` (a
+  `RangeError`) for a `localPort` outside 1 to 65535, as `openTunnel` and
+  `openSocksProxy` do, instead of returning a command ssh would reject. Their
+  documentation now says they throw, also for a host starting with `-`.
 
 ## 0.7.0
 

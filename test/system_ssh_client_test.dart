@@ -814,11 +814,17 @@ void main() {
         await expectLater(
           openProxy(),
           throwsA(
-            isA<SshException>().having(
-              (exception) => exception.message,
-              'message',
-              contains('ClearAllForwardings'),
-            ),
+            isA<SshConfigException>()
+                .having(
+                  (exception) => exception.message,
+                  'message',
+                  contains('ClearAllForwardings'),
+                )
+                .having(
+                  (exception) => exception.isPermanent,
+                  'isPermanent',
+                  isTrue,
+                ),
           ),
         );
         expect(fake.attempts, isEmpty);
@@ -875,16 +881,16 @@ void main() {
       await expectLater(
         open(),
         throwsA(
-          isA<SshException>()
-              .having(
-                (exception) => exception,
-                'type',
-                isNot(isA<SshTunnelException>()),
-              )
+          isA<SshConfigException>()
               .having(
                 (exception) => exception.message,
                 'message',
                 contains('ClearAllForwardings'),
+              )
+              .having(
+                (exception) => exception.isPermanent,
+                'isPermanent',
+                isTrue,
               ),
         ),
       );
