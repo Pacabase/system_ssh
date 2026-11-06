@@ -8,13 +8,13 @@ Every change must keep these promises:
 
 - **It runs the system's own `ssh`.** Never add an SSH implementation. `~/.ssh/config` (`Host`, `Include`, `Match`, `ProxyJump`), agents including `IdentityAgent` sockets, hardware keys, certificates and `known_hosts` must work exactly as in a terminal.
 - **It only adds what an unattended tunnel needs.** It asks `ssh -G` what the user's config resolves to and adds options only where the config leaves the default. The README's "Options it sets" table lists every one. Change both together.
-- **Tunnels stay local and die with the process.** Forwards bind `127.0.0.1` only. `close()`, or the app exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it started (a job object on Windows).
+- **Tunnels stay local and die with the process.** The forward or proxy it opens binds `127.0.0.1` only; forwards the user's config sets for the host open too. `close()`, or the app exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it started (a job object on Windows).
 - **It works on every OpenSSH it supports.** CI runs a real `sshd` on Ubuntu, macOS and Windows with each runner's own OpenSSH (the README's "Platforms" table). Don't rely on an ssh option or output that the oldest one lacks. `ssh` comes from the `PATH` (or `SystemSshClient`'s own path), and on Windows CI checks that it's the built-in OpenSSH.
 - **Failures say why.** An app gets a typed exception, or a failed `done`, with ssh's reason and whether a retry is worth it, never a bare exit code.
 
 ## Code
 
-- **Public API:** everything public is exported from `lib/system_ssh.dart`, and `test/public_api_test.dart` pins it. Keep `SshClient` an interface that an app can fake. A change to it breaks those fakes, so call that out in the CHANGELOG.
+- **Public API:** the package's API is what `lib/system_ssh.dart` exports (apps never import `lib/src`), and `test/public_api_test.dart` pins it. Keep `SshClient` an interface that an app can fake. A change to it breaks those fakes, so call that out in the CHANGELOG.
 - **Docs:** every public member has a dartdoc comment saying what it does for the caller, with an example where it helps. Inside `lib/src`, add a comment only for a reason the code can't show (an ssh quirk, a platform difference).
 - **Dependencies:** this is a library, so use version ranges, not pins. CI also tests the lowest versions they allow (`dart pub downgrade`).
 - **Style:** `final class` and `sealed class` where a type isn't meant to be extended, no abbreviations (`exception`, not `e`), and `catch (exception)`.
@@ -40,3 +40,5 @@ dart analyze --fatal-infos
 dart test --exclude-tags integration
 dart pub publish --dry-run
 ```
+
+CI also runs the unit tests on Dart 3.5, the oldest SDK `pubspec.yaml` allows, so don't use a newer API.
