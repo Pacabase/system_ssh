@@ -1,7 +1,7 @@
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
-class _FakeTunnel implements SshTunnel {
+final class _FakeTunnel implements SshTunnel {
   _FakeTunnel(this.localPort);
 
   @override
@@ -14,7 +14,7 @@ class _FakeTunnel implements SshTunnel {
   Future<void> close() async {}
 }
 
-class _FakeSshClient implements SshClient {
+final class _FakeSshClient implements SshClient {
   @override
   Future<SshTunnel> openTunnel(
     SshTarget server, {

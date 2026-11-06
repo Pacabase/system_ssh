@@ -618,7 +618,7 @@ final class _KillCounting implements Process {
 }
 
 // An ssh that, like the real one, says "Killed by signal 15." as it is killed.
-class _GoodbyeProcess implements Process {
+final class _GoodbyeProcess implements Process {
   _GoodbyeProcess(List<String> lines) {
     lines.forEach(_stderr.add);
   }
