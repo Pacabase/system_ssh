@@ -314,6 +314,44 @@ void main() {
       });
     });
 
+    group('through a ProxyCommand', () {
+      test('close stops the ProxyCommand too', () async {
+        final tunnel = await open(via: fixture.proxyCommandTarget);
+        expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
+        final proxy = await fixture.proxyPid;
+        addTearDown(() => Process.killPid(proxy, ProcessSignal.sigkill));
+        expect(isRunning(proxy), isTrue);
+
+        await tunnel.close();
+
+        expect(await stops(proxy), isTrue);
+      });
+
+      test('done says why when the ProxyCommand dies', () async {
+        final tunnel = await open(via: fixture.proxyCommandTarget);
+        expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
+
+        Process.killPid(await fixture.proxyPid, ProcessSignal.sigkill);
+
+        await expectLater(
+          tunnel.done.timeout(const Duration(seconds: 20)),
+          throwsA(
+            isA<SshTunnelException>()
+                .having(
+                  (exception) => exception.message,
+                  'message',
+                  allOf(isNotEmpty, isNot(startsWith('ssh exited with code'))),
+                )
+                .having(
+                  (exception) => exception.isPermanent,
+                  'isPermanent',
+                  isFalse,
+                ),
+          ),
+        );
+      });
+    });
+
     test('done completes after close', () async {
       final tunnel = await open();
 
