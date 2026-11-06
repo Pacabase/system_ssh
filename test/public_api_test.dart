@@ -94,6 +94,7 @@ void main() {
       const SshTunnelAbortedException(),
       const SshTunnelException('boom', exitCode: 255),
       const SshPortInUseException(5432),
+      const SshConfigException('boom'),
     ];
 
     expect(

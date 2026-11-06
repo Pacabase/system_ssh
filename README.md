@@ -114,13 +114,15 @@ signed with a Developer ID and notarized instead.
 | `SshTunnelAbortedException` | `abortTrigger` completed first |
 | `SshPortInUseException` | the `localPort` you asked for is taken |
 | `SshTunnelException` | ssh exited before the tunnel opened; `log` and `exitCode` say why |
-| `SshException` | anything else, such as `ClearAllForwardings` in your config |
+| `SshConfigException` | your ssh config for the host stops the tunnel from working, such as `ClearAllForwardings yes` |
+| `SshException` | anything else, such as a Windows job object that can't be set up |
 | `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…`, or a `localPort` outside 1 to 65535 |
 
 `isPermanent` says whether trying again can't work until something changes:
-true for a missing ssh, a taken `localPort`, and an `SshTunnelException` for a
-host key, a refused login or a broken ssh config. A dropped connection, a
-timeout or a host that doesn't resolve while offline is worth retrying.
+true for a missing ssh, a taken `localPort`, an `SshConfigException`, and an
+`SshTunnelException` for a host key, a refused login or a broken ssh config. A
+dropped connection, a timeout or a host that doesn't resolve while offline is
+worth retrying.
 
 ## Options it sets
 

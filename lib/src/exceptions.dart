@@ -74,6 +74,20 @@ final class SshTunnelException extends SshException {
   String toString() => 'SshTunnelException: $message';
 }
 
+/// The user's ssh config for the host stops the tunnel from working, for
+/// example by setting `ClearAllForwardings`, so trying again can't work until
+/// they change it.
+final class SshConfigException extends SshException {
+  /// An exception saying, in [message], which setting stops the tunnel.
+  const SshConfigException(super.message);
+
+  @override
+  bool get isPermanent => true;
+
+  @override
+  String toString() => 'SshConfigException: $message';
+}
+
 /// The `127.0.0.1` port asked of [SshClient.openTunnel] or
 /// [SshClient.openSocksProxy] is taken.
 final class SshPortInUseException extends SshException {

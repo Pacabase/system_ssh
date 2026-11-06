@@ -145,7 +145,7 @@ Future<SshTunnel> openSystemForward(
     abortTrigger: abortTrigger,
   );
   if (config['clearallforwardings'] == 'yes') {
-    throw SshException(
+    throw SshConfigException(
       '~/.ssh/config sets ClearAllForwardings for ${server.host}, '
       'which drops the tunnel',
     );
