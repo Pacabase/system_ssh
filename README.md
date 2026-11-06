@@ -131,12 +131,17 @@ unattended tunnel needs:
 
 | Option | When |
 |---|---|
+| `-n`, `-N`, `-T`, `-v` | always: no input, no remote command or terminal, and `-v` is how it tells the tunnel is open |
 | `ExitOnForwardFailure=yes`, `ControlPath=none` | always |
 | `BatchMode=yes` | your config leaves it at `no` |
 | `StrictHostKeyChecking=accept-new` | your config leaves it at `ask`; a changed key still fails |
 | `ConnectTimeout=15` | your config sets none |
 | `ServerAliveInterval=15` | your config sets none |
 | `ForkAfterAuthentication=no` | your config turns it on |
+
+If `ssh -G` fails or takes over 5 seconds, it adds every option above but
+`ForkAfterAuthentication=no`, so a `StrictHostKeyChecking yes` in your config
+becomes `accept-new`.
 
 The forward or proxy binds `127.0.0.1` only. `close()`, or your process
 exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it

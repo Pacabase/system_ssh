@@ -6,7 +6,7 @@ import 'ssh_client.dart';
 ///
 /// The subclasses say what; this class itself is thrown when the tunnel
 /// can't be set up for a reason that isn't ssh's.
-class SshException implements Exception {
+final class SshException implements Exception {
   const SshException(this.message);
 
   /// What went wrong.
