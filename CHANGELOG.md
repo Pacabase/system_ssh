@@ -5,6 +5,11 @@
   1Password's SSH agent approval on Linux, names your app instead of `/bin/sh`.
   ssh, and anything it started such as a ProxyCommand, still stops when the app
   exits or is killed, and still ignores a terminal's Ctrl-C.
+- **Breaking:** `SshException` is now a `final class`, so an app can no
+  longer extend or implement it. Catching it works as before. A fake
+  `SshClient` that needs to act out a failure throws an `SshTunnelException`,
+  such as `throw const SshTunnelException('Connection refused');`, and an
+  app's own errors use its own exception type.
 - `tunnelCommand` and `socksProxyCommand` throw an `ArgumentError` (a
   `RangeError`) for a `localPort` outside 1 to 65535, as `openTunnel` and
   `openSocksProxy` do, instead of returning a command ssh would reject. Their
