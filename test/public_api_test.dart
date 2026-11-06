@@ -54,6 +54,72 @@ void main() {
     expect(await fake.configuredHosts(), ['ssh.example.com']);
   });
 
+  test('reads back the target it was given', () {
+    const target = SshTarget('ssh.example.com', port: 2222, user: 'alice');
+
+    expect((target.host, target.port, target.user),
+        ('ssh.example.com', 2222, 'alice'));
+  });
+
+  test('waits on a tunnel and closes it', () async {
+    final SshTunnel tunnel = await _FakeSshClient().openTunnel(
+      const SshTarget('ssh.example.com'),
+      remoteHost: 'db.example.com',
+      remotePort: 5432,
+    );
+
+    await tunnel.close();
+    await tunnel.done;
+  });
+
+  test('runs a chosen ssh executable', () {
+    const client = SystemSshClient(executable: '/usr/local/bin/ssh');
+
+    expect(client.executable, '/usr/local/bin/ssh');
+  });
+
+  test('switches over every kind of log line', () {
+    String describe(SshLog log) => switch (log) {
+          SshProgress(:final line) => 'progress: $line',
+          SshMessage(:final line) => 'message: $line',
+          SshForwardFailed(:final line, :final reason) => '$reason: $line',
+        };
+
+    expect(
+      [
+        const SshProgress('debug1: Connecting to ssh.example.com port 22.'),
+        const SshMessage('Warning: Permanently added ssh.example.com.'),
+        const SshForwardFailed(
+          'channel 2: open failed: connect failed: Connection refused',
+          reason: 'Connection refused',
+        ),
+      ].map(describe),
+      [
+        startsWith('progress: '),
+        startsWith('message: '),
+        startsWith('Connection refused: '),
+      ],
+    );
+  });
+
+  test('shows the terminal command for a tunnel and a SOCKS proxy', () {
+    const server = SshTarget('ssh.example.com');
+
+    expect(
+      tunnelCommand(
+        server,
+        remoteHost: 'db.example.com',
+        remotePort: 5432,
+        localPort: 15432,
+      ),
+      contains('-L 127.0.0.1:15432:db.example.com:5432'),
+    );
+    expect(
+      socksProxyCommand(server, localPort: 1080),
+      contains('-D 127.0.0.1:1080'),
+    );
+  });
+
   test('takes the login shell and extra variables for ssh', () {
     const client = SystemSshClient(
       loginShell: true,
@@ -101,6 +167,25 @@ void main() {
       exceptions.map((exception) => exception.message),
       everyElement(isNotEmpty),
     );
+  });
+
+  test('says whether retrying an exception can work', () {
+    const tunnelException = SshTunnelException(
+      'Host key verification failed.',
+      log: ['debug1: Connecting to ssh.example.com port 22.'],
+      exitCode: 255,
+      isPermanent: true,
+    );
+    const portInUse = SshPortInUseException(5432);
+
+    expect(const SshException('boom').isPermanent, isFalse);
+    expect(SshNotFoundException().isPermanent, isTrue);
+    expect(const SshTunnelAbortedException().isPermanent, isFalse);
+    expect(tunnelException.log,
+        ['debug1: Connecting to ssh.example.com port 22.']);
+    expect(
+        (tunnelException.exitCode, tunnelException.isPermanent), (255, true));
+    expect((portInUse.port, portInUse.isPermanent), (5432, true));
   });
 
   test('rejects a server host that ssh would read as an option', () async {
