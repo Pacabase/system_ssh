@@ -73,8 +73,9 @@ void main() {
       expect(await stops(childPid), isTrue);
     });
 
-    test('stops the command when this process is killed', () async {
-      final command = await fakeCommand(['hang']);
+    test('stops the command and what it started when this process is killed',
+        () async {
+      final command = await fakeCommand(['spawn', 'hang']);
       final helper = await Process.start(Platform.resolvedExecutable, [
         'test/fakes/start_watched_main.dart',
         ...command.arguments,
@@ -88,12 +89,14 @@ void main() {
             .trim(),
       );
       final pid = await command.pid;
+      final childPid = await command.childPid;
 
       expect(isRunning(pid), isTrue);
 
       Process.killPid(helperPid, ProcessSignal.sigkill);
 
       expect(await stops(pid), isTrue);
+      expect(await stops(childPid), isTrue);
     });
 
     test(
@@ -118,17 +121,67 @@ void main() {
         return process;
       }
 
-      test('kills the command and what it started once stdin closes', () async {
-        final command = await fakeCommand(['spawn', 'hang']);
+      test("is this process's own child, for 1Password's prompt", () async {
+        final command = await fakeCommand(['hang']);
         final process = await start(command.arguments);
-        final pid = await command.pid;
-        final childPid = await command.childPid;
 
-        await process.stdin.close();
+        expect(await command.pid, process.pid);
+        expect(parentOf(process.pid), pid);
+      });
 
-        expect(await exitCodeOf(process), 143);
-        expect(await stops(pid), isTrue);
-        expect(await stops(childPid), isTrue);
+      test('gives the command /dev/null as stdin', () async {
+        final process = await start(['sh', '-c', 'cat; echo done']);
+
+        expect(await process.stdout.transform(utf8.decoder).join(), 'done\n');
+      });
+
+      test('kill does nothing once the command has exited', () async {
+        final command = await fakeCommand(['exit:3']);
+        final process = await start(command.arguments);
+        await exitCodeOf(process);
+
+        expect(process.kill(), isFalse);
+        expect(await exitCodeOf(process), 3);
+      });
+
+      for (final (how, stop) in [
+        ('exits', (Process process) => Process.killPid(process.pid)),
+        ('is killed', (Process process) => process.kill()),
+      ]) {
+        test('leaves no watcher behind once the command $how', () async {
+          final command = await fakeCommand(['hang']);
+          final process = await start(command.arguments);
+          await command.pid;
+          final watcher = childrenOf(pid)
+              .where((child) => argumentsOf(child).endsWith(' ${process.pid}'))
+              .single;
+
+          stop(process);
+          await exitCodeOf(process);
+
+          expect(await stops(watcher), isTrue);
+        });
+      }
+
+      test('exits 128 + the signal it died of', () async {
+        final command = await fakeCommand(['hang']);
+        final process = await start(command.arguments);
+        await command.pid;
+
+        process.kill(ProcessSignal.sigkill);
+
+        expect(await exitCodeOf(process), 137);
+      });
+
+      test("ignores a terminal's Ctrl-C, as a background job does", () async {
+        final command = await fakeCommand(['hang']);
+        final process = await start(command.arguments);
+        await command.pid;
+
+        Process.killPid(process.pid, ProcessSignal.sigint);
+        Process.killPid(process.pid);
+
+        expect(await exitCodeOf(process), 128 + 15);
       });
 
       test('exits 143 when terminated', () async {
@@ -147,8 +200,7 @@ void main() {
 
         process.kill();
 
-        // 143 once sh's trap is set; before that, sh dies of the TERM.
-        expect(await exitCodeOf(process), anyOf(143, terminated));
+        expect(await exitCodeOf(process), 143);
         await Future<void>.delayed(const Duration(milliseconds: 500));
         for (final pid in command.pids) {
           expect(await stops(pid), isTrue);
@@ -251,3 +303,18 @@ void main() {
     });
   });
 }
+
+int parentOf(int pid) => int.parse(_ps(['-o', 'ppid=', '-p', '$pid']));
+
+List<int> childrenOf(int pid) => [
+      for (final line
+          in (Process.runSync('pgrep', ['-P', '$pid']).stdout as String)
+              .split('\n'))
+        if (int.tryParse(line) case final child?) child,
+    ];
+
+// Empty once the process is gone.
+String argumentsOf(int pid) => _ps(['-o', 'args=', '-p', '$pid']);
+
+String _ps(List<String> arguments) =>
+    (Process.runSync('ps', arguments).stdout as String).trim();
