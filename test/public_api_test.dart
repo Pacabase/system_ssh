@@ -181,6 +181,7 @@ void main() {
     expect(const SshException('boom').isPermanent, isFalse);
     expect(SshNotFoundException().isPermanent, isTrue);
     expect(const SshTunnelAbortedException().isPermanent, isFalse);
+    expect(const SshConfigException('boom').isPermanent, isTrue);
     expect(tunnelException.log,
         ['debug1: Connecting to ssh.example.com port 22.']);
     expect(
