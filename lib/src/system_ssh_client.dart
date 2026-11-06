@@ -94,7 +94,6 @@ final class SystemSshClient implements SshClient {
 final _unsafeInHost = RegExp(r'''[\s'"`$;&|<>(){}\\/]|[\x00-\x1f]''');
 final _unsafeInUser = RegExp(r'''[\s'"`$;&|<>(){}/]|[\x00-\x1f]''');
 
-/// The `-L` forward to [remoteHost]:[remotePort], for [openSystemForward].
 List<String> Function(int localPort) localForwardTo(
   String remoteHost,
   int remotePort,

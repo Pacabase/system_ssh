@@ -46,7 +46,6 @@ final _refused = RegExp(
   r'^channel \d+: open failed: (?:connect failed: )?(.+?)(?:: open failed)?$',
 );
 
-/// [line] by what it means.
 SshLog classify(String line) {
   if (isProgress(line)) return SshProgress(line);
   if (_refused.firstMatch(line)?[1] case final reason?) {

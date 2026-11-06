@@ -22,7 +22,7 @@ Future<Process> startInJob(
       command.sublist(1),
       environment: environment,
     );
-  } catch (_) {
+  } catch (exception) {
     _closeHandle(job);
     rethrow;
   }
