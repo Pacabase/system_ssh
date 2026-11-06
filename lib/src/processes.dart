@@ -3,127 +3,109 @@ import 'dart:io';
 
 import 'exceptions.dart';
 import 'windows_job.dart';
+import 'wrapped_process.dart';
 
 /// Starts [command] so it, and the ProxyCommand or ProxyJump ssh it runs, dies
 /// with this process, even a killed or crashed one. [Process.kill] on the
 /// result stops them.
 ///
-/// On Linux the command is this process's own child, since 1Password's prompt
-/// there names the parent of ssh, which would otherwise be a shell.
+/// The command is this process's own child, since 1Password's prompt on Linux
+/// names the parent of ssh, which would otherwise be a shell.
 Future<Process> startWatched(
   List<String> command, {
   Map<String, String> environment = const {},
 }) =>
-    _start(() async {
-      if (Platform.isWindows) {
-        return startInJob(command, environment: environment);
-      }
-      if (Platform.isLinux) {
-        return _WatchedChild.start(command, environment: environment);
-      }
-      return Process.start(
-        '/bin/sh',
-        ['-c', _dieWithParent, 'sh', ...command],
-        environment: environment,
-      );
-    });
+    _start(
+      () => Platform.isWindows
+          ? startInJob(command, environment: environment)
+          : _WatchedChild.start(command, environment: environment),
+    );
 
 /// A command beside a shell that stops it, and its children, once the shell's
-/// stdin hits EOF however this process dies, as _dieWithParent does from above.
-/// Linux's own parent-death signal is no use: it fires when the thread that
-/// started the command exits, and Dart's idle threads do.
-final class _WatchedChild implements Process {
-  _WatchedChild._(this._process) {
-    unawaited(_process.exitCode.then((_) => _hasExited = true));
+/// stdin hits EOF however this process dies. Linux's own parent-death signal is
+/// no use: it fires when the thread that started the command exits, and Dart's
+/// idle threads do.
+final class _WatchedChild extends WrappedProcess {
+  _WatchedChild._(super.process, this._watcher) {
+    unawaited(process.exitCode.then((_) => _hasExited = true));
+    unawaited(_watcher.exitCode.then((_) => _isWatched = false));
   }
 
   static Future<Process> start(
     List<String> command, {
     required Map<String, String> environment,
   }) async {
-    // sh becomes the command in the same process, so it is still this process's
-    // child, exits 127 if the command is missing, and reads /dev/null, as a
-    // background job in _dieWithParent does.
+    // sh waits for the watcher, then becomes the command in the same process,
+    // which exits 127 if the command is missing. Like a background job, it
+    // reads /dev/null and ignores a terminal's Ctrl-C.
     final process = await Process.start(
       '/bin/sh',
-      ['-c', r'exec "$@" </dev/null', 'sh', ...command],
+      [
+        '-c',
+        r'''trap '' INT QUIT; read _ || exit 1; exec "$@" </dev/null''',
+        'sh',
+        ...command,
+      ],
       environment: environment,
     );
 
     final Process watcher;
     try {
-      watcher = await Process.start('/bin/sh', [
-        '-c',
-        _stopOnEof,
-        'sh',
-        '${process.pid}',
-      ]);
+      watcher = await Process.start(
+        '/bin/sh',
+        ['-c', _stopOnEof, 'sh', '${process.pid}'],
+        environment: environment,
+      );
     } on ProcessException {
-      process.kill(ProcessSignal.sigkill);
-      rethrow;
+      unawaited(process.stdout.drain<void>());
+      unawaited(process.stderr.drain<void>());
+      _close(process.stdin);
+      throw const SshException('could not start the shell that watches ssh');
     }
     unawaited(watcher.stdout.drain<void>());
     unawaited(watcher.stderr.drain<void>());
     unawaited(process.exitCode.then((_) => watcher.kill()));
-    return _WatchedChild._(process);
+
+    process.stdin.writeln();
+    _close(process.stdin);
+    return _WatchedChild._(process, watcher);
   }
 
-  final Process _process;
+  final Process _watcher;
   var _hasExited = false;
+  var _isWatched = true;
   var _isTerminated = false;
 
-  @override
-  int get pid => _process.pid;
-
-  @override
-  Stream<List<int>> get stdout => _process.stdout;
-
-  @override
-  Stream<List<int>> get stderr => _process.stderr;
-
-  /// Nothing reads it: the command reads /dev/null.
-  @override
-  IOSink get stdin => _process.stdin;
-
   /// 143 once [kill] terminated it, whatever the command exits with, and a
-  /// signal's 128 + its number, as _dieWithParent's shell reports them.
+  /// signal's 128 + its number, as a shell reports them.
   @override
-  Future<int> get exitCode => _process.exitCode.then(
+  Future<int> get exitCode => process.exitCode.then(
         (code) => _isTerminated ? 143 : (code < 0 ? 128 - code : code),
       );
 
+  /// TERM goes through the watcher, which stops the command's children first:
+  /// ssh only stops its ProxyCommand once connected.
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     // Its pid may be another process's by now.
     if (_hasExited) return false;
-    if (signal == ProcessSignal.sigterm) _isTerminated = true;
-    // ssh only stops its ProxyCommand once connected. The watcher stops once
-    // the command exits.
-    for (final child in _children(pid)) {
-      Process.killPid(child, signal);
-    }
-    return _process.kill(signal);
+    if (signal != ProcessSignal.sigterm) return process.kill(signal);
+
+    _isTerminated = true;
+    if (!_isWatched) return process.kill(signal);
+    _close(_watcher.stdin);
+    return true;
   }
 
-  // Linux lists children per thread, and a command can start them from any.
-  static List<int> _children(int pid) {
-    try {
-      return [
-        for (final thread in Directory('/proc/$pid/task').listSync())
-          ...File('${thread.path}/children')
-              .readAsStringSync()
-              .split(' ')
-              .map(int.tryParse)
-              .nonNulls,
-      ];
-    } on FileSystemException {
-      return const [];
-    }
-  }
+  // A shell that died first breaks the pipe, which is no error here.
+  static void _close(IOSink stdin) =>
+      unawaited(stdin.close().then((_) {}, onError: (Object _) {}));
 }
 
-// Waits for this process to die, which closes the shell's stdin, then stops $1.
+// Waits for this process to die or kill the command, either of which closes
+// the shell's stdin, then stops $1.
 const _stopOnEof = r'''
+trap '' INT QUIT
 read _
 pkill -TERM -P "$1" 2>/dev/null
 kill "$1" 2>/dev/null
@@ -167,20 +149,3 @@ Future<Process> _start(Future<Process> Function() start) async {
     throw SshNotFoundException();
   }
 }
-
-// stdin hits EOF however this process dies. `stop` also kills ssh's children,
-// since ssh only stops its ProxyCommand once connected.
-const _dieWithParent = r'''
-stop() { pkill -TERM -P "$pid" 2>/dev/null; kill "$pid" 2>/dev/null; }
-term=
-trap 'term=1' TERM
-"$@" & pid=$!
-exec 3<&0
-{ read _ <&3; stop; } & watcher=$!
-trap 'stop; kill $watcher 2>/dev/null; wait $pid; exit 143' TERM
-[ -z "$term" ] || kill -TERM $$
-wait $pid
-status=$?
-kill $watcher 2>/dev/null
-exit $status
-''';

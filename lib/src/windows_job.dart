@@ -6,6 +6,7 @@ import 'package:ffi/ffi.dart';
 
 import 'exceptions.dart';
 import 'logger.dart';
+import 'wrapped_process.dart';
 
 /// Starts [command] in a job object that Windows kills when this process
 /// exits, however it exits. [Process.kill] on the result kills the whole job.
@@ -67,35 +68,19 @@ _Handle _createJob() {
   return job;
 }
 
-final class _JobProcess implements Process {
-  _JobProcess(this._process, this._job) {
-    unawaited(_process.exitCode.then((_) => _close()));
+final class _JobProcess extends WrappedProcess {
+  _JobProcess(super.process, this._job) {
+    unawaited(process.exitCode.then((_) => _close()));
   }
 
-  final Process _process;
   _Handle? _job;
-
-  @override
-  int get pid => _process.pid;
-
-  @override
-  IOSink get stdin => _process.stdin;
-
-  @override
-  Stream<List<int>> get stdout => _process.stdout;
-
-  @override
-  Stream<List<int>> get stderr => _process.stderr;
-
-  @override
-  Future<int> get exitCode => _process.exitCode;
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     final job = _job;
     final isTerminated = job != null && _terminateJobObject(job, 1) != 0;
 
-    return _process.kill(signal) || isTerminated;
+    return process.kill(signal) || isTerminated;
   }
 
   // Closing the last handle kills whatever ssh left running in the job.

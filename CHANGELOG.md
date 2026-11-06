@@ -1,9 +1,10 @@
 ## Unreleased
 
-- On Linux, ssh is now a child of your app itself rather than of a `/bin/sh`
-  wrapper, so a prompt that names the process asking, such as 1Password's
-  SSH agent approval, names your app instead of `/bin/sh`. ssh and its
-  ProxyCommand still stop when the app exits or is killed.
+- On Linux and macOS, ssh is now a child of your app itself rather than of a
+  `/bin/sh` wrapper, so a prompt that names the process asking, such as
+  1Password's SSH agent approval on Linux, names your app instead of `/bin/sh`.
+  ssh, and anything it started such as a ProxyCommand, still stops when the app
+  exits or is killed, and still ignores a terminal's Ctrl-C.
 
 ## 0.7.0
 
