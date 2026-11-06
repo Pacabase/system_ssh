@@ -5,6 +5,10 @@
   1Password's SSH agent approval on Linux, names your app instead of `/bin/sh`.
   ssh, and anything it started such as a ProxyCommand, still stops when the app
   exits or is killed, and still ignores a terminal's Ctrl-C.
+- `tunnelCommand` and `socksProxyCommand` throw an `ArgumentError` (a
+  `RangeError`) for a `localPort` outside 1 to 65535, as `openTunnel` and
+  `openSocksProxy` do, instead of returning a command ssh would reject. Their
+  documentation now says they throw, also for a host starting with `-`.
 
 ## 0.7.0
 
