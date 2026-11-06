@@ -46,8 +46,8 @@ final class SystemSshTunnel implements SshTunnel {
     void report(SshLog entry) {
       try {
         onLog?.call(entry);
-      } catch (exception, stack) {
-        logger.warning('onLog threw', exception, stack);
+      } catch (exception, stackTrace) {
+        logger.warning('onLog threw', exception, stackTrace);
       }
     }
 
@@ -122,7 +122,7 @@ final class SystemSshTunnel implements SshTunnel {
 
     try {
       await ready.future;
-    } catch (_) {
+    } catch (exception) {
       await tunnel.close();
       rethrow;
     }
