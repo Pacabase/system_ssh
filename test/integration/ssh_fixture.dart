@@ -56,6 +56,16 @@ final class SshFixture {
   /// Like [identityAgentTarget], but nothing listens on the agent's socket.
   SshTarget get deadAgentTarget => const SshTarget('dead-agent');
 
+  /// Same server, reached through a ProxyCommand that runs `ssh -W` to it.
+  SshTarget get proxyCommandTarget => const SshTarget('proxy-command');
+
+  /// The pid of the `ssh -W` that [proxyCommandTarget]'s ProxyCommand runs,
+  /// once it has started.
+  Future<int> get proxyPid => eventually(() {
+        if (!_proxyPid.existsSync()) return null;
+        return int.tryParse(_proxyPid.readAsStringSync().trim());
+      });
+
   /// The socket of the agent [startAgent] runs.
   String get agentSocket =>
       '${_require(_directory, 'setUpAll').path}/agent.sock';
@@ -73,6 +83,9 @@ final class SshFixture {
 
   File get _knownHosts =>
       File('${_require(_directory, 'setUpAll').path}/known_hosts');
+
+  File get _proxyPid =>
+      File('${_require(_directory, 'setUpAll').path}/proxy.pid');
 
   String get _hostKeyName => '[127.0.0.1]:$_port';
 
@@ -95,6 +108,20 @@ ${agent == null ? '' : '  IdentityAgent $agent\n'}  StrictHostKeyChecking accept
 ${agentHost('agent-only', null)}
 ${agentHost('identity-agent', '${directory.path}/agent.sock')}
 ${agentHost('dead-agent', '${directory.path}/dead.sock')}
+Host proxy-command
+  HostName 127.0.0.1
+  Port $_port
+  ProxyCommand ${ssh.replaceAll(r'\', '/')} -W %h:%p jump
+  StrictHostKeyChecking accept-new
+  UserKnownHostsFile $knownHosts
+
+Host jump
+  HostName 127.0.0.1
+  Port $_port
+  BatchMode yes
+  StrictHostKeyChecking accept-new
+  UserKnownHostsFile $knownHosts
+
 Host strict-host-keys
   HostName 127.0.0.1
   Port $_port
@@ -109,8 +136,10 @@ Host 127.0.0.1
       File(await compileExecutable('test/integration/ssh_wrapper_main.dart'))
           .copySync(ssh);
     } else {
+      // ssh runs a ProxyCommand as `exec <command>`, so $$ ends up ssh -W's pid.
       File(ssh).writeAsStringSync('''
 #!/bin/sh
+case " \$* " in *" -W "*) echo \$\$ > '${_proxyPid.path}' ;; esac
 exec ssh -F '${directory.path}/config' "\$@"
 ''');
       await Process.run('chmod', ['+x', ssh]);
@@ -164,6 +193,7 @@ exec ssh -F '${directory.path}/config' "\$@"
     if (skip case final reason?) throw StateError(reason);
 
     if (_knownHosts.existsSync()) _knownHosts.deleteSync();
+    if (_proxyPid.existsSync()) _proxyPid.deleteSync();
 
     final echo = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     _echo = echo;
