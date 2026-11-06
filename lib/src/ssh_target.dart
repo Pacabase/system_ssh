@@ -5,6 +5,12 @@ import 'ssh_command.dart';
 /// A null [port] or [user] is left to `~/.ssh/config`, and [host] may be a
 /// `Host` alias from it.
 final class SshTarget {
+  /// The server at [host], with [port] and [user] left to `~/.ssh/config`
+  /// unless given.
+  ///
+  /// ```dart
+  /// const SshTarget('ssh.example.com', port: 2222, user: 'deploy');
+  /// ```
   const SshTarget(this.host, {this.port, this.user});
 
   /// A host name, address or `~/.ssh/config` alias.
