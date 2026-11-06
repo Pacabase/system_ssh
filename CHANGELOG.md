@@ -1,3 +1,10 @@
+## Unreleased
+
+- On Linux, ssh is now a child of your app itself rather than of a `/bin/sh`
+  wrapper, so a prompt that names the process asking, such as 1Password's
+  SSH agent approval, names your app instead of `/bin/sh`. ssh and its
+  ProxyCommand still stop when the app exits or is killed.
+
 ## 0.7.0
 
 - `tunnelCommand` and `socksProxyCommand` give the `ssh` command that opens

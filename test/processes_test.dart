@@ -58,6 +58,18 @@ void main() {
       expect(await exitCodeOf(process), 3);
     });
 
+    test(
+      'kill does nothing once the command has exited on Linux',
+      skip: Platform.isLinux ? null : 'Linux only',
+      () async {
+        final process = await startSteps(['exit:3']);
+        await exitCodeOf(process);
+
+        expect(process.kill(), isFalse);
+        expect(await exitCodeOf(process), 3);
+      },
+    );
+
     test('kill stops the command and what it started', () async {
       final command = await fakeCommand(['spawn', 'hang']);
       final process = await start(command.arguments);
@@ -97,6 +109,20 @@ void main() {
     });
 
     test(
+      "is this process's own child on Linux, for 1Password's prompt",
+      skip: Platform.isLinux ? null : 'Linux only',
+      () async {
+        final command = await fakeCommand(['hang']);
+        final process = await start(command.arguments);
+
+        expect(await command.pid, process.pid);
+        final stat = File('/proc/${process.pid}/stat').readAsStringSync();
+        final parent = stat.substring(stat.lastIndexOf(')') + 2).split(' ')[1];
+        expect(parent, '$pid');
+      },
+    );
+
+    test(
       'throws SshNotFoundException for a command that does not exist',
       skip: Platform.isWindows ? null : 'POSIX starts /bin/sh, which exits 127',
       () async {
@@ -118,7 +144,10 @@ void main() {
         return process;
       }
 
-      test('kills the command and what it started once stdin closes', () async {
+      test('kills the command and what it started once stdin closes',
+          skip: Platform.isLinux
+              ? 'Linux stops it when this process dies, not on stdin'
+              : null, () async {
         final command = await fakeCommand(['spawn', 'hang']);
         final process = await start(command.arguments);
         final pid = await command.pid;
