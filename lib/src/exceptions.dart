@@ -7,6 +7,7 @@ import 'ssh_client.dart';
 /// The subclasses say what; this class itself is thrown when the tunnel
 /// can't be set up for a reason that isn't ssh's.
 class SshException implements Exception {
+  /// An error that says [message].
   const SshException(this.message);
 
   /// What went wrong.
@@ -23,6 +24,8 @@ class SshException implements Exception {
 
 /// No `ssh` executable could be started.
 final class SshNotFoundException extends SshException {
+  /// An error that tells the user how to get ssh: on Windows, to add
+  /// "OpenSSH Client" under Optional features; elsewhere, to install OpenSSH.
   factory SshNotFoundException() => Platform.isWindows
       ? const SshNotFoundException._(
           'ssh was not found; add "OpenSSH Client" in Settings under '
@@ -44,6 +47,7 @@ final class SshNotFoundException extends SshException {
 /// The `abortTrigger` passed to [SshClient.openTunnel] or
 /// [SshClient.openSocksProxy] completed before the tunnel opened.
 final class SshTunnelAbortedException extends SshException {
+  /// An error saying the tunnel was aborted.
   const SshTunnelAbortedException() : super('the tunnel was aborted');
 
   @override
@@ -53,6 +57,17 @@ final class SshTunnelAbortedException extends SshException {
 /// ssh exited on its own: before the tunnel was open, when opening it, or
 /// after, when the connection dropped (from [SshTunnel.done]).
 final class SshTunnelException extends SshException {
+  /// An error that says [message], which is what a fake [SshClient] throws
+  /// to act out a failure. [log] defaults to empty, [exitCode] to null and
+  /// [isPermanent] to false.
+  ///
+  /// ```dart
+  /// throw const SshTunnelException(
+  ///   'Permission denied (publickey).',
+  ///   exitCode: 255,
+  ///   isPermanent: true,
+  /// );
+  /// ```
   const SshTunnelException(
     super.message, {
     this.log = const [],
@@ -77,6 +92,7 @@ final class SshTunnelException extends SshException {
 /// The `127.0.0.1` port asked of [SshClient.openTunnel] or
 /// [SshClient.openSocksProxy] is taken.
 final class SshPortInUseException extends SshException {
+  /// An error saying [port] on `127.0.0.1` is already in use.
   const SshPortInUseException(this.port)
       : super('127.0.0.1:$port is already in use');
 

@@ -17,6 +17,8 @@ import 'system_ssh_tunnel.dart';
 /// Tunnels through the system's OpenSSH client, with `~/.ssh/config` and its
 /// agent applying as they do in a terminal.
 final class SystemSshClient implements SshClient {
+  /// A client that runs `ssh` from the `PATH` with the app's own environment,
+  /// unless [executable], [loginShell] or [environment] say otherwise.
   const SystemSshClient({
     this.executable = 'ssh',
     this.loginShell = false,
