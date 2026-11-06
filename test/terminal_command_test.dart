@@ -52,12 +52,74 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    for (final port in [0, 65536]) {
+      test('rejects local port $port', () {
+        expect(
+          () => tunnelCommand(
+            const SshTarget('ssh.example.com'),
+            remoteHost: 'db.example.com',
+            remotePort: 5432,
+            localPort: port,
+          ),
+          throwsRangeError,
+        );
+      });
+    }
+
+    for (final port in [1, 65535]) {
+      test('accepts local port $port', () {
+        expect(
+          tunnelCommand(
+            const SshTarget('ssh.example.com'),
+            remoteHost: 'db.example.com',
+            remotePort: 5432,
+            localPort: port,
+          ),
+          'ssh -N -L 127.0.0.1:$port:db.example.com:5432 ssh.example.com',
+        );
+      });
+    }
   });
 
-  test('socksProxyCommand serves a SOCKS proxy through the server', () {
-    expect(
-      socksProxyCommand(const SshTarget('ssh.example.com'), localPort: 1080),
-      'ssh -N -D 127.0.0.1:1080 ssh.example.com',
-    );
+  group('socksProxyCommand', () {
+    test('serves a SOCKS proxy through the server', () {
+      expect(
+        socksProxyCommand(const SshTarget('ssh.example.com'), localPort: 1080),
+        'ssh -N -D 127.0.0.1:1080 ssh.example.com',
+      );
+    });
+
+    test('rejects a host ssh would read as an option', () {
+      expect(
+        () => socksProxyCommand(
+          const SshTarget('-oProxyCommand=false'),
+          localPort: 1080,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    for (final port in [0, 65536]) {
+      test('rejects local port $port', () {
+        expect(
+          () => socksProxyCommand(
+            const SshTarget('ssh.example.com'),
+            localPort: port,
+          ),
+          throwsRangeError,
+        );
+      });
+    }
+
+    for (final port in [1, 65535]) {
+      test('accepts local port $port', () {
+        expect(
+          socksProxyCommand(const SshTarget('ssh.example.com'),
+              localPort: port),
+          'ssh -N -D 127.0.0.1:$port ssh.example.com',
+        );
+      });
+    }
   });
 }

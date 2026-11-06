@@ -6,21 +6,31 @@ import 'ssh_target.dart';
 ///
 /// It's for people: it leaves out the options this package adds for a tunnel
 /// nobody watches, so ssh can ask for a password or a new host key there.
+///
+/// Throws an [ArgumentError] for a [server] host starting with `-`, which ssh
+/// would read as an option, or a [localPort] outside 1 to 65535.
 String tunnelCommand(
   SshTarget server, {
   required String remoteHost,
   required int remotePort,
   required int localPort,
-}) =>
-    _command(
-      server,
-      localForward(localPort, remoteHost: remoteHost, remotePort: remotePort),
-    );
+}) {
+  checkLocalPort(localPort);
+  return _command(
+    server,
+    localForward(localPort, remoteHost: remoteHost, remotePort: remotePort),
+  );
+}
 
 /// The command that serves the same SOCKS proxy as `openSocksProxy` from a
 /// terminal, such as `ssh -N -D 127.0.0.1:1080 ssh.example.com`.
-String socksProxyCommand(SshTarget server, {required int localPort}) =>
-    _command(server, dynamicForward(localPort));
+///
+/// Throws an [ArgumentError] for a [server] host starting with `-`, which ssh
+/// would read as an option, or a [localPort] outside 1 to 65535.
+String socksProxyCommand(SshTarget server, {required int localPort}) {
+  checkLocalPort(localPort);
+  return _command(server, dynamicForward(localPort));
+}
 
 String _command(SshTarget server, List<String> forward) {
   if (server.host.startsWith('-')) {

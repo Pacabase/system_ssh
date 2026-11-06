@@ -130,9 +130,7 @@ Future<SshTunnel> openSystemForward(
       when user.startsWith('-') || user.contains(_unsafeInUser)) {
     throw ArgumentError.value(user, 'server', 'is not a valid user');
   }
-  if (localPort case final port? when port < 1 || port > 65535) {
-    throw RangeError.range(port, 1, 65535, 'localPort');
-  }
+  if (localPort != null) checkLocalPort(localPort);
 
   var isAborted = false;
   unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));

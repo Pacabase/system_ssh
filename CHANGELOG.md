@@ -21,6 +21,10 @@
   `SshClient` that needs to act out a failure throws an `SshTunnelException`,
   such as `throw const SshTunnelException('Connection refused');`, and an
   app's own errors use its own exception type.
+- `tunnelCommand` and `socksProxyCommand` throw an `ArgumentError` (a
+  `RangeError`) for a `localPort` outside 1 to 65535, as `openTunnel` and
+  `openSocksProxy` do, instead of returning a command ssh would reject. Their
+  documentation now says they throw, also for a host starting with `-`.
 
 ## 0.7.0
 

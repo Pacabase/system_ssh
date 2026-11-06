@@ -11,6 +11,12 @@ List<String> destinationArguments(SshTarget server) => [
       server.host,
     ];
 
+void checkLocalPort(int port) {
+  if (port < 1 || port > 65535) {
+    throw RangeError.range(port, 1, 65535, 'localPort');
+  }
+}
+
 List<String> localForward(
   int localPort, {
   required String remoteHost,
