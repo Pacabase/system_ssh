@@ -160,4 +160,49 @@ void main() {
       );
     });
   });
+
+  group('socketTunnelCommand', () {
+    test('forwards the local port to the socket on the server', () {
+      expect(
+        socketTunnelCommand(
+          const SshTarget('ssh.example.com'),
+          remoteSocket: '/var/run/docker.sock',
+          localPort: 2375,
+        ),
+        'ssh -N -L 127.0.0.1:2375:/var/run/docker.sock ssh.example.com',
+      );
+    });
+
+    test('quotes a path with a space', () {
+      expect(
+        socketTunnelCommand(
+          const SshTarget('ssh.example.com'),
+          remoteSocket: '/tmp/my app.sock',
+          localPort: 2375,
+        ),
+        "ssh -N -L '127.0.0.1:2375:/tmp/my app.sock' ssh.example.com",
+      );
+    });
+
+    test('rejects a path ssh would misread, and a bad port', () {
+      const server = SshTarget('ssh.example.com');
+
+      expect(
+        () => socketTunnelCommand(
+          server,
+          remoteSocket: 'docker.sock',
+          localPort: 2375,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => socketTunnelCommand(
+          server,
+          remoteSocket: '/var/run/docker.sock',
+          localPort: 0,
+        ),
+        throwsRangeError,
+      );
+    });
+  });
 }

@@ -24,6 +24,22 @@ List<String> localForward(
 }) =>
     ['-L', '127.0.0.1:$localPort:${bracketIPv6(remoteHost)}:$remotePort'];
 
+// ssh reads a forward without a `/` as a host, splits it at `:`, and newer
+// versions expand `%` tokens and `${VAR}` in socket paths.
+final _unsafeInSocket = RegExp(r'[:%$]|[\x00-\x1f]');
+
+void checkSocketPath(String path, String name) {
+  if (!path.startsWith('/') || path.contains(_unsafeInSocket)) {
+    throw ArgumentError.value(path, name, 'is not an absolute socket path');
+  }
+}
+
+List<String> localForwardToSocket(
+  int localPort, {
+  required String remoteSocket,
+}) =>
+    ['-L', '127.0.0.1:$localPort:$remoteSocket'];
+
 /// A [remotePort] of 0 has the server pick one.
 List<String> remoteForward(
   int remotePort, {

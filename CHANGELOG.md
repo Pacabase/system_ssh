@@ -14,9 +14,21 @@
   ```
 
   `remoteTunnelCommand` gives the same forward as a terminal command.
-- **Breaking:** `SshClient` has the new `openRemoteTunnel` method, so a fake
-  that implements `SshClient` needs one too. It can return its own
-  `SshRemoteTunnel`, or throw `UnimplementedError` if your tests never open one.
+- `openSocketTunnel` forwards a `127.0.0.1` port to a Unix socket on the
+  server, such as Docker's or PostgreSQL's, and `socketTunnelCommand` gives
+  the terminal command:
+
+  ```dart
+  final tunnel = await client.openSocketTunnel(
+    const SshTarget('ssh.example.com'),
+    remoteSocket: '/var/run/docker.sock',
+  );
+  // DOCKER_HOST=tcp://127.0.0.1:${tunnel.localPort}
+  ```
+- **Breaking:** `SshClient` has the new `openRemoteTunnel` and
+  `openSocketTunnel` methods, so a fake that implements `SshClient` needs them
+  too. Each can return its own tunnel, or throw `UnimplementedError` if your
+  tests never open one.
 
 ## 0.8.0
 

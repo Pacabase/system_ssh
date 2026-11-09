@@ -22,6 +22,25 @@ String tunnelCommand(
   );
 }
 
+/// The command that opens the same tunnel as `openSocketTunnel` from a
+/// terminal, such as `ssh -N -L 127.0.0.1:2375:/var/run/docker.sock
+/// ssh.example.com`.
+///
+/// Throws an [ArgumentError] for a [server] host starting with `-`, a
+/// [remoteSocket] ssh would misread, or a [localPort] outside 1 to 65535.
+String socketTunnelCommand(
+  SshTarget server, {
+  required String remoteSocket,
+  required int localPort,
+}) {
+  checkLocalPort(localPort);
+  checkSocketPath(remoteSocket, 'remoteSocket');
+  return _command(
+    server,
+    localForwardToSocket(localPort, remoteSocket: remoteSocket),
+  );
+}
+
 /// The command that opens the same remote forward as `openRemoteTunnel` from
 /// a terminal, such as `ssh -N -R 127.0.0.1:8080:localhost:3000
 /// ssh.example.com`.

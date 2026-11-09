@@ -71,6 +71,26 @@ print('curl --socks5-hostname 127.0.0.1:${proxy.localPort} https://example.com')
 It takes `localPort`, `onLog` and `abortTrigger` as `openTunnel` does. Point a
 browser, or any SOCKS5 client, at the port.
 
+## Unix socket
+
+`openSocketTunnel` forwards a `127.0.0.1` port to a Unix socket on the
+server, such as Docker's or PostgreSQL's:
+
+```dart
+final tunnel = await client.openSocketTunnel(
+  const SshTarget('ssh.example.com'),
+  remoteSocket: '/var/run/docker.sock',
+);
+
+print('DOCKER_HOST=tcp://127.0.0.1:${tunnel.localPort} docker ps');
+```
+
+It takes `localPort`, `onLog` and `abortTrigger` as `openTunnel` does, and
+`socketTunnelCommand(...)` gives the terminal command. The path must be
+absolute, the server's sshd must serve Unix sockets (OpenSSH on Linux and
+macOS does), and the login must be allowed to open the socket. A connection
+that can't reach it comes to `onLog` as an `SshForwardFailed`.
+
 ## Remote forward
 
 `openRemoteTunnel` does the reverse (`ssh -R`): the server listens on its own

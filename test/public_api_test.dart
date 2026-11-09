@@ -40,6 +40,16 @@ final class _FakeSshClient implements SshClient {
       _FakeTunnel(localPort ?? 50000);
 
   @override
+  Future<SshTunnel> openSocketTunnel(
+    SshTarget server, {
+    required String remoteSocket,
+    int? localPort,
+    void Function(SshLog log)? onLog,
+    Future<void>? abortTrigger,
+  }) async =>
+      _FakeTunnel(localPort ?? 50002);
+
+  @override
   Future<SshRemoteTunnel> openRemoteTunnel(
     SshTarget server, {
     String localHost = 'localhost',
@@ -194,6 +204,35 @@ void main() {
     expect((picked.remotePort, fixed.remotePort), (41234, 8080));
     await fixed.close();
     await fixed.done;
+  });
+
+  test('opens a tunnel to a Unix socket on the server', () async {
+    final SshClient fake = _FakeSshClient();
+    final tunnel = await fake.openSocketTunnel(
+      const SshTarget('ssh.example.com'),
+      remoteSocket: '/var/run/docker.sock',
+      localPort: 2375,
+    );
+
+    expect(tunnel.localPort, 2375);
+    expect(
+      socketTunnelCommand(
+        const SshTarget('ssh.example.com'),
+        remoteSocket: '/var/run/docker.sock',
+        localPort: 2375,
+      ),
+      contains('-L 127.0.0.1:2375:/var/run/docker.sock'),
+    );
+  });
+
+  test('rejects a relative socket path', () async {
+    await expectLater(
+      const SystemSshClient().openSocketTunnel(
+        const SshTarget('ssh.example.com'),
+        remoteSocket: 'docker.sock',
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('shows the terminal command for a remote tunnel', () {
