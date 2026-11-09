@@ -121,8 +121,9 @@ print('On the server, curl http://127.0.0.1:${tunnel.remotePort}');
 ## Sharing a connection
 
 Each tunnel runs its own ssh, so five tunnels to one server mean five
-logins: five hardware-key touches, or five approvals in an agent such as
-1Password's. `shareConnections` has tunnels to the same server share one:
+logins and five connections: five touches of a hardware key that asks for
+one on each login, or five confirmations from an agent that asks each time
+(`ssh-add -c`). `shareConnections` has tunnels to the same server share one:
 
 ```dart
 const client = SystemSshClient(shareConnections: true);

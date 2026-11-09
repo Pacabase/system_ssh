@@ -41,9 +41,9 @@ final class SystemSshClient implements SshClient {
   /// `ProxyCommand`.
   final Map<String, String> environment;
 
-  /// Whether tunnels to the same server share one ssh connection, so the user
-  /// logs in, touches a hardware key or approves an agent's prompt once
-  /// rather than once per tunnel.
+  /// Whether tunnels to the same server share one ssh connection, so the
+  /// server sees one login, and a hardware key that asks for a touch, or an
+  /// agent that confirms each use, asks once rather than once per tunnel.
   ///
   /// The connection is this process's own, never one the user's
   /// `ControlMaster` set up, and it stops once its last tunnel closes, or

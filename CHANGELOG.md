@@ -26,8 +26,9 @@
   // DOCKER_HOST=tcp://127.0.0.1:${tunnel.localPort}
   ```
 - `SystemSshClient(shareConnections: true)` has tunnels to the same server
-  share one ssh connection, so the user logs in, touches a hardware key or
-  approves an agent's prompt once per server rather than once per tunnel:
+  share one ssh connection, so the server sees one login and the user touches
+  a hardware key or confirms an agent's prompt once per server rather than
+  once per tunnel:
 
   ```dart
   const client = SystemSshClient(shareConnections: true);
