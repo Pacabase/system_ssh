@@ -44,8 +44,9 @@ final class SshNotFoundException extends SshException {
   String toString() => 'SshNotFoundException: $message';
 }
 
-/// The `abortTrigger` passed to [SshClient.openTunnel] or
-/// [SshClient.openSocksProxy] completed before the tunnel opened.
+/// The `abortTrigger` passed to [SshClient.openTunnel],
+/// [SshClient.openRemoteTunnel] or [SshClient.openSocksProxy] completed
+/// before the tunnel opened.
 final class SshTunnelAbortedException extends SshException {
   /// An error saying the tunnel was aborted.
   const SshTunnelAbortedException() : super('the tunnel was aborted');
@@ -55,7 +56,8 @@ final class SshTunnelAbortedException extends SshException {
 }
 
 /// ssh exited on its own: before the tunnel was open, when opening it, or
-/// after, when the connection dropped (from [SshTunnel.done]).
+/// after, when the connection dropped (from [SshTunnel.done] or
+/// [SshRemoteTunnel.done]).
 final class SshTunnelException extends SshException {
   /// An error that says [message], which is what a fake [SshClient] throws
   /// to act out a failure. [log] defaults to empty, [exitCode] to null and

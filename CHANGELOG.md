@@ -1,3 +1,23 @@
+## Unreleased
+
+- `openRemoteTunnel` opens a remote forward (`ssh -R`): the server listens on
+  its `127.0.0.1`, and each connection there comes back to a host and port on
+  your side, with the same options and failures as `openTunnel`. Leave out
+  `remotePort` to have the server pick one, and read it from `remotePort`:
+
+  ```dart
+  final tunnel = await client.openRemoteTunnel(
+    const SshTarget('ssh.example.com'),
+    localPort: 3000,
+  );
+  print('The server reaches it on 127.0.0.1:${tunnel.remotePort}');
+  ```
+
+  `remoteTunnelCommand` gives the same forward as a terminal command.
+- **Breaking:** `SshClient` has the new `openRemoteTunnel` method, so a fake
+  that implements `SshClient` needs one too. It can return its own
+  `SshRemoteTunnel`, or throw `UnimplementedError` if your tests never open one.
+
 ## 0.8.0
 
 - **Breaking:** `SshException` is now a `final class`, so an app can no

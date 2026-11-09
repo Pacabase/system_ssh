@@ -11,10 +11,10 @@ List<String> destinationArguments(SshTarget server) => [
       server.host,
     ];
 
-void checkLocalPort(int port) {
-  if (port < 1 || port > 65535) {
-    throw RangeError.range(port, 1, 65535, 'localPort');
-  }
+void checkLocalPort(int port) => checkPort(port, 'localPort');
+
+void checkPort(int port, String name) {
+  if (port < 1 || port > 65535) throw RangeError.range(port, 1, 65535, name);
 }
 
 List<String> localForward(
@@ -23,6 +23,14 @@ List<String> localForward(
   required int remotePort,
 }) =>
     ['-L', '127.0.0.1:$localPort:${bracketIPv6(remoteHost)}:$remotePort'];
+
+/// A [remotePort] of 0 has the server pick one.
+List<String> remoteForward(
+  int remotePort, {
+  required String localHost,
+  required int localPort,
+}) =>
+    ['-R', '127.0.0.1:$remotePort:${bracketIPv6(localHost)}:$localPort'];
 
 List<String> dynamicForward(int localPort) => ['-D', '127.0.0.1:$localPort'];
 

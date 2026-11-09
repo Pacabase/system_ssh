@@ -11,38 +11,104 @@ import 'ssh_output.dart';
 const _tailLength = 20;
 
 final class SystemSshTunnel implements SshTunnel {
-  SystemSshTunnel._(this.localPort, this._process, this.done) {
+  SystemSshTunnel._(this.localPort, this._forward);
+
+  /// Waits for ssh to have bound the forward on [localPort]. [onLog] gets
+  /// each line ssh writes until then, and its warnings and failed connections
+  /// after. Every line also goes to the `system_ssh` logger.
+  static Future<SystemSshTunnel> attach(
+    Process process, {
+    required int localPort,
+    void Function(SshLog log)? onLog,
+    Future<void>? abortTrigger,
+  }) async =>
+      SystemSshTunnel._(
+        localPort,
+        await ForwardProcess.attach(
+          process,
+          readiness: LocalForwardReadiness(localPort),
+          describe: () => '127.0.0.1:$localPort',
+          onLog: onLog,
+          abortTrigger: abortTrigger,
+        ),
+      );
+
+  @override
+  final int localPort;
+
+  final ForwardProcess _forward;
+
+  @override
+  Future<void> get done => _forward.done;
+
+  @override
+  Future<void> close() => _forward.close();
+}
+
+final class SystemSshRemoteTunnel implements SshRemoteTunnel {
+  SystemSshRemoteTunnel._(this.remotePort, this._forward);
+
+  /// Waits for the server to have accepted the forward [readiness] watches,
+  /// with [onLog] as in [SystemSshTunnel.attach].
+  static Future<SystemSshRemoteTunnel> attach(
+    Process process, {
+    required RemoteForwardReadiness readiness,
+    void Function(SshLog log)? onLog,
+    Future<void>? abortTrigger,
+  }) async {
+    final forward = await ForwardProcess.attach(
+      process,
+      readiness: readiness,
+      describe: () =>
+          "the server's 127.0.0.1:${readiness.port ?? readiness.requestedPort}",
+      onLog: onLog,
+      abortTrigger: abortTrigger,
+    );
+    return SystemSshRemoteTunnel._(readiness.port!, forward);
+  }
+
+  @override
+  final int remotePort;
+
+  final ForwardProcess _forward;
+
+  @override
+  Future<void> get done => _forward.done;
+
+  @override
+  Future<void> close() => _forward.close();
+}
+
+/// ssh running one forward, local or remote.
+final class ForwardProcess {
+  ForwardProcess._(this._process, this.done, this._describe) {
     unawaited(_process.exitCode.then((_) => _hasExited = true));
     // A caller that never listens to done must not crash on a dropped tunnel.
     done.ignore();
   }
 
-  @override
-  final int localPort;
-
-  @override
+  /// Completes when [close] stops ssh, or fails saying why it exited.
   final Future<void> done;
 
   final Process _process;
+  final String Function() _describe;
   bool _hasExited = false;
   bool _isClosed = false;
 
-  /// Waits for ssh to have bound the forward. [onLog] gets each line ssh
-  /// writes until then, and its warnings and failed connections after. Every
-  /// line also goes to the `system_ssh` logger.
-  static Future<SystemSshTunnel> attach(
+  /// Waits until [readiness] says ssh's forward is up.
+  static Future<ForwardProcess> attach(
     Process process, {
-    required int localPort,
+    required ForwardReadiness readiness,
+    required String Function() describe,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async {
     final lines = <String>[];
     final tail = <String>[];
     final ready = Completer<void>();
-    var isListening = false;
     final stderrDone = Completer<void>();
 
-    late final SystemSshTunnel tunnel;
+    late final ForwardProcess forward;
     void report(SshLog entry) {
       try {
         onLog?.call(entry);
@@ -57,7 +123,7 @@ final class SystemSshTunnel implements SshTunnel {
         tail.add(line);
         if (tail.length > _tailLength) tail.removeAt(0);
         // Once closed, what's left is ssh saying goodbye: "Killed by signal 15."
-        if (tunnel._isClosed || line.trim().isEmpty) return;
+        if (forward._isClosed || line.trim().isEmpty) return;
         if (classify(line) case final entry when entry is! SshProgress) {
           report(entry);
         }
@@ -66,8 +132,7 @@ final class SystemSshTunnel implements SshTunnel {
 
       lines.add(line);
       if (line.trim().isNotEmpty) report(classify(line));
-      if (isListeningOn(line, localPort)) isListening = true;
-      if (isListening && isSessionStarted(line)) ready.complete();
+      if (readiness.isReadyAfter(line)) ready.complete();
     }
 
     process.stderr
@@ -89,7 +154,7 @@ final class SystemSshTunnel implements SshTunnel {
       );
       logger.info('ssh exited with code $code');
       if (ready.isCompleted) {
-        if (tunnel._isClosed) return;
+        if (forward._isClosed) return;
 
         final reason = failureMessage(tail);
         throw SshTunnelException(
@@ -111,7 +176,7 @@ final class SystemSshTunnel implements SshTunnel {
       );
     }
 
-    tunnel = SystemSshTunnel._(localPort, process, waitForExit());
+    forward = ForwardProcess._(process, waitForExit(), describe);
     unawaited(
       abortTrigger?.then((_) {
         if (!ready.isCompleted) {
@@ -123,20 +188,20 @@ final class SystemSshTunnel implements SshTunnel {
     try {
       await ready.future;
     } catch (exception) {
-      await tunnel.close();
+      await forward.close();
       rethrow;
     }
 
-    logger.info('Tunnel ready on 127.0.0.1:$localPort');
-    return tunnel;
+    logger.info('Tunnel ready on ${describe()}');
+    return forward;
   }
 
-  @override
+  /// Stops ssh. Closing again does nothing.
   Future<void> close() async {
     if (_isClosed) return;
     _isClosed = true;
 
-    logger.info('Closing tunnel on 127.0.0.1:$localPort');
+    logger.info('Closing tunnel on ${_describe()}');
     // Once exited, the pid may already belong to another process.
     if (!_hasExited) _process.kill();
     try {

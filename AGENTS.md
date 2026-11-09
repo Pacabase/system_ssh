@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for coding agents (and people) working on `system_ssh`, a Dart package that opens SSH tunnels (`ssh -L`) and SOCKS proxies (`ssh -D`) through the system's own `ssh`. [README.md](README.md) is the user-facing contract; keep it true.
+Guidance for coding agents (and people) working on `system_ssh`, a Dart package that opens SSH tunnels (`ssh -L`), remote forwards (`ssh -R`) and SOCKS proxies (`ssh -D`) through the system's own `ssh`. [README.md](README.md) is the user-facing contract; keep it true.
 
 ## What the package promises
 
@@ -8,7 +8,7 @@ Every change must keep these promises:
 
 - **It runs the system's own `ssh`.** Never add an SSH implementation. `~/.ssh/config` (`Host`, `Include`, `Match`, `ProxyJump`), agents including `IdentityAgent` sockets, hardware keys, certificates and `known_hosts` must work exactly as in a terminal.
 - **It only adds what an unattended tunnel needs.** It asks `ssh -G` what the user's config resolves to and adds options only where the config leaves the default. The README's "Options it sets" table lists every one. Change both together.
-- **Tunnels stay local and die with the process.** The forward or proxy it opens binds `127.0.0.1` only; forwards the user's config sets for the host open too. `close()`, or the app exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it started (a job object on Windows).
+- **Tunnels stay local and die with the process.** The forward or proxy it opens binds `127.0.0.1` only, and a remote forward asks the server for its `127.0.0.1`; forwards the user's config sets for the host open too. `close()`, or the app exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it started (a job object on Windows).
 - **It works on every OpenSSH it supports.** CI runs a real `sshd` on Ubuntu, macOS and Windows with each runner's own OpenSSH (the README's "Platforms" table). Don't rely on an ssh option or output that the oldest one lacks. `ssh` comes from the `PATH` (or `SystemSshClient`'s own path), and on Windows CI checks that it's the built-in OpenSSH.
 - **Failures say why.** An app gets a typed exception, or a failed `done`, with ssh's reason and whether a retry is worth it, never a bare exit code.
 

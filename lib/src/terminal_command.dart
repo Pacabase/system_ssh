@@ -22,6 +22,27 @@ String tunnelCommand(
   );
 }
 
+/// The command that opens the same remote forward as `openRemoteTunnel` from
+/// a terminal, such as `ssh -N -R 127.0.0.1:8080:localhost:3000
+/// ssh.example.com`.
+///
+/// Throws an [ArgumentError] for a [server] host starting with `-`, which ssh
+/// would read as an option, or a [localPort] or [remotePort] outside 1 to
+/// 65535.
+String remoteTunnelCommand(
+  SshTarget server, {
+  String localHost = 'localhost',
+  required int localPort,
+  required int remotePort,
+}) {
+  checkLocalPort(localPort);
+  checkPort(remotePort, 'remotePort');
+  return _command(
+    server,
+    remoteForward(remotePort, localHost: localHost, localPort: localPort),
+  );
+}
+
 /// The command that serves the same SOCKS proxy as `openSocksProxy` from a
 /// terminal, such as `ssh -N -D 127.0.0.1:1080 ssh.example.com`.
 ///
