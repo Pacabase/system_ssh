@@ -14,6 +14,19 @@ final class _FakeTunnel implements SshTunnel {
   Future<void> close() async {}
 }
 
+final class _FakeRemoteTunnel implements SshRemoteTunnel {
+  _FakeRemoteTunnel(this.remotePort);
+
+  @override
+  final int remotePort;
+
+  @override
+  Future<void> get done => Future.value();
+
+  @override
+  Future<void> close() async {}
+}
+
 final class _FakeSshClient implements SshClient {
   @override
   Future<SshTunnel> openTunnel(
@@ -25,6 +38,17 @@ final class _FakeSshClient implements SshClient {
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50000);
+
+  @override
+  Future<SshRemoteTunnel> openRemoteTunnel(
+    SshTarget server, {
+    String localHost = 'localhost',
+    required int localPort,
+    int? remotePort,
+    void Function(SshLog log)? onLog,
+    Future<void>? abortTrigger,
+  }) async =>
+      _FakeRemoteTunnel(remotePort ?? 41234);
 
   @override
   Future<SshTunnel> openSocksProxy(
@@ -151,6 +175,47 @@ void main() {
 
     expect(proxy.localPort, 50001);
     expect(fixed.localPort, 1080);
+  });
+
+  test('opens a remote tunnel, on a fixed server port or a picked one',
+      () async {
+    final SshClient fake = _FakeSshClient();
+    final SshRemoteTunnel picked = await fake.openRemoteTunnel(
+      const SshTarget('ssh.example.com'),
+      localPort: 3000,
+    );
+    final fixed = await fake.openRemoteTunnel(
+      const SshTarget('ssh.example.com'),
+      localHost: '127.0.0.1',
+      localPort: 3000,
+      remotePort: 8080,
+    );
+
+    expect((picked.remotePort, fixed.remotePort), (41234, 8080));
+    await fixed.close();
+    await fixed.done;
+  });
+
+  test('shows the terminal command for a remote tunnel', () {
+    expect(
+      remoteTunnelCommand(
+        const SshTarget('ssh.example.com'),
+        localPort: 3000,
+        remotePort: 8080,
+      ),
+      contains('-R 127.0.0.1:8080:localhost:3000'),
+    );
+  });
+
+  test('rejects a remote tunnel port outside 1 to 65535', () async {
+    await expectLater(
+      const SystemSshClient().openRemoteTunnel(
+        const SshTarget('ssh.example.com'),
+        localPort: 3000,
+        remotePort: 0,
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('exports every exception as an SshException with a message', () {

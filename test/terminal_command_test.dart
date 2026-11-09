@@ -122,4 +122,42 @@ void main() {
       });
     }
   });
+
+  group('remoteTunnelCommand', () {
+    test('has the server forward its port back to the local one', () {
+      expect(
+        remoteTunnelCommand(
+          const SshTarget('ssh.example.com', user: 'deploy'),
+          localPort: 3000,
+          remotePort: 8080,
+        ),
+        'ssh -N -R 127.0.0.1:8080:localhost:3000 deploy@ssh.example.com',
+      );
+    });
+
+    test('takes another local host, bracketing IPv6', () {
+      expect(
+        remoteTunnelCommand(
+          const SshTarget('ssh.example.com'),
+          localHost: '::1',
+          localPort: 3000,
+          remotePort: 8080,
+        ),
+        'ssh -N -R 127.0.0.1:8080:[::1]:3000 ssh.example.com',
+      );
+    });
+
+    test('rejects ports outside 1 to 65535', () {
+      const server = SshTarget('ssh.example.com');
+
+      expect(
+        () => remoteTunnelCommand(server, localPort: 3000, remotePort: 0),
+        throwsRangeError,
+      );
+      expect(
+        () => remoteTunnelCommand(server, localPort: 70000, remotePort: 8080),
+        throwsRangeError,
+      );
+    });
+  });
 }

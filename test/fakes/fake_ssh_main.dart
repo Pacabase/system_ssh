@@ -138,8 +138,37 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       .toList();
   final mode = attempt <= modes.length ? modes[attempt - 1] : modes.last;
   final forward =
-      arguments.indexWhere((argument) => ['-L', '-D'].contains(argument));
-  final port = arguments[forward + 1].split(':')[1];
+      arguments.indexWhere((argument) => ['-L', '-D', '-R'].contains(argument));
+  final spec = arguments[forward + 1].split(':');
+  final port = spec[1];
+
+  if (arguments[forward] == '-R') {
+    // A remote port of 0 has the server pick 41234.
+    final destination = '${spec[2]}:${spec[3]}';
+    final listen = port == '0' ? '41234' : port;
+    final answer = 'listen 127.0.0.1:$port, connect $destination';
+    return _run(switch (mode) {
+      AttemptMode.ready => [
+          'err:debug1: Entering interactive session.',
+          'err:debug1: remote forward success for: $answer',
+          if (port == '0')
+            'err:Allocated port $listen for remote forward to $destination',
+          'hang',
+        ],
+      AttemptMode.fail => [
+          'err:ssh: connect to host ssh.example.com port 22: Connection refused',
+          'exit:255',
+        ],
+      AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
+      AttemptMode.bindFailure => [
+          'err:debug1: Entering interactive session.',
+          'err:debug1: remote forward failure for: $answer',
+          'err:Error: remote port forwarding failed for listen port $port',
+          'exit:255',
+        ],
+    });
+  }
+
   final listening =
       'debug1: Local forwarding listening on 127.0.0.1 port $port.';
 

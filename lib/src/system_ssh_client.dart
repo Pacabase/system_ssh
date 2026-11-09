@@ -11,6 +11,7 @@ import 'ssh_client.dart';
 import 'ssh_command.dart';
 import 'ssh_config.dart';
 import 'ssh_log.dart';
+import 'ssh_output.dart';
 import 'ssh_target.dart';
 import 'system_ssh_tunnel.dart';
 
@@ -61,6 +62,26 @@ final class SystemSshClient implements SshClient {
         server,
         forward: localForwardTo(remoteHost, remotePort),
         localPort: localPort,
+        onLog: onLog,
+        abortTrigger: abortTrigger,
+        executable: executable,
+        environment: await _sshEnvironment(),
+      );
+
+  @override
+  Future<SshRemoteTunnel> openRemoteTunnel(
+    SshTarget server, {
+    String localHost = 'localhost',
+    required int localPort,
+    int? remotePort,
+    void Function(SshLog log)? onLog,
+    Future<void>? abortTrigger,
+  }) async =>
+      openSystemRemoteForward(
+        server,
+        localHost: localHost,
+        localPort: localPort,
+        remotePort: remotePort,
         onLog: onLog,
         abortTrigger: abortTrigger,
         executable: executable,
@@ -123,32 +144,19 @@ Future<SshTunnel> openSystemForward(
   Future<bool> Function(int port) portIsFree = isPortFree,
   Duration configTimeout = const Duration(seconds: 5),
 }) async {
-  if (server.host.startsWith('-') || server.host.contains(_unsafeInHost)) {
-    throw ArgumentError.value(server.host, 'server', 'is not a valid host');
-  }
-  if (server.user case final user?
-      when user.startsWith('-') || user.contains(_unsafeInUser)) {
-    throw ArgumentError.value(user, 'server', 'is not a valid user');
-  }
+  checkServer(server);
   if (localPort != null) checkLocalPort(localPort);
 
   var isAborted = false;
   unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
 
-  final ssh = resolveExecutable(executable, environment: environment);
-  final config = await resolveConfig(
+  final (ssh, config) = await _resolve(
     server,
-    executable: ssh,
+    executable: executable,
     environment: environment,
-    timeout: configTimeout,
+    configTimeout: configTimeout,
     abortTrigger: abortTrigger,
   );
-  if (config['clearallforwardings'] == 'yes') {
-    throw SshConfigException(
-      '~/.ssh/config sets ClearAllForwardings for ${server.host}, '
-      'which drops the tunnel',
-    );
-  }
 
   Future<SshTunnel> start(int port) async {
     final command = sshCommand(
@@ -159,18 +167,14 @@ Future<SshTunnel> openSystemForward(
     );
     logger.info(command.join(' '));
 
-    try {
-      return await SystemSshTunnel.attach(
+    return _notFoundOn127(
+      () async => SystemSshTunnel.attach(
         await startWatched(command, environment: environment),
         localPort: port,
         onLog: onLog,
         abortTrigger: abortTrigger,
-      );
-    } on SshTunnelException catch (exception) {
-      // sh's code for a missing command; Windows fails to start instead.
-      if (exception.exitCode == 127) throw SshNotFoundException();
-      rethrow;
-    }
+      ),
+    );
   }
 
   if (localPort != null) {
@@ -198,5 +202,107 @@ Future<SshTunnel> openSystemForward(
       // Another process can take the port before ssh binds it.
       if (attempt == 3 || await portIsFree(port)) rethrow;
     }
+  }
+}
+
+/// [SystemSshClient.openRemoteTunnel], with the parts tests replace.
+Future<SshRemoteTunnel> openSystemRemoteForward(
+  SshTarget server, {
+  required String localHost,
+  required int localPort,
+  int? remotePort,
+  void Function(SshLog log)? onLog,
+  Future<void>? abortTrigger,
+  String executable = 'ssh',
+  Map<String, String> environment = const {},
+  Duration configTimeout = const Duration(seconds: 5),
+}) async {
+  checkServer(server);
+  if (localHost.contains(_unsafeInHost)) {
+    throw ArgumentError.value(localHost, 'localHost', 'is not a valid host');
+  }
+  checkLocalPort(localPort);
+  if (remotePort != null) checkPort(remotePort, 'remotePort');
+
+  var isAborted = false;
+  unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
+
+  final (ssh, config) = await _resolve(
+    server,
+    executable: executable,
+    environment: environment,
+    configTimeout: configTimeout,
+    abortTrigger: abortTrigger,
+  );
+  if (isAborted) throw const SshTunnelAbortedException();
+
+  final command = sshCommand(
+    server,
+    forward: remoteForward(
+      remotePort ?? 0,
+      localHost: localHost,
+      localPort: localPort,
+    ),
+    config: config,
+    executable: ssh,
+  );
+  logger.info(command.join(' '));
+
+  return _notFoundOn127(
+    () async => SystemSshRemoteTunnel.attach(
+      await startWatched(command, environment: environment),
+      readiness: RemoteForwardReadiness(
+        remotePort ?? 0,
+        localHost: localHost,
+        localPort: localPort,
+      ),
+      onLog: onLog,
+      abortTrigger: abortTrigger,
+    ),
+  );
+}
+
+void checkServer(SshTarget server) {
+  if (server.host.startsWith('-') || server.host.contains(_unsafeInHost)) {
+    throw ArgumentError.value(server.host, 'server', 'is not a valid host');
+  }
+  if (server.user case final user?
+      when user.startsWith('-') || user.contains(_unsafeInUser)) {
+    throw ArgumentError.value(user, 'server', 'is not a valid user');
+  }
+}
+
+/// The ssh to run, and what `ssh -G` says the config makes of [server].
+Future<(String, Map<String, String>)> _resolve(
+  SshTarget server, {
+  required String executable,
+  required Map<String, String> environment,
+  required Duration configTimeout,
+  Future<void>? abortTrigger,
+}) async {
+  final ssh = resolveExecutable(executable, environment: environment);
+  final config = await resolveConfig(
+    server,
+    executable: ssh,
+    environment: environment,
+    timeout: configTimeout,
+    abortTrigger: abortTrigger,
+  );
+  if (config['clearallforwardings'] == 'yes') {
+    throw SshConfigException(
+      '~/.ssh/config sets ClearAllForwardings for ${server.host}, '
+      'which drops the tunnel',
+    );
+  }
+  return (ssh, config);
+}
+
+Future<T> _notFoundOn127<T>(Future<T> Function() start) async {
+  try {
+    return await start();
+  } on SshTunnelException catch (exception) {
+    // sh's code for a missing command; Windows fails to start instead.
+    if (exception.exitCode == 127) throw SshNotFoundException();
+    rethrow;
   }
 }

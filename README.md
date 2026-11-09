@@ -71,6 +71,33 @@ print('curl --socks5-hostname 127.0.0.1:${proxy.localPort} https://example.com')
 It takes `localPort`, `onLog` and `abortTrigger` as `openTunnel` does. Point a
 browser, or any SOCKS5 client, at the port.
 
+## Remote forward
+
+`openRemoteTunnel` does the reverse (`ssh -R`): the server listens on its own
+`127.0.0.1`, and each connection there comes back through ssh to a host and
+port on your side, such as a dev server:
+
+```dart
+final tunnel = await client.openRemoteTunnel(
+  const SshTarget('ssh.example.com'),
+  localPort: 3000,
+  remotePort: 8080,
+);
+
+print('On the server, curl http://127.0.0.1:${tunnel.remotePort}');
+```
+
+- Leave out `remotePort` to have the server pick a free one; `tunnel.remotePort`
+  says which.
+- `localHost` defaults to `localhost`; another host forwards to that machine,
+  as this one reaches it.
+- When the server port is taken, or its sshd doesn't allow forwarding, it
+  throws an `SshTunnelException` with ssh's
+  `Error: remote port forwarding failed for listen port 8080`.
+- It takes `onLog` and `abortTrigger` as `openTunnel` does, and
+  `remoteTunnelCommand(...)` gives the terminal command:
+  `ssh -N -R 127.0.0.1:8080:localhost:3000 ssh.example.com`.
+
 ## GUI apps
 
 An app started from the macOS Dock or Finder gets none of what your shell
@@ -143,7 +170,9 @@ If `ssh -G` fails or takes over 5 seconds, it adds every option above but
 `ForkAfterAuthentication=no`, so a `StrictHostKeyChecking yes` in your config
 becomes `accept-new`.
 
-The forward or proxy binds `127.0.0.1` only. `close()`, or your process
+The forward or proxy binds `127.0.0.1` only, and a remote forward asks the
+server for its `127.0.0.1` only, which it gets unless its sshd sets
+`GatewayPorts yes`. `close()`, or your process
 exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it
 started.
 
