@@ -52,11 +52,15 @@ List<String> dynamicForward(int localPort) => ['-D', '127.0.0.1:$localPort'];
 
 /// A `-o` beats ~/.ssh/config, so options are set only where [config]
 /// leaves ssh's default, or where it couldn't be read at all.
+///
+/// With a [masterSocket], ssh serves the forwards `-O forward` adds there,
+/// for this process alone; without one, it serves nothing but [forward].
 List<String> sshCommand(
   SshTarget server, {
   required List<String> forward,
   Map<String, String> config = const {},
   String executable = 'ssh',
+  String? masterSocket,
 }) {
   bool isDefault(String name, String value) =>
       config.isEmpty || config[name] == value;
@@ -71,7 +75,14 @@ List<String> sshCommand(
       '-o',
       'ForkAfterAuthentication=no',
     ],
-    ...['-o', 'ControlPath=none'],
+    if (masterSocket case final socket?) ...[
+      ...['-o', 'ControlMaster=yes'],
+      ...['-o', 'ControlPath=${controlPath(socket)}'],
+      ...['-o', 'ControlPersist=no'],
+    ] else ...[
+      '-o',
+      'ControlPath=none'
+    ],
     // No terminal answers a password prompt here; fail instead of waiting.
     if (isDefault('batchmode', 'no')) ...['-o', 'BatchMode=yes'],
     // No terminal answers ssh's unknown-host prompt; a changed key still fails.
@@ -87,3 +98,23 @@ List<String> sshCommand(
     ...destinationArguments(server),
   ];
 }
+
+/// `ssh -O <operation>` for [forward] on the master at [masterSocket]. It
+/// never connects, so it needs none of [sshCommand]'s options.
+List<String> muxCommand(
+  SshTarget server, {
+  required String operation,
+  required List<String> forward,
+  required String masterSocket,
+  String executable = 'ssh',
+}) =>
+    [
+      executable,
+      ...['-o', 'ControlPath=${controlPath(masterSocket)}'],
+      ...['-O', operation],
+      ...forward,
+      ...destinationArguments(server),
+    ];
+
+/// ssh expands `%` tokens in a ControlPath.
+String controlPath(String socket) => socket.replaceAll('%', '%%');

@@ -10,8 +10,17 @@ import 'ssh_output.dart';
 
 const _tailLength = 20;
 
+/// A forward that is up: ssh's own process, or a share of a master's.
+abstract interface class ForwardHandle {
+  /// Completes when [close] stops it, or fails saying why it went down.
+  Future<void> get done;
+
+  /// Stops it. Closing again does nothing.
+  Future<void> close();
+}
+
 final class SystemSshTunnel implements SshTunnel {
-  SystemSshTunnel._(this.localPort, this._forward);
+  SystemSshTunnel(this.localPort, this._forward);
 
   /// Waits for ssh to have bound the forward on [localPort]. [onLog] gets
   /// each line ssh writes until then, and its warnings and failed connections
@@ -22,7 +31,7 @@ final class SystemSshTunnel implements SshTunnel {
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
-      SystemSshTunnel._(
+      SystemSshTunnel(
         localPort,
         await ForwardProcess.attach(
           process,
@@ -36,7 +45,7 @@ final class SystemSshTunnel implements SshTunnel {
   @override
   final int localPort;
 
-  final ForwardProcess _forward;
+  final ForwardHandle _forward;
 
   @override
   Future<void> get done => _forward.done;
@@ -46,7 +55,7 @@ final class SystemSshTunnel implements SshTunnel {
 }
 
 final class SystemSshRemoteTunnel implements SshRemoteTunnel {
-  SystemSshRemoteTunnel._(this.remotePort, this._forward);
+  SystemSshRemoteTunnel(this.remotePort, this._forward);
 
   /// Waits for the server to have accepted the forward [readiness] watches,
   /// with [onLog] as in [SystemSshTunnel.attach].
@@ -64,13 +73,13 @@ final class SystemSshRemoteTunnel implements SshRemoteTunnel {
       onLog: onLog,
       abortTrigger: abortTrigger,
     );
-    return SystemSshRemoteTunnel._(readiness.port!, forward);
+    return SystemSshRemoteTunnel(readiness.port!, forward);
   }
 
   @override
   final int remotePort;
 
-  final ForwardProcess _forward;
+  final ForwardHandle _forward;
 
   @override
   Future<void> get done => _forward.done;
@@ -79,8 +88,8 @@ final class SystemSshRemoteTunnel implements SshRemoteTunnel {
   Future<void> close() => _forward.close();
 }
 
-/// ssh running one forward, local or remote.
-final class ForwardProcess {
+/// ssh running one forward, local or remote, or a master serving several.
+final class ForwardProcess implements ForwardHandle {
   ForwardProcess._(this._process, this.done, this._describe) {
     unawaited(_process.exitCode.then((_) => _hasExited = true));
     // A caller that never listens to done must not crash on a dropped tunnel.
@@ -88,6 +97,7 @@ final class ForwardProcess {
   }
 
   /// Completes when [close] stops ssh, or fails saying why it exited.
+  @override
   final Future<void> done;
 
   final Process _process;
@@ -95,12 +105,15 @@ final class ForwardProcess {
   bool _hasExited = false;
   bool _isClosed = false;
 
-  /// Waits until [readiness] says ssh's forward is up.
+  /// Waits until [readiness] says ssh's forward is up. [onLog] gets ssh's
+  /// lines until then, and its warnings and failed connections after, unless
+  /// [onLineAfterReady] takes every line after instead.
   static Future<ForwardProcess> attach(
     Process process, {
     required ForwardReadiness readiness,
     required String Function() describe,
     void Function(SshLog log)? onLog,
+    void Function(String line)? onLineAfterReady,
     Future<void>? abortTrigger,
   }) async {
     final lines = <String>[];
@@ -124,6 +137,7 @@ final class ForwardProcess {
         if (tail.length > _tailLength) tail.removeAt(0);
         // Once closed, what's left is ssh saying goodbye: "Killed by signal 15."
         if (forward._isClosed || line.trim().isEmpty) return;
+        if (onLineAfterReady != null) return onLineAfterReady(line);
         if (classify(line) case final entry when entry is! SshProgress) {
           report(entry);
         }
@@ -197,6 +211,7 @@ final class ForwardProcess {
   }
 
   /// Stops ssh. Closing again does nothing.
+  @override
   Future<void> close() async {
     if (_isClosed) return;
     _isClosed = true;

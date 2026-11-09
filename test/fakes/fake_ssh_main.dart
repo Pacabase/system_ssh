@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 /// How the fake plays one tunnel attempt.
-enum AttemptMode { ready, fail, notFound, bindFailure }
+/// `hang` connects forever, saying nothing.
+enum AttemptMode { ready, fail, notFound, bindFailure, hang }
 
 /// Stands in for ssh in the tests, compiled to an executable.
 ///
@@ -85,6 +86,20 @@ Future<void> _run(List<String> steps) async {
       case 'hang':
         await _flush();
         await Future<void>.delayed(const Duration(hours: 1));
+      case 'say':
+        // Hangs, writing to stderr each line a test appends to the file.
+        await _flush();
+        var said = 0;
+        while (true) {
+          final file = File(value);
+          final lines = file.existsSync() ? file.readAsLinesSync() : <String>[];
+          for (final line in lines.skip(said)) {
+            stderr.writeln(line);
+          }
+          said = lines.length;
+          await stderr.flush();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
       default:
         throw ArgumentError.value(step, 'step');
     }
@@ -124,6 +139,8 @@ Future<void> _ssh(String directory, List<String> arguments) async {
     return _run([]);
   }
 
+  if (arguments.contains('-O')) return _mux(directory, arguments);
+
   var attempt = 1;
   while (file('argv.$attempt').existsSync()) {
     attempt++;
@@ -137,6 +154,22 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       .map(AttemptMode.values.byName)
       .toList();
   final mode = attempt <= modes.length ? modes[attempt - 1] : modes.last;
+  if (arguments.contains('ControlMaster=yes')) {
+    return _run(switch (mode) {
+      AttemptMode.ready => [
+          'err:debug1: setting up multiplex master socket',
+          'err:debug1: Entering interactive session.',
+          'say:${file('master_say').path}',
+        ],
+      AttemptMode.fail || AttemptMode.bindFailure => [
+          'err:ssh: connect to host ssh.example.com port 22: Connection refused',
+          'exit:255',
+        ],
+      AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
+      AttemptMode.hang => ['hang'],
+    });
+  }
+
   final forward =
       arguments.indexWhere((argument) => ['-L', '-D', '-R'].contains(argument));
   final spec = arguments[forward + 1].split(':');
@@ -160,6 +193,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
           'exit:255',
         ],
       AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
+      AttemptMode.hang => ['hang'],
       AttemptMode.bindFailure => [
           'err:debug1: Entering interactive session.',
           'err:debug1: remote forward failure for: $answer',
@@ -183,12 +217,50 @@ Future<void> _ssh(String directory, List<String> arguments) async {
         'exit:255',
       ],
     AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
+    AttemptMode.hang => ['hang'],
     AttemptMode.bindFailure => [
         'err:$listening',
         'err:bind [127.0.0.1]:$port: Address already in use',
         'err:channel_setup_fwd_listener_tcpip: cannot listen to port: $port',
         'err:Could not request local forwarding.',
         'exit:255',
+      ],
+  });
+}
+
+/// `ssh -O forward|cancel`: records its arguments as `mux.<n>`, and answers
+/// per the `mux_modes` file, one line per command: `ok`, `fail` or
+/// `silent-fail` (fails but exits 0, as `-O cancel` does).
+Future<void> _mux(String directory, List<String> arguments) async {
+  File file(String name) => File('$directory/$name');
+
+  var command = 1;
+  while (file('mux.$command').existsSync()) {
+    command++;
+  }
+  file('mux.$command').writeAsStringSync(arguments.join('\n'));
+
+  final modesFile = file('mux_modes');
+  final modes = modesFile.existsSync() ? modesFile.readAsLinesSync() : ['ok'];
+  final mode = command <= modes.length ? modes[command - 1] : modes.last;
+  final operation = arguments[arguments.indexOf('-O') + 1];
+  final spec = arguments[arguments.indexOf('-O') + 3];
+
+  await _run(switch (mode) {
+    'fail' => [
+        'err:mux_client_forward: forwarding request failed: Port forwarding failed',
+        'err:muxclient: master forward request failed',
+        'exit:255',
+      ],
+    'silent-fail' => [
+        'err:mux_client_forward: forwarding request failed: port not forwarded',
+        'err:muxclient: master cancel forward request failed',
+        'exit:0',
+      ],
+    _ => [
+        if (operation == 'forward' && spec.startsWith('127.0.0.1:0:'))
+          'echo:41234',
+        'exit:0',
       ],
   });
 }

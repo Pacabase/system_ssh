@@ -112,3 +112,46 @@ SshLog classify(String line) {
   }
   return SshMessage(line);
 }
+
+/// A shared master is up once it listens for `-O` commands and has started
+/// its session.
+final class MasterReadiness implements ForwardReadiness {
+  bool _isMultiplexing = false;
+  bool _isSessionStarted = false;
+
+  @override
+  bool isReadyAfter(String line) {
+    if (line.contains('setting up multiplex master socket')) {
+      _isMultiplexing = true;
+    }
+    if (isSessionStarted(line)) _isSessionStarted = true;
+    return _isMultiplexing && _isSessionStarted;
+  }
+}
+
+/// A master's own lines about the `-O` commands it serves, which the commands
+/// already report.
+bool isMuxChatter(String line) => line.startsWith('mux_');
+
+// "channel 1: open failed: connect failed: Connection refused"
+final _channelFailed = RegExp(r'^channel (\d+): open failed: ');
+
+// "debug1: channel 1: free: direct-tcpip: listening port 42303 for 127.0.0.1
+// port 1, connect from 127.0.0.1 port 56239 to 127.0.0.1 port 42303, ..."
+final _channelFreed = RegExp(r'channel (\d+): free: (.*)$');
+final _listeningPort = RegExp(r'^(?:[\w-]+: )?listening port (\d+) ');
+
+/// The channel a failed connection was on, or null for another line.
+int? failedChannel(String line) =>
+    int.tryParse(_channelFailed.firstMatch(line)?[1] ?? '');
+
+/// The channel ssh freed, with the local port it was forwarded from when it
+/// says, or null for another line.
+(int, int?)? freedChannel(String line) =>
+    switch (_channelFreed.firstMatch(line)) {
+      final match? => (
+          int.parse(match[1]!),
+          int.tryParse(_listeningPort.firstMatch(match[2]!)?[1] ?? ''),
+        ),
+      null => null,
+    };

@@ -7,6 +7,7 @@ import 'logger.dart';
 import 'login_shell.dart';
 import 'ports.dart';
 import 'processes.dart';
+import 'shared_connection.dart';
 import 'ssh_client.dart';
 import 'ssh_command.dart';
 import 'ssh_config.dart';
@@ -19,11 +20,13 @@ import 'system_ssh_tunnel.dart';
 /// agent applying as they do in a terminal.
 final class SystemSshClient implements SshClient {
   /// A client that runs `ssh` from the `PATH` with the app's own environment,
-  /// unless [executable], [loginShell] or [environment] say otherwise.
+  /// one ssh per tunnel, unless [executable], [loginShell], [environment] or
+  /// [shareConnections] say otherwise.
   const SystemSshClient({
     this.executable = 'ssh',
     this.loginShell = false,
     this.environment = const {},
+    this.shareConnections = false,
   });
 
   /// The OpenSSH client to run: a path, or a name looked up on the `PATH`.
@@ -37,6 +40,20 @@ final class SystemSshClient implements SshClient {
   /// Variables ssh gets on top of the rest, such as an `AWS_PROFILE` for a
   /// `ProxyCommand`.
   final Map<String, String> environment;
+
+  /// Whether tunnels to the same server share one ssh connection, so the user
+  /// logs in, touches a hardware key or approves an agent's prompt once
+  /// rather than once per tunnel.
+  ///
+  /// The connection is this process's own, never one the user's
+  /// `ControlMaster` set up, and it stops once its last tunnel closes, or
+  /// with the app. When it drops, every tunnel on it fails [SshTunnel.done]
+  /// together. Windows' OpenSSH can't share a connection, so there each
+  /// tunnel keeps its own ssh.
+  final bool shareConnections;
+
+  ConnectionPool? get _pool =>
+      shareConnections && !Platform.isWindows ? connectionPool : null;
 
   @override
   Future<List<String>> configuredHosts() {
@@ -66,6 +83,7 @@ final class SystemSshClient implements SshClient {
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
+        pool: _pool,
       );
 
   @override
@@ -84,6 +102,7 @@ final class SystemSshClient implements SshClient {
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
+        pool: _pool,
       );
 
   @override
@@ -104,6 +123,7 @@ final class SystemSshClient implements SshClient {
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
+        pool: _pool,
       );
 
   @override
@@ -121,6 +141,7 @@ final class SystemSshClient implements SshClient {
         abortTrigger: abortTrigger,
         executable: executable,
         environment: await _sshEnvironment(),
+        pool: _pool,
       );
 
   Future<Map<String, String>> _sshEnvironment() async => {
@@ -168,6 +189,7 @@ Future<SshTunnel> openSystemForward(
   Future<int> Function() freePort = pickFreePort,
   Future<bool> Function(int port) portIsFree = isPortFree,
   Duration configTimeout = const Duration(seconds: 5),
+  ConnectionPool? pool,
 }) async {
   checkServer(server);
   if (localPort != null) checkLocalPort(localPort);
@@ -182,8 +204,23 @@ Future<SshTunnel> openSystemForward(
     configTimeout: configTimeout,
     abortTrigger: abortTrigger,
   );
+  // Held while it opens, so a retry on a taken port reuses the login.
+  final shared = await pool?.connect(
+    server,
+    executable: ssh,
+    environment: environment,
+    config: config,
+    onLog: onLog,
+    abortTrigger: abortTrigger,
+  );
 
   Future<SshTunnel> start(int port) async {
+    if (shared != null) {
+      final (handle, _) =
+          await shared.forward(forward(port), localPort: port, onLog: onLog);
+      return SystemSshTunnel(port, handle);
+    }
+
     final command = sshCommand(
       server,
       forward: forward(port),
@@ -202,31 +239,39 @@ Future<SshTunnel> openSystemForward(
     );
   }
 
-  if (localPort != null) {
-    if (isAborted) throw const SshTunnelAbortedException();
-    if (!await portIsFree(localPort)) throw SshPortInUseException(localPort);
-    if (isAborted) throw const SshTunnelAbortedException();
+  Future<SshTunnel> open() async {
+    if (localPort != null) {
+      if (isAborted) throw const SshTunnelAbortedException();
+      if (!await portIsFree(localPort)) throw SshPortInUseException(localPort);
+      if (isAborted) throw const SshTunnelAbortedException();
 
-    try {
-      return await start(localPort);
-    } on SshTunnelException {
-      if (await portIsFree(localPort)) rethrow;
-      throw SshPortInUseException(localPort);
+      try {
+        return await start(localPort);
+      } on SshTunnelException {
+        if (await portIsFree(localPort)) rethrow;
+        throw SshPortInUseException(localPort);
+      }
+    }
+
+    for (var attempt = 1;; attempt++) {
+      if (isAborted) throw const SshTunnelAbortedException();
+
+      final port = await freePort();
+      if (isAborted) throw const SshTunnelAbortedException();
+
+      try {
+        return await start(port);
+      } on SshTunnelException {
+        // Another process can take the port before ssh binds it.
+        if (attempt == 3 || await portIsFree(port)) rethrow;
+      }
     }
   }
 
-  for (var attempt = 1;; attempt++) {
-    if (isAborted) throw const SshTunnelAbortedException();
-
-    final port = await freePort();
-    if (isAborted) throw const SshTunnelAbortedException();
-
-    try {
-      return await start(port);
-    } on SshTunnelException {
-      // Another process can take the port before ssh binds it.
-      if (attempt == 3 || await portIsFree(port)) rethrow;
-    }
+  try {
+    return await open();
+  } finally {
+    shared?.release();
   }
 }
 
@@ -241,6 +286,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   String executable = 'ssh',
   Map<String, String> environment = const {},
   Duration configTimeout = const Duration(seconds: 5),
+  ConnectionPool? pool,
 }) async {
   checkServer(server);
   if (localHost.contains(_unsafeInHost)) {
@@ -261,13 +307,38 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   );
   if (isAborted) throw const SshTunnelAbortedException();
 
+  final forward = remoteForward(
+    remotePort ?? 0,
+    localHost: localHost,
+    localPort: localPort,
+  );
+
+  if (pool != null) {
+    final shared = await pool.connect(
+      server,
+      executable: ssh,
+      environment: environment,
+      config: config,
+      onLog: onLog,
+      abortTrigger: abortTrigger,
+    );
+    try {
+      if (isAborted) throw const SshTunnelAbortedException();
+      final (handle, printed) = await shared.forward(forward, onLog: onLog);
+      final port = remotePort ?? int.tryParse(printed);
+      if (port == null) {
+        await handle.close();
+        throw SshException("ssh didn't say which port the server picked");
+      }
+      return SystemSshRemoteTunnel(port, handle);
+    } finally {
+      shared.release();
+    }
+  }
+
   final command = sshCommand(
     server,
-    forward: remoteForward(
-      remotePort ?? 0,
-      localHost: localHost,
-      localPort: localPort,
-    ),
+    forward: forward,
     config: config,
     executable: ssh,
   );

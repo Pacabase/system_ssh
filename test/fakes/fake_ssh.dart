@@ -51,6 +51,21 @@ final class FakeSsh {
   void attemptModes(List<AttemptMode> modes) => _file('modes')
       .writeAsStringSync(modes.map((mode) => mode.name).join('\n'));
 
+  /// Answers each `ssh -O` command in turn: `ok`, `fail`, or `silent-fail`
+  /// (fails but exits 0); commands past the end repeat the last.
+  void muxModes(List<String> modes) =>
+      _file('mux_modes').writeAsStringSync(modes.join('\n'));
+
+  /// Has a master that is up write [line] to its stderr.
+  void masterSays(String line) =>
+      _file('master_say').writeAsStringSync('$line\n', mode: FileMode.append);
+
+  /// The arguments of each `ssh -O` command, in order.
+  List<List<String>> get muxCommands => [
+        for (var command = 1; _file('mux.$command').existsSync(); command++)
+          _file('mux.$command').readAsLinesSync(),
+      ];
+
   /// What `ssh -G` was run with, or null if it wasn't.
   List<String>? get configArguments {
     final file = _file('config_argv');
