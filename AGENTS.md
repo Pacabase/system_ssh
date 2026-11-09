@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for coding agents (and people) working on `system_ssh`, a Dart package that opens SSH tunnels (`ssh -L`), remote forwards (`ssh -R`) and SOCKS proxies (`ssh -D`) through the system's own `ssh`. [README.md](README.md) is the user-facing contract; keep it true.
+Guidance for coding agents (and people) working on `system_ssh`, a Dart package that opens SSH tunnels (`ssh -L`, to a host and port or a Unix socket), remote forwards (`ssh -R`) and SOCKS proxies (`ssh -D`) through the system's own `ssh`. [README.md](README.md) is the user-facing contract; keep it true.
 
 ## What the package promises
 

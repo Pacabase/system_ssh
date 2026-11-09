@@ -69,6 +69,24 @@ final class SystemSshClient implements SshClient {
       );
 
   @override
+  Future<SshTunnel> openSocketTunnel(
+    SshTarget server, {
+    required String remoteSocket,
+    int? localPort,
+    void Function(SshLog log)? onLog,
+    Future<void>? abortTrigger,
+  }) async =>
+      openSystemForward(
+        server,
+        forward: localForwardToSocketAt(remoteSocket),
+        localPort: localPort,
+        onLog: onLog,
+        abortTrigger: abortTrigger,
+        executable: executable,
+        environment: await _sshEnvironment(),
+      );
+
+  @override
   Future<SshRemoteTunnel> openRemoteTunnel(
     SshTarget server, {
     String localHost = 'localhost',
@@ -128,6 +146,13 @@ List<String> Function(int localPort) localForwardTo(
         remoteHost: remoteHost,
         remotePort: remotePort,
       );
+}
+
+List<String> Function(int localPort) localForwardToSocketAt(
+  String remoteSocket,
+) {
+  checkSocketPath(remoteSocket, 'remoteSocket');
+  return (port) => localForwardToSocket(port, remoteSocket: remoteSocket);
 }
 
 /// [SystemSshClient.openTunnel] and [SystemSshClient.openSocksProxy], with

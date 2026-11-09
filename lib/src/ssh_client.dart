@@ -31,8 +31,8 @@ abstract interface class SshRemoteTunnel {
   Future<void> close();
 }
 
-/// Opens SSH tunnels (local port forwards), remote forwards and SOCKS proxies
-/// (dynamic forwards). An interface, so an app can swap in a fake in its
+/// Opens SSH tunnels (local port forwards, to a host and port or a Unix
+/// socket), remote forwards and SOCKS proxies (dynamic forwards). An interface, so an app can swap in a fake in its
 /// tests.
 abstract interface class SshClient {
   /// Forwards [localPort] on `127.0.0.1`, or a free port when it is null,
@@ -69,6 +69,34 @@ abstract interface class SshClient {
     SshTarget server, {
     required String remoteHost,
     required int remotePort,
+    int? localPort,
+    void Function(SshLog log)? onLog,
+    Future<void>? abortTrigger,
+  });
+
+  /// Forwards [localPort] on `127.0.0.1`, or a free port when it is null,
+  /// to the Unix socket at [remoteSocket] on [server], such as a Docker or
+  /// PostgreSQL socket.
+  ///
+  /// ```dart
+  /// final tunnel = await client.openSocketTunnel(
+  ///   const SshTarget('ssh.example.com'),
+  ///   remoteSocket: '/var/run/docker.sock',
+  /// );
+  /// // DOCKER_HOST=tcp://127.0.0.1:${tunnel.localPort}
+  /// ```
+  ///
+  /// The server needs an sshd that serves Unix sockets, as OpenSSH does on
+  /// Linux and macOS, and a login allowed to open [remoteSocket]. A
+  /// connection it can't make comes to [onLog] as an [SshForwardFailed].
+  /// [onLog] and [abortTrigger] otherwise work as in [openTunnel].
+  ///
+  /// Throws as [openTunnel] does, and an [ArgumentError] for a
+  /// [remoteSocket] that isn't an absolute path, or holds `:`, `%` or `$`,
+  /// which ssh would misread.
+  Future<SshTunnel> openSocketTunnel(
+    SshTarget server, {
+    required String remoteSocket,
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,

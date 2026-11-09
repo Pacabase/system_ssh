@@ -45,8 +45,8 @@ final class SshNotFoundException extends SshException {
 }
 
 /// The `abortTrigger` passed to [SshClient.openTunnel],
-/// [SshClient.openRemoteTunnel] or [SshClient.openSocksProxy] completed
-/// before the tunnel opened.
+/// [SshClient.openSocketTunnel], [SshClient.openRemoteTunnel] or
+/// [SshClient.openSocksProxy] completed before the tunnel opened.
 final class SshTunnelAbortedException extends SshException {
   /// An error saying the tunnel was aborted.
   const SshTunnelAbortedException() : super('the tunnel was aborted');
@@ -105,8 +105,8 @@ final class SshConfigException extends SshException {
   String toString() => 'SshConfigException: $message';
 }
 
-/// The `127.0.0.1` port asked of [SshClient.openTunnel] or
-/// [SshClient.openSocksProxy] is taken.
+/// The `127.0.0.1` port asked of [SshClient.openTunnel],
+/// [SshClient.openSocketTunnel] or [SshClient.openSocksProxy] is taken.
 final class SshPortInUseException extends SshException {
   /// An error saying [port] on `127.0.0.1` is already in use.
   const SshPortInUseException(this.port)
