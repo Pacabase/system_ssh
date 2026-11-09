@@ -108,6 +108,38 @@ void main() {
       }
     });
 
+    test('tells only the tunnel used that its destination refused', () async {
+      final closed = await pickFreePort();
+      final refusedLogs = <SshLog>[];
+      final otherLogs = <SshLog>[];
+      final refusing = await openSystemForward(
+        fixture.target,
+        forward: localForwardTo(fixture.echoHost, closed),
+        onLog: logged(refusedLogs),
+        executable: fixture.ssh,
+        pool: pool,
+      );
+      addTearDown(refusing.close);
+      await open(logs: otherLogs);
+      refusedLogs.clear();
+      otherLogs.clear();
+
+      expect(await fixture.echoThrough(refusing.localPort, 'ping'), isEmpty);
+      for (var waited = 0; waited < 50; waited++) {
+        if (refusedLogs.any((log) => log is SshForwardFailed)) break;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+
+      expect(
+        refusedLogs,
+        contains(
+          isA<SshForwardFailed>()
+              .having((log) => log.reason, 'reason', 'Connection refused'),
+        ),
+      );
+      expect(otherLogs, isNot(contains(isA<SshForwardFailed>())));
+    });
+
     test('stops a ProxyCommand once the last tunnel closes', () async {
       final first = await open(via: fixture.proxyCommandTarget);
       final second = await open(via: fixture.proxyCommandTarget);

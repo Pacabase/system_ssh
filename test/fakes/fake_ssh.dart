@@ -51,8 +51,9 @@ final class FakeSsh {
   void attemptModes(List<AttemptMode> modes) => _file('modes')
       .writeAsStringSync(modes.map((mode) => mode.name).join('\n'));
 
-  /// Answers each `ssh -O` command in turn: `ok`, `fail`, or `silent-fail`
-  /// (fails but exits 0); commands past the end repeat the last.
+  /// Answers each `ssh -O` command in turn: `ok`, `quiet` (prints no port),
+  /// `slow` (answers after 300 ms), `hang`, `fail`, or `silent-fail` (fails
+  /// but exits 0); commands past the end repeat the last.
   void muxModes(List<String> modes) =>
       _file('mux_modes').writeAsStringSync(modes.join('\n'));
 

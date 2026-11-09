@@ -122,13 +122,7 @@ final class ForwardProcess implements ForwardHandle {
     final stderrDone = Completer<void>();
 
     late final ForwardProcess forward;
-    void report(SshLog entry) {
-      try {
-        onLog?.call(entry);
-      } catch (exception, stackTrace) {
-        logger.warning('onLog threw', exception, stackTrace);
-      }
-    }
+    void report(SshLog entry) => reportTo(onLog, entry);
 
     void onLine(String line) {
       logger.fine(line);
@@ -169,25 +163,9 @@ final class ForwardProcess implements ForwardHandle {
       logger.info('ssh exited with code $code');
       if (ready.isCompleted) {
         if (forward._isClosed) return;
-
-        final reason = failureMessage(tail);
-        throw SshTunnelException(
-          reason.isEmpty ? 'ssh exited with code $code' : reason,
-          log: List.unmodifiable(tail),
-          exitCode: code,
-          isPermanent: isPermanentFailure(tail),
-        );
+        throw tunnelFailure(tail, code);
       }
-
-      final reason = failureMessage(lines);
-      ready.completeError(
-        SshTunnelException(
-          reason.isEmpty ? 'ssh exited with code $code' : reason,
-          log: lines,
-          exitCode: code,
-          isPermanent: isPermanentFailure(lines),
-        ),
-      );
+      ready.completeError(tunnelFailure(lines, code));
     }
 
     forward = ForwardProcess._(process, waitForExit(), describe);

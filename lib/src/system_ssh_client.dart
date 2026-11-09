@@ -204,6 +204,11 @@ Future<SshTunnel> openSystemForward(
     configTimeout: configTimeout,
     abortTrigger: abortTrigger,
   );
+  if (isAborted) throw const SshTunnelAbortedException();
+  // A taken port needs no login to say so.
+  if (pool != null && localPort != null && !await portIsFree(localPort)) {
+    throw SshPortInUseException(localPort);
+  }
   // Held while it opens, so a retry on a taken port reuses the login.
   final shared = await pool?.connect(
     server,
@@ -216,8 +221,16 @@ Future<SshTunnel> openSystemForward(
 
   Future<SshTunnel> start(int port) async {
     if (shared != null) {
-      final (handle, _) =
-          await shared.forward(forward(port), localPort: port, onLog: onLog);
+      final (handle, _) = await shared.forward(
+        forward(port),
+        localPort: port,
+        onLog: onLog,
+        abortTrigger: abortTrigger,
+      );
+      if (isAborted) {
+        await handle.close();
+        throw const SshTunnelAbortedException();
+      }
       return SystemSshTunnel(port, handle);
     }
 
@@ -229,7 +242,7 @@ Future<SshTunnel> openSystemForward(
     );
     logger.info(command.join(' '));
 
-    return _notFoundOn127(
+    return notFoundOn127(
       () async => SystemSshTunnel.attach(
         await startWatched(command, environment: environment),
         localPort: port,
@@ -324,11 +337,18 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
     );
     try {
       if (isAborted) throw const SshTunnelAbortedException();
-      final (handle, printed) = await shared.forward(forward, onLog: onLog);
+      final (handle, printed) = await shared.forward(
+        forward,
+        onLog: onLog,
+        abortTrigger: abortTrigger,
+      );
       final port = remotePort ?? int.tryParse(printed);
-      if (port == null) {
+      if (isAborted || port == null) {
         await handle.close();
-        throw SshException("ssh didn't say which port the server picked");
+        if (isAborted) throw const SshTunnelAbortedException();
+        throw const SshException(
+          "ssh didn't say which port the server picked",
+        );
       }
       return SystemSshRemoteTunnel(port, handle);
     } finally {
@@ -344,7 +364,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   );
   logger.info(command.join(' '));
 
-  return _notFoundOn127(
+  return notFoundOn127(
     () async => SystemSshRemoteTunnel.attach(
       await startWatched(command, environment: environment),
       readiness: RemoteForwardReadiness(
@@ -391,14 +411,4 @@ Future<(String, Map<String, String>)> _resolve(
     );
   }
   return (ssh, config);
-}
-
-Future<T> _notFoundOn127<T>(Future<T> Function() start) async {
-  try {
-    return await start();
-  } on SshTunnelException catch (exception) {
-    // sh's code for a missing command; Windows fails to start instead.
-    if (exception.exitCode == 127) throw SshNotFoundException();
-    rethrow;
-  }
 }

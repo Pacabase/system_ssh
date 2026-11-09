@@ -100,7 +100,9 @@ List<String> sshCommand(
 }
 
 /// `ssh -O <operation>` for [forward] on the master at [masterSocket]. It
-/// never connects, so it needs none of [sshCommand]'s options.
+/// reads no config: ssh would send the config's own forwards with each
+/// operation, and a `ControlMaster yes` there has it skip the operation and
+/// log in itself.
 List<String> muxCommand(
   SshTarget server, {
   required String operation,
@@ -110,11 +112,16 @@ List<String> muxCommand(
 }) =>
     [
       executable,
+      ...['-F', 'none'],
+      ...['-o', 'ControlMaster=no'],
       ...['-o', 'ControlPath=${controlPath(masterSocket)}'],
+      ...['-o', 'BatchMode=yes'],
       ...['-O', operation],
       ...forward,
       ...destinationArguments(server),
     ];
 
-/// ssh expands `%` tokens in a ControlPath.
-String controlPath(String socket) => socket.replaceAll('%', '%%');
+/// ssh splits an option's value at a space unless it's quoted, and expands
+/// `%` tokens in a ControlPath. It has no escape for `$` or `"`, so the
+/// socket's directory is picked without them.
+String controlPath(String socket) => '"${socket.replaceAll('%', '%%')}"';

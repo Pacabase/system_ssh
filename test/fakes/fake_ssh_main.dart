@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-/// How the fake plays one tunnel attempt.
-/// `hang` connects forever, saying nothing.
-enum AttemptMode { ready, fail, notFound, bindFailure, hang }
+/// How the fake plays one tunnel attempt. `hang` connects forever, saying
+/// nothing; `held`, for a master, says only what a test has it say, so the
+/// test finishes its login.
+enum AttemptMode { ready, fail, notFound, bindFailure, hang, held }
 
 /// Stands in for ssh in the tests, compiled to an executable.
 ///
@@ -167,6 +168,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
         ],
       AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
       AttemptMode.hang => ['hang'],
+      AttemptMode.held => ['say:${file('master_say').path}'],
     });
   }
 
@@ -193,7 +195,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
           'exit:255',
         ],
       AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
-      AttemptMode.hang => ['hang'],
+      AttemptMode.hang || AttemptMode.held => ['hang'],
       AttemptMode.bindFailure => [
           'err:debug1: Entering interactive session.',
           'err:debug1: remote forward failure for: $answer',
@@ -217,7 +219,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
         'exit:255',
       ],
     AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
-    AttemptMode.hang => ['hang'],
+    AttemptMode.hang || AttemptMode.held => ['hang'],
     AttemptMode.bindFailure => [
         'err:$listening',
         'err:bind [127.0.0.1]:$port: Address already in use',
@@ -229,14 +231,21 @@ Future<void> _ssh(String directory, List<String> arguments) async {
 }
 
 /// `ssh -O forward|cancel`: records its arguments as `mux.<n>`, and answers
-/// per the `mux_modes` file, one line per command: `ok`, `fail` or
-/// `silent-fail` (fails but exits 0, as `-O cancel` does).
+/// per the `mux_modes` file, one line per command: `ok`, `quiet` (prints no
+/// port), `slow` (answers after 300 ms), `hang`, `fail` or `silent-fail`
+/// (fails but exits 0, as `-O cancel` does).
 Future<void> _mux(String directory, List<String> arguments) async {
   File file(String name) => File('$directory/$name');
 
+  // Commands run at once must not take the same record.
   var command = 1;
-  while (file('mux.$command').existsSync()) {
-    command++;
+  while (true) {
+    try {
+      file('mux.$command').createSync(exclusive: true);
+      break;
+    } on FileSystemException {
+      command++;
+    }
   }
   file('mux.$command').writeAsStringSync(arguments.join('\n'));
 
@@ -257,7 +266,10 @@ Future<void> _mux(String directory, List<String> arguments) async {
         'err:muxclient: master cancel forward request failed',
         'exit:0',
       ],
+    'hang' => ['hang'],
+    'quiet' => ['exit:0'],
     _ => [
+        if (mode == 'slow') 'sleep:300',
         if (operation == 'forward' && spec.startsWith('127.0.0.1:0:'))
           'echo:41234',
         'exit:0',

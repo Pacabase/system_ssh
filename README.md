@@ -206,7 +206,7 @@ unattended tunnel needs:
 |---|---|
 | `-n`, `-N`, `-T`, `-v` | always: no input, no remote command or terminal, and `-v` is how it tells the tunnel is open |
 | `ExitOnForwardFailure=yes` | always |
-| `ControlPath=none` | always, or with `shareConnections`, `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own |
+| `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no` |
 | `StrictHostKeyChecking=accept-new` | your config leaves it at `ask`; a changed key still fails |
 | `ConnectTimeout=15` | your config sets none |

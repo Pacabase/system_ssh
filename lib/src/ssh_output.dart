@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'exceptions.dart';
 import 'ssh_log.dart';
 
 final _progress = RegExp(
@@ -27,6 +28,17 @@ String failureMessage(List<String> log) {
       errors.isNotEmpty ? errors : lines.sublist(max(0, lines.length - 3));
 
   return reason.join('\n');
+}
+
+/// ssh's exit with [code], saying why from [log].
+SshTunnelException tunnelFailure(List<String> log, int code) {
+  final reason = failureMessage(log);
+  return SshTunnelException(
+    reason.isEmpty ? 'ssh exited with code $code' : reason,
+    log: List.unmodifiable(log),
+    exitCode: code,
+    isPermanent: isPermanentFailure(log),
+  );
 }
 
 /// Whether [line] is ssh saying it set up the forward on [localPort]; ssh logs
@@ -130,8 +142,22 @@ final class MasterReadiness implements ForwardReadiness {
 }
 
 /// A master's own lines about the `-O` commands it serves, which the commands
-/// already report.
-bool isMuxChatter(String line) => line.startsWith('mux_');
+/// already report, such as a bind failure for a taken port.
+bool isMuxChatter(String line) => _muxChatter.hasMatch(line);
+
+final _muxChatter =
+    RegExp(r'^(mux_|bind \[|channel_setup_fwd_listener|Could not request )');
+
+// "connect_to localhost port 3000: failed.", for a remote forward.
+final _localConnectFailed = RegExp(r'^connect_to (\S+) port (\d+): failed');
+
+/// The host and port of a remote forward's destination that couldn't be
+/// reached, or null for another line.
+String? failedDestination(String line) =>
+    switch (_localConnectFailed.firstMatch(line)) {
+      final match? => '${match[1]}:${match[2]}',
+      null => null,
+    };
 
 // "channel 1: open failed: connect failed: Connection refused"
 final _channelFailed = RegExp(r'^channel (\d+): open failed: ');
@@ -139,7 +165,8 @@ final _channelFailed = RegExp(r'^channel (\d+): open failed: ');
 // "debug1: channel 1: free: direct-tcpip: listening port 42303 for 127.0.0.1
 // port 1, connect from 127.0.0.1 port 56239 to 127.0.0.1 port 42303, ..."
 final _channelFreed = RegExp(r'channel (\d+): free: (.*)$');
-final _listeningPort = RegExp(r'^(?:[\w-]+: )?listening port (\d+) ');
+// The type can be `direct-streamlocal@openssh.com`, for a socket forward.
+final _listeningPort = RegExp(r'^(?:[\w@.-]+: )?listening port (\d+) ');
 
 /// The channel a failed connection was on, or null for another line.
 int? failedChannel(String line) =>
