@@ -118,6 +118,32 @@ print('On the server, curl http://127.0.0.1:${tunnel.remotePort}');
   `remoteTunnelCommand(...)` gives the terminal command:
   `ssh -N -R 127.0.0.1:8080:localhost:3000 ssh.example.com`.
 
+## Sharing a connection
+
+Each tunnel runs its own ssh, so five tunnels to one server mean five
+logins and five connections: five touches of a hardware key that asks for
+one on each login, or five confirmations from an agent that asks each time
+(`ssh-add -c`). `shareConnections` has tunnels to the same server share one:
+
+```dart
+const client = SystemSshClient(shareConnections: true);
+
+final db = await client.openTunnel(server, remoteHost: 'db', remotePort: 5432);
+final cache = await client.openTunnel(server, remoteHost: 'cache', remotePort: 6379);
+// One login for both.
+```
+
+- The connection is your process's own ssh master, in a private directory.
+  It never uses or becomes a `ControlMaster` from your ssh config, so your
+  terminal sessions are unaffected.
+- It starts with the first tunnel to a server and stops once the last one
+  closes, or with your process, even by a crash.
+- When it drops, every tunnel on it fails `done` together.
+- Two tunnels can't share the same remote forward (the same `remotePort`, or
+  a server-picked port to the same local one); the second throws.
+- Windows' OpenSSH can't share a connection, so there each tunnel keeps its
+  own ssh.
+
 ## GUI apps
 
 An app started from the macOS Dock or Finder gets none of what your shell
@@ -179,7 +205,8 @@ unattended tunnel needs:
 | Option | When |
 |---|---|
 | `-n`, `-N`, `-T`, `-v` | always: no input, no remote command or terminal, and `-v` is how it tells the tunnel is open |
-| `ExitOnForwardFailure=yes`, `ControlPath=none` | always |
+| `ExitOnForwardFailure=yes` | always |
+| `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no` |
 | `StrictHostKeyChecking=accept-new` | your config leaves it at `ask`; a changed key still fails |
 | `ConnectTimeout=15` | your config sets none |

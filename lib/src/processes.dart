@@ -144,6 +144,17 @@ String? _find(String name, String path) => path
     .where((candidate) => File(candidate).existsSync())
     .firstOrNull;
 
+/// [start]'s result, or [SshNotFoundException] when ssh exited with sh's code
+/// for a missing command; Windows fails to start instead.
+Future<T> notFoundOn127<T>(Future<T> Function() start) async {
+  try {
+    return await start();
+  } on SshTunnelException catch (exception) {
+    if (exception.exitCode == 127) throw SshNotFoundException();
+    rethrow;
+  }
+}
+
 Future<Process> _start(Future<Process> Function() start) async {
   try {
     return await start();
