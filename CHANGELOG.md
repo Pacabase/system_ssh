@@ -1,5 +1,36 @@
 ## Unreleased
 
+- **Breaking:** a tunnel no longer trusts a new host key unseen. Where the
+  user's ssh config leaves `StrictHostKeyChecking` at `ask`, it used to pass
+  `accept-new`, so the first connection trusted whatever key the server
+  offered, as a terminal never does without asking. It now checks strictly,
+  and a host that isn't in `known_hosts` yet throws an
+  `SshUnknownHostKeyException` (an `SshTunnelException`, permanent) whose
+  `hostKey` has the `host`, key `type` and `fingerprint` to show the user.
+  `trustHostKey` adds it once they have checked it:
+
+  ```dart
+  } on SshUnknownHostKeyException catch (exception) {
+    if (await confirm(exception.hostKey)) {
+      await client.trustHostKey(server, exception.hostKey);
+      // ...and open the tunnel again.
+    }
+  }
+  ```
+
+  It writes the key only if the server still offers that one, as ssh's
+  `accept-new` would write it. To keep trusting new keys unseen, catch the
+  exception and call `trustHostKey` without asking, or set
+  `StrictHostKeyChecking accept-new` for the host in the ssh config, which the
+  tunnel leaves alone. A config that sets `yes`, `accept-new` or `no` behaves
+  as before.
+- A host key that doesn't match `known_hosts` throws an
+  `SshHostKeyChangedException` with the key the server offers now, instead of
+  a plain `SshTunnelException`; it is still an `SshTunnelException`, so
+  catching that works as before.
+- **Breaking:** `SshClient` has the new `trustHostKey` method, so a fake that
+  implements `SshClient` needs it too; one that does nothing is enough for
+  tests that never act out an unknown key.
 - `openRemoteTunnel` opens a remote forward (`ssh -R`): the server listens on
   its `127.0.0.1`, and each connection there comes back to a host and port on
   your side, with the same options and failures as `openTunnel`. Leave out

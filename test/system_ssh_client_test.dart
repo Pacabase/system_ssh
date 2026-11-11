@@ -662,7 +662,7 @@ void main() {
             ...['-o', 'ExitOnForwardFailure=yes'],
             ...['-o', 'ControlPath=none'],
             ...['-o', 'BatchMode=yes'],
-            ...['-o', 'StrictHostKeyChecking=accept-new'],
+            ...['-o', 'StrictHostKeyChecking=yes'],
             ...['-o', 'ConnectTimeout=15'],
             ...['-o', 'ServerAliveInterval=15'],
             ...['-p', '2222'],
@@ -975,7 +975,7 @@ void main() {
         fake.attempts.single,
         containsAll([
           'BatchMode=yes',
-          'StrictHostKeyChecking=accept-new',
+          'StrictHostKeyChecking=yes',
           'ConnectTimeout=15',
           'ServerAliveInterval=15',
         ]),
@@ -995,7 +995,7 @@ void main() {
       await open();
 
       final arguments = fake.attempts.single;
-      expect(arguments, isNot(contains('StrictHostKeyChecking=accept-new')));
+      expect(arguments, isNot(contains('StrictHostKeyChecking=yes')));
       expect(arguments, contains('ConnectTimeout=15'));
       expect(arguments, contains('ServerAliveInterval=15'));
     });
@@ -1012,7 +1012,7 @@ void main() {
         fake.attempts.single,
         containsAll([
           'BatchMode=yes',
-          'StrictHostKeyChecking=accept-new',
+          'StrictHostKeyChecking=yes',
           'ConnectTimeout=15',
           'ServerAliveInterval=15',
         ]),

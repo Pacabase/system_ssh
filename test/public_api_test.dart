@@ -71,7 +71,23 @@ final class _FakeSshClient implements SshClient {
 
   @override
   Future<List<String>> configuredHosts() async => const ['ssh.example.com'];
+
+  final trusted = <SshHostKey>[];
+
+  @override
+  Future<void> trustHostKey(
+    SshTarget server,
+    SshHostKey hostKey, {
+    Future<void>? abortTrigger,
+  }) async =>
+      trusted.add(hostKey);
 }
+
+const _hostKey = SshHostKey(
+  host: '[ssh.example.com]:2222',
+  type: 'ED25519',
+  fingerprint: 'SHA256:fakeHostKeyFingerprintFakeHostKeyFingerpri',
+);
 
 void main() {
   test('exports the client, its target and tunnel', () async {
@@ -265,6 +281,8 @@ void main() {
       const SshTunnelException('boom', exitCode: 255),
       const SshPortInUseException(5432),
       const SshConfigException('boom'),
+      SshUnknownHostKeyException(_hostKey),
+      SshHostKeyChangedException(_hostKey),
     ];
 
     expect(
@@ -291,6 +309,44 @@ void main() {
     expect(
         (tunnelException.exitCode, tunnelException.isPermanent), (255, true));
     expect((portInUse.port, portInUse.isPermanent), (5432, true));
+  });
+
+  test('acts out an unknown host key and trusts it', () async {
+    final fake = _FakeSshClient();
+    final unknown = SshUnknownHostKeyException(
+      _hostKey,
+      log: const ['Host key verification failed.'],
+      exitCode: 255,
+    );
+    final changed = SshHostKeyChangedException(_hostKey);
+
+    await fake.trustHostKey(
+        const SshTarget('ssh.example.com'), unknown.hostKey);
+
+    expect(fake.trusted, [
+      const SshHostKey(
+        host: '[ssh.example.com]:2222',
+        type: 'ED25519',
+        fingerprint: 'SHA256:fakeHostKeyFingerprintFakeHostKeyFingerpri',
+      ),
+    ]);
+    expect(
+      [unknown, changed],
+      everyElement(
+        isA<SshTunnelException>().having(
+          (exception) => exception.isPermanent,
+          'isPermanent',
+          isTrue,
+        ),
+      ),
+    );
+    expect((
+      changed.hostKey.host,
+      changed.hostKey.type
+    ), (
+      '[ssh.example.com]:2222',
+      'ED25519',
+    ));
   });
 
   test('rejects a server host that ssh would read as an option', () async {

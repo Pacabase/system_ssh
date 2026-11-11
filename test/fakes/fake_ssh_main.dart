@@ -7,6 +7,41 @@ import 'dart:io';
 /// test finishes its login.
 enum AttemptMode { ready, fail, notFound, bindFailure, hang, held }
 
+/// How the fake's server key plays, before any [AttemptMode]: `unknown` until
+/// the fake's own `known_hosts` holds [fakeHostKeyEntry], `changed`, or
+/// `jump-unknown` for a ProxyJump host that isn't known.
+enum HostKeyMode { unknown, changed, jumpUnknown }
+
+/// How the fake answers the ssh that reads a host key to trust it: `adds`
+/// writes [fakeHostKeyEntry], `addsOther` a key with another fingerprint,
+/// `known` finds it already known, `changed` finds another key known, and
+/// `unreachable` never connects.
+enum TrustMode { adds, addsOther, known, changed, unreachable }
+
+const fakeHostKeyName = '[ssh.example.com]:2222';
+const fakeHostKeyFingerprint =
+    'SHA256:fakeHostKeyFingerprintFakeHostKeyFingerpri';
+const otherHostKeyFingerprint =
+    'SHA256:otherHostKeyFingerprintOtherHostKeyFingerp';
+const _fakeHostKey =
+    'AAAAC3NzaC1lZDI1NTE5AAAAIGZha2UgaG9zdCBrZXkgZm9yIHRoZSB0ZXN0cyBvbmx5';
+const fakeHostKeyEntry = '$fakeHostKeyName ssh-ed25519 $_fakeHostKey';
+
+List<String> _changedKey(String fingerprint) => [
+      'err:debug1: Server host key: ssh-ed25519 $fingerprint',
+      'err:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
+      'err:@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @',
+      'err:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
+      'err:IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!',
+      'err:The fingerprint for the ED25519 key sent by the remote host is',
+      'err:$fingerprint.',
+      'err:Please contact your system administrator.',
+      'err:Offending ED25519 key in /home/user/.ssh/known_hosts:3',
+      'err:Host key for $fakeHostKeyName has changed and you have requested strict checking.',
+      'err:Host key verification failed.',
+      'exit:255',
+    ];
+
 /// Stands in for ssh in the tests, compiled to an executable.
 ///
 /// Copied into a directory as `ssh`, it plays the ssh a test set up in that
@@ -141,6 +176,9 @@ Future<void> _ssh(String directory, List<String> arguments) async {
   }
 
   if (arguments.contains('-O')) return _mux(directory, arguments);
+  if (arguments.contains('PreferredAuthentications=none')) {
+    return _trust(directory, arguments);
+  }
 
   var attempt = 1;
   while (file('argv.$attempt').existsSync()) {
@@ -155,6 +193,37 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       .map(AttemptMode.values.byName)
       .toList();
   final mode = attempt <= modes.length ? modes[attempt - 1] : modes.last;
+
+  final knownHosts = read('known_hosts') ?? '';
+  final hostKeyMode = switch (read('host_key_mode')) {
+    final name? => HostKeyMode.values.byName(name),
+    null => null,
+  };
+  switch (hostKeyMode) {
+    case HostKeyMode.unknown when !knownHosts.contains(fakeHostKeyEntry):
+      return _run([
+        'err:debug1: Connecting to ssh.example.com port 2222.',
+        'err:debug1: Server host key: ssh-ed25519 $fakeHostKeyFingerprint',
+        'err:No ED25519 host key is known for $fakeHostKeyName and you have requested strict checking.',
+        'err:Host key verification failed.',
+        'exit:255',
+      ]);
+    case HostKeyMode.changed:
+      return _run(_changedKey(fakeHostKeyFingerprint));
+    case HostKeyMode.jumpUnknown:
+      return _run([
+        'err:debug1: Connecting to jump.example.com port 22.',
+        'err:debug1: Server host key: ssh-ed25519 $otherHostKeyFingerprint',
+        "err:debug1: read_passphrase: can't open /dev/tty: Device not configured",
+        'err:Host key verification failed.',
+        'err:kex_exchange_identification: Connection closed by remote host',
+        'err:Connection closed by UNKNOWN port 65535',
+        'exit:255',
+      ]);
+    case HostKeyMode.unknown || null:
+      break;
+  }
+
   if (arguments.contains('ControlMaster=yes')) {
     return _run(switch (mode) {
       AttemptMode.ready => [
@@ -225,6 +294,50 @@ Future<void> _ssh(String directory, List<String> arguments) async {
         'err:bind [127.0.0.1]:$port: Address already in use',
         'err:channel_setup_fwd_listener_tcpip: cannot listen to port: $port',
         'err:Could not request local forwarding.',
+        'exit:255',
+      ],
+  });
+}
+
+/// The ssh that reads a host key to trust it: records its arguments as
+/// `trust_argv` and answers per the `trust_mode` file.
+Future<void> _trust(String directory, List<String> arguments) async {
+  File file(String name) => File('$directory/$name');
+  file('trust_argv').writeAsStringSync(arguments.join('\n'));
+
+  final option = arguments.firstWhere(
+    (argument) => argument.startsWith('UserKnownHostsFile='),
+  );
+  final readInto = File(RegExp('"([^"]+)"').firstMatch(option)![1]!);
+  final mode = file('trust_mode').existsSync()
+      ? TrustMode.values.byName(file('trust_mode').readAsStringSync())
+      : TrustMode.adds;
+  final fingerprint = mode == TrustMode.addsOther
+      ? otherHostKeyFingerprint
+      : fakeHostKeyFingerprint;
+  const denied =
+      'err:user@ssh.example.com: Permission denied (publickey,password).';
+
+  if (mode case TrustMode.adds || TrustMode.addsOther) {
+    readInto.writeAsStringSync('$fakeHostKeyEntry\n');
+  }
+  await _run(switch (mode) {
+    TrustMode.adds || TrustMode.addsOther => [
+        'err:debug1: Connecting to ssh.example.com port 2222.',
+        'err:debug1: Server host key: ssh-ed25519 $fingerprint',
+        "err:Warning: Permanently added '$fakeHostKeyName' (ED25519) to the list of known hosts.",
+        denied,
+        'exit:255',
+      ],
+    TrustMode.known => [
+        'err:debug1: Server host key: ssh-ed25519 $fingerprint',
+        "err:debug1: Host '$fakeHostKeyName' is known and matches the ED25519 host key.",
+        denied,
+        'exit:255',
+      ],
+    TrustMode.changed => _changedKey(otherHostKeyFingerprint),
+    TrustMode.unreachable => [
+        'err:ssh: connect to host ssh.example.com port 2222: Connection refused',
         'exit:255',
       ],
   });

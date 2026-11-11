@@ -144,6 +144,53 @@ final cache = await client.openTunnel(server, remoteHost: 'cache', remotePort: 6
 - Windows' OpenSSH can't share a connection, so there each tunnel keeps its
   own ssh.
 
+## Host keys
+
+A terminal asks before it trusts a server it hasn't seen. A tunnel has no
+terminal, so where your ssh config leaves `StrictHostKeyChecking` at `ask`,
+opening one to a host that isn't in `known_hosts` yet throws an
+`SshUnknownHostKeyException` instead. Its `hostKey` says what to show: the
+`host` as `known_hosts` names it, the key's `type` and its `fingerprint`,
+as `ssh-keygen -l` prints them. Once the user has checked the fingerprint,
+`trustHostKey` adds the key to their `known_hosts`, and the tunnel opens:
+
+```dart
+Future<SshTunnel> open() => client.openTunnel(
+      server,
+      remoteHost: 'db.example.com',
+      remotePort: 5432,
+    );
+
+try {
+  return await open();
+} on SshUnknownHostKeyException catch (exception) {
+  final key = exception.hostKey;
+  if (!await confirm('Trust ${key.host}? ${key.type} ${key.fingerprint}')) {
+    rethrow;
+  }
+  await client.trustHostKey(server, key);
+  return open();
+}
+```
+
+- `trustHostKey` connects again to read the key, without logging in, and
+  writes it only if the server still offers the one you showed. ssh writes the
+  entry itself, as `accept-new` would: hashed if your config sets
+  `HashKnownHosts`, under the `HostKeyAlias` or `[host]:port` it checks, in the
+  first `UserKnownHostsFile` (`~/.ssh/known_hosts` by default).
+- From then on the key is known, so a reconnect doesn't ask again.
+- A key that doesn't match `known_hosts` throws an
+  `SshHostKeyChangedException`, from both the tunnel and `trustHostKey`, with
+  the key the server offers now. Nothing is written; the user removes the old
+  key (`ssh-keygen -R <host>`) once they know why it changed.
+- A config that sets `StrictHostKeyChecking` gets what it sets: `yes` fails
+  with ssh's own `SshTunnelException`, and `accept-new` or `no` connects as
+  ssh does. Set `accept-new` for a host to trust its first key unseen.
+- A host behind a `ProxyCommand` is asked about like any other. A `ProxyJump`
+  host's own key is checked by the ssh it starts, which gets none of these
+  options, so an unknown one fails with ssh's `Host key verification failed.`
+  Connect to it once from a terminal to trust it.
+
 ## GUI apps
 
 An app started from the macOS Dock or Finder gets none of what your shell
@@ -187,6 +234,8 @@ signed with a Developer ID and notarized instead.
 | `SshTunnelAbortedException` | `abortTrigger` completed first |
 | `SshPortInUseException` | the `localPort` you asked for is taken |
 | `SshTunnelException` | ssh exited before the tunnel opened; `log` and `exitCode` say why |
+| `SshUnknownHostKeyException` | the server's host key isn't in `known_hosts` yet, and your config leaves `StrictHostKeyChecking` at `ask`; see [Host keys](#host-keys) |
+| `SshHostKeyChangedException` | the server's host key doesn't match the one `known_hosts` holds for it |
 | `SshConfigException` | your ssh config for the host stops the tunnel from working, such as `ClearAllForwardings yes` |
 | `SshException` | anything else, such as a Windows job object that can't be set up |
 | `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…`, or a `localPort` outside 1 to 65535 |
@@ -208,14 +257,14 @@ unattended tunnel needs:
 | `ExitOnForwardFailure=yes` | always |
 | `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no` |
-| `StrictHostKeyChecking=accept-new` | your config leaves it at `ask`; a changed key still fails |
+| `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
 | `ConnectTimeout=15` | your config sets none |
 | `ServerAliveInterval=15` | your config sets none |
 | `ForkAfterAuthentication=no` | your config turns it on |
 
 If `ssh -G` fails or takes over 5 seconds, it adds every option above but
-`ForkAfterAuthentication=no`, so a `StrictHostKeyChecking yes` in your config
-becomes `accept-new`.
+`ForkAfterAuthentication=no`, so a `StrictHostKeyChecking accept-new` or `no`
+in your config becomes `yes`.
 
 The forward or proxy binds `127.0.0.1` only, and a remote forward asks the
 server for its `127.0.0.1` only, which it gets unless its sshd sets
@@ -225,7 +274,9 @@ started.
 
 ## Limits
 
-- A `ProxyJump` host doesn't get these options; ssh doesn't pass them on.
+- A `ProxyJump` host doesn't get these options; ssh doesn't pass them on. So
+  an unknown jump host fails with ssh's own error rather than an
+  `SshUnknownHostKeyException`.
 - Forwards your config sets for the host open too.
 - Password and keyboard-interactive logins aren't supported yet, and a key
   with a passphrase needs an agent. A config that sets `BatchMode no` looks
@@ -267,5 +318,9 @@ class FakeSshClient implements SshClient {
 
   @override
   Future<List<String>> configuredHosts() async => const ['ssh.example.com'];
+
+  @override
+  Future<void> trustHostKey(SshTarget server, SshHostKey hostKey,
+      {Future<void>? abortTrigger}) async {}
 }
 ```

@@ -3,10 +3,18 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-import 'fake_ssh_main.dart' show AttemptMode;
+import 'fake_ssh_main.dart' show AttemptMode, HostKeyMode, TrustMode;
 import 'fakes.dart';
 
-export 'fake_ssh_main.dart' show AttemptMode;
+export 'fake_ssh_main.dart'
+    show
+        AttemptMode,
+        HostKeyMode,
+        TrustMode,
+        fakeHostKeyEntry,
+        fakeHostKeyFingerprint,
+        fakeHostKeyName,
+        otherHostKeyFingerprint;
 
 /// An executable at [path] that plays ssh, chosen through the `executable:`
 /// parameter. It answers `-G` per [answerConfig], [hangOnConfig] or
@@ -50,6 +58,23 @@ final class FakeSsh {
   /// One mode per attempt; attempts past the end repeat the last.
   void attemptModes(List<AttemptMode> modes) => _file('modes')
       .writeAsStringSync(modes.map((mode) => mode.name).join('\n'));
+
+  /// Has every tunnel attempt play [mode] first.
+  void hostKeyMode(HostKeyMode mode) =>
+      _file('host_key_mode').writeAsStringSync(mode.name);
+
+  /// Has the ssh that reads a host key to trust play [mode].
+  void trustMode(TrustMode mode) =>
+      _file('trust_mode').writeAsStringSync(mode.name);
+
+  /// The `known_hosts` that [HostKeyMode.unknown] reads, for a config to name.
+  File get knownHosts => _file('known_hosts');
+
+  /// What the ssh that reads a host key was run with, or null if it wasn't.
+  List<String>? get trustArguments {
+    final file = _file('trust_argv');
+    return file.existsSync() ? file.readAsLinesSync() : null;
+  }
 
   /// Answers each `ssh -O` command in turn: `ok`, `quiet` (prints no port),
   /// `slow` (answers after 300 ms), `hang`, `fail`, or `silent-fail` (fails

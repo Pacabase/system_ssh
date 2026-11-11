@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'ssh_client.dart';
+import 'ssh_host_key.dart';
 
 /// Something went wrong opening a tunnel.
 ///
@@ -89,6 +90,63 @@ final class SshTunnelException extends SshException {
 
   @override
   String toString() => 'SshTunnelException: $message';
+}
+
+/// The server's host key isn't in `known_hosts` yet, so ssh refused it rather
+/// than trust it unseen.
+///
+/// Show the user [hostKey], and once they have checked its fingerprint, call
+/// [SshClient.trustHostKey] and open the tunnel again:
+///
+/// ```dart
+/// } on SshUnknownHostKeyException catch (exception) {
+///   if (await askToTrust(exception.hostKey)) {
+///     await client.trustHostKey(server, exception.hostKey);
+///     // ...and open the tunnel again.
+///   }
+/// }
+/// ```
+///
+/// It is thrown only where the user's ssh config leaves
+/// `StrictHostKeyChecking` at `ask`, as a terminal would ask there. A config
+/// that sets `yes`, `accept-new` or `no` gets what it asks for.
+final class SshUnknownHostKeyException extends SshTunnelException {
+  /// An error saying the server offers [hostKey], which isn't known yet.
+  SshUnknownHostKeyException(this.hostKey, {super.log, super.exitCode})
+      : super(
+          '${hostKey.host} is not a known host; its ${hostKey.type} key '
+          'fingerprint is ${hostKey.fingerprint}',
+          isPermanent: true,
+        );
+
+  /// The key the server offered.
+  final SshHostKey hostKey;
+
+  @override
+  String toString() => 'SshUnknownHostKeyException: $message';
+}
+
+/// The server offers a host key other than the one `known_hosts` holds for it,
+/// or other than the one passed to [SshClient.trustHostKey]: someone may be
+/// intercepting the connection, or the server was reinstalled.
+///
+/// Nothing is trusted or written; trying again can't work until the user
+/// removes the old key, such as with `ssh-keygen -R`, after finding out why it
+/// changed.
+final class SshHostKeyChangedException extends SshTunnelException {
+  /// An error saying [hostKey] is what the server offers now.
+  SshHostKeyChangedException(this.hostKey, {super.log, super.exitCode})
+      : super(
+          'the host key for ${hostKey.host} has changed; it now offers the '
+          '${hostKey.type} key ${hostKey.fingerprint}',
+          isPermanent: true,
+        );
+
+  /// The key the server offers now.
+  final SshHostKey hostKey;
+
+  @override
+  String toString() => 'SshHostKeyChangedException: $message';
 }
 
 /// The user's ssh config for the host stops the tunnel from working, for
