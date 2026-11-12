@@ -33,6 +33,14 @@
   the host in the ssh config, which the tunnel leaves alone. A config that
   sets `yes`, `accept-new` or `no` behaves as before, unless `ssh -G` can't
   read it (see the README's "Options it sets").
+- `package:system_ssh/ssh_client.dart` has every type but `SystemSshClient`:
+  `SshClient` and its tunnels, logs, targets, host keys and exceptions, and the
+  terminal commands. It imports no `dart:io`, so code that only takes an
+  `SshClient`, such as UI or a fake in tests, depends on nothing that starts
+  ssh. `package:system_ssh/system_ssh.dart` still exports everything.
+- `SshNotFoundException()` takes `onWindows: true` for the hint to add
+  "OpenSSH Client" on Windows, rather than checking the platform itself; a
+  fake that throws one gets the same message on every platform.
 - A host key that doesn't match `known_hosts` throws an
   `SshHostKeyChangedException` with the key the server offers now, instead of
   a plain `SshTunnelException`; it is still an `SshTunnelException`, so

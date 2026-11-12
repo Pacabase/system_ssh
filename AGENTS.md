@@ -14,7 +14,7 @@ Every change must keep these promises:
 
 ## Code
 
-- **Public API:** the package's API is what `lib/system_ssh.dart` exports (apps never import `lib/src`), and `test/public_api_test.dart` pins it. Keep `SshClient` an interface that an app can fake. A change to it breaks those fakes, so call that out in the CHANGELOG.
+- **Public API:** the package's API is what `lib/system_ssh.dart` exports (apps never import `lib/src`), and `test/public_api_test.dart` pins it. `lib/ssh_client.dart` exports all of it but `SystemSshClient`, and nothing it reaches may import `dart:io`, `dart:ffi` or `dart:isolate`; `test/ssh_client_library_test.dart` checks. Keep `SshClient` an interface that an app can fake. A change to it breaks those fakes, so call that out in the CHANGELOG.
 - **Docs:** every public member has a dartdoc comment saying what it does for the caller, with an example where it helps. Inside `lib/src`, add a comment only for a reason the code can't show (an ssh quirk, a platform difference).
 - **Dependencies:** this is a library, so use version ranges, not pins. CI also tests the lowest versions they allow (`dart pub downgrade`).
 - **Style:** `final class` and `sealed class` where a type isn't meant to be extended, no abbreviations (`exception`, not `e`), and `catch (exception)`.
