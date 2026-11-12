@@ -1,13 +1,12 @@
-## Unreleased
+## 0.9.0
 
-- `package:system_ssh/ssh_client.dart` has every type but `SystemSshClient`:
-  `SshClient` and its tunnels, logs, targets, host keys and exceptions, and the
-  terminal commands. It imports no `dart:io`, so code that only takes an
-  `SshClient`, such as UI or a fake in tests, depends on nothing that starts
-  ssh. `package:system_ssh/system_ssh.dart` still exports everything.
-- `SshNotFoundException()` takes `onWindows: true` for the hint to add
-  "OpenSSH Client" on Windows, rather than checking the platform itself; a
-  fake that throws one gets the same message on every platform.
+- **Breaking:** `SshClient` has the new `openRemoteTunnel`,
+  `openSocketTunnel` and `trustHostKey` methods, so a fake that implements
+  `SshClient` needs them too. Each tunnel method can throw
+  `UnimplementedError` if your tests never open one, and `trustHostKey` can do
+  nothing if they never act out an unknown key. A fake acts one out with
+  `throw SshUnknownHostKeyException(const SshHostKey(host: ..., type: ...,
+  fingerprint: ...))`.
 - **Breaking:** a tunnel no longer trusts a new host key unseen. Where the
   user's ssh config leaves `StrictHostKeyChecking` at `ask`, it used to pass
   `accept-new`, so the first connection trusted whatever key the server
@@ -34,6 +33,14 @@
   the host in the ssh config, which the tunnel leaves alone. A config that
   sets `yes`, `accept-new` or `no` behaves as before, unless `ssh -G` can't
   read it (see the README's "Options it sets").
+- `package:system_ssh/ssh_client.dart` has every type but `SystemSshClient`:
+  `SshClient` and its tunnels, logs, targets, host keys and exceptions, and the
+  terminal commands. It imports no `dart:io`, so code that only takes an
+  `SshClient`, such as UI or a fake in tests, depends on nothing that starts
+  ssh. `package:system_ssh/system_ssh.dart` still exports everything.
+- `SshNotFoundException()` takes `onWindows: true` for the hint to add
+  "OpenSSH Client" on Windows, rather than checking the platform itself; a
+  fake that throws one gets the same message on every platform.
 - A host key that doesn't match `known_hosts` throws an
   `SshHostKeyChangedException` with the key the server offers now, instead of
   a plain `SshTunnelException`; it is still an `SshTunnelException`, so
@@ -76,13 +83,6 @@
   stops with its last tunnel or the app. When it drops, every tunnel on it
   fails `done` together. On Windows, which can't share a connection, each
   tunnel keeps its own ssh.
-- **Breaking:** `SshClient` has the new `openRemoteTunnel`,
-  `openSocketTunnel` and `trustHostKey` methods, so a fake that implements
-  `SshClient` needs them too. Each tunnel method can throw
-  `UnimplementedError` if your tests never open one, and `trustHostKey` can do
-  nothing if they never act out an unknown key. A fake acts one out with
-  `throw SshUnknownHostKeyException(const SshHostKey(host: ..., type: ...,
-  fingerprint: ...))`.
 
 ## 0.8.0
 
