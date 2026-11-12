@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import 'exceptions.dart';
 import 'logger.dart';
 import 'processes.dart';
@@ -19,8 +21,7 @@ final _changedHost = RegExp(
 );
 final _changedType =
     RegExp(r'^The fingerprint for the (\S+) key sent by the remote host is');
-final _added = RegExp(r"^Warning: Permanently added '([^']+)' \((\S+)\)");
-final _known = RegExp(r"^debug\d: Host '.+' is known and matches the ");
+final _known = RegExp(r"^debug\d: Host '(.+)' is known and matches the ");
 
 /// Whether `ssh -G` [config] leaves `StrictHostKeyChecking` at `ask`, where
 /// the tunnel checks strictly and an unknown key is the caller's to trust.
@@ -46,8 +47,11 @@ SshTunnelException? hostKeyFailure(
   Map<String, String> config,
 ) {
   final log = exception.log;
+  if (!_failedOnHostKey(log, config)) return null;
+  final expected = knownHostsName(config);
 
-  if (changedHostKey(log) case final hostKey?) {
+  if (changedHostKey(log) case final hostKey?
+      when expected == null || hostKey.host.toLowerCase() == expected) {
     return SshHostKeyChangedException(
       hostKey,
       log: log,
@@ -56,13 +60,13 @@ SshTunnelException? hostKeyFailure(
   }
 
   if (!asksAboutHostKeys(config)) return null;
-  final expected = knownHostsName(config);
-  for (final (index, line) in log.indexed) {
+  // The last match: a ProxyJump host's banner, printed before, can say anything.
+  for (final (index, line) in log.indexed.toList().reversed) {
     final match = _unknown.firstMatch(line);
     if (match == null) continue;
 
     final host = match[2]!;
-    // A ProxyJump host's own ssh gets none of our options; only ours is ours.
+    // A ProxyJump host's own ssh gets none of our options: not ours to ask about.
     if (expected != null && host.toLowerCase() != expected) continue;
 
     final fingerprint = _lastFingerprint(log.take(index));
@@ -75,6 +79,17 @@ SshTunnelException? hostKeyFailure(
     );
   }
   return null;
+}
+
+/// Whether [log] is ssh giving up on a host key, rather than a server's
+/// banner printing the words: ssh says so, and never logged in to the host.
+bool _failedOnHostKey(List<String> log, Map<String, String> config) {
+  if (!log.any((line) => line.startsWith('Host key verification failed'))) {
+    return false;
+  }
+  final host = config['hostname'];
+  return host == null ||
+      !log.any((line) => line.startsWith('Authenticated to $host '));
 }
 
 /// The key ssh says replaced the one in `known_hosts`, or null when it says
@@ -93,6 +108,53 @@ SshHostKey? changedHostKey(List<String> log) {
 
 String? _lastFingerprint(Iterable<String> log) =>
     log.map(_serverHostKey.firstMatch).nonNulls.lastOrNull?[1];
+
+/// The key in a `known_hosts` [entry] as ssh shows it, fingerprinted with
+/// the hash [like]'s fingerprint uses, or null when [entry] isn't one.
+SshHostKey? knownHostsKey(
+  String entry, {
+  required String host,
+  required SshHostKey like,
+}) {
+  final fields = entry.trim().split(RegExp(r'\s+'));
+  if (fields.length < 3 || fields.first.startsWith('@')) return null;
+  try {
+    final blob = base64.decode(fields[2]);
+    return SshHostKey(
+      host: host,
+      type: keyTypeName(fields[1]),
+      fingerprint: fingerprintOf(blob, like: like.fingerprint),
+    );
+  } on FormatException {
+    return null;
+  }
+}
+
+/// [blob]'s fingerprint as ssh prints it: MD5 when [like] is one, as under
+/// `FingerprintHash md5`, otherwise SHA256.
+String fingerprintOf(List<int> blob, {String like = 'SHA256:'}) {
+  if (like.startsWith('MD5:')) {
+    final hex = md5
+        .convert(blob)
+        .bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'));
+    return 'MD5:${hex.join(':')}';
+  }
+  final digest = base64.encode(sha256.convert(blob).bytes);
+  return 'SHA256:${digest.replaceAll('=', '')}';
+}
+
+/// The name ssh's messages give a key type, such as `ED25519` for
+/// `ssh-ed25519`.
+String keyTypeName(String type) => switch (type) {
+      'ssh-ed25519' => 'ED25519',
+      'ssh-rsa' => 'RSA',
+      'ssh-dss' => 'DSA',
+      'sk-ssh-ed25519@openssh.com' => 'ED25519-SK',
+      'sk-ecdsa-sha2-nistp256@openssh.com' => 'ECDSA-SK',
+      _ when type.startsWith('ecdsa-sha2-') => 'ECDSA',
+      _ => type,
+    };
 
 /// [open]'s result, with a host key failure thrown as its own exception.
 Future<T> checkingHostKeys<T>(
@@ -170,35 +232,41 @@ Future<void> trustSystemHostKey(
       environment: environment,
       timeout: timeout,
       abortTrigger: abortTrigger,
+      host: config['hostname'],
     );
-    if (changedHostKey(log) case final changed?) {
-      throw SshHostKeyChangedException(changed, log: log, exitCode: code);
-    }
 
     final entries =
         read.readAsLinesSync().where((line) => line.trim().isNotEmpty).toList();
-    final addedAt = log.lastIndexWhere(_added.hasMatch);
-    if (entries.isEmpty &&
-        log.any(_known.hasMatch) &&
-        _lastFingerprint(log) == hostKey.fingerprint) {
-      return;
-    }
-    if (entries.isEmpty || addedAt < 0) {
+    if (entries.isEmpty) {
       if (code == 127) throw SshNotFoundException();
+      // ssh wrote no new key, so no server got far enough to print a banner:
+      // its log is ssh's own.
+      if (changedHostKey(log) case final changed?) {
+        throw SshHostKeyChangedException(changed, log: log, exitCode: code);
+      }
+      final name = knownHostsName(config);
+      if (log.any(
+        (line) => switch (_known.firstMatch(line)) {
+          final match? => name == null || match[1]!.toLowerCase() == name,
+          null => false,
+        },
+      )) {
+        return;
+      }
       throw tunnelFailure(log, code);
     }
 
-    final offered = _lastFingerprint(log.take(addedAt));
-    if (offered != hostKey.fingerprint) {
-      throw SshHostKeyChangedException(
-        SshHostKey(
-          host: hostKey.host,
-          type: _added.firstMatch(log[addedAt])![2]!,
-          fingerprint: offered ?? 'unknown',
-        ),
-        log: log,
-        exitCode: code,
-      );
+    // The key ssh wrote, not the one its log names: a server's banner, printed
+    // after the key exchange, can print any line.
+    final offered = entries
+        .map((entry) => knownHostsKey(entry, host: hostKey.host, like: hostKey))
+        .toSet();
+    final key = offered.length == 1 ? offered.single : null;
+    if (key == null) {
+      throw SshException("couldn't read the host key ssh got: $entries");
+    }
+    if (key.fingerprint != hostKey.fingerprint) {
+      throw SshUnknownHostKeyException(key, log: log, exitCode: code);
     }
 
     _append(target, entries);
@@ -217,26 +285,42 @@ Future<(List<String>, int)> _run(
   required Map<String, String> environment,
   required Duration timeout,
   Future<void>? abortTrigger,
+  String? host,
 }) async {
   final aborted = Completer<void>();
   unawaited(abortTrigger?.then((_) => aborted.complete(), onError: (_) {}));
 
   final process = await startWatched(command, environment: environment);
   unawaited(process.stdout.drain<void>());
-  final lines = process.stderr
+  final lines = <String>[];
+  final stderrDone = Completer<void>();
+  process.stderr
       .transform(const Utf8Decoder(allowMalformed: true))
       .transform(const LineSplitter())
-      .map((line) {
-    logger.fine(line);
-    return line;
-  }).toList();
+      .listen(
+    (line) {
+      logger.fine(line);
+      lines.add(line);
+      // A server that lets the `none` method in has nothing more to show. A
+      // ProxyJump host's ssh logs in to the jump host first, under its name.
+      if (host != null && line.startsWith('Authenticated to $host ')) {
+        process.kill();
+      }
+    },
+    onError: (Object _) {},
+    onDone: stderrDone.complete,
+  );
 
   try {
     final code = await Future.any([
       process.exitCode,
       aborted.future.then((_) => throw const SshTunnelAbortedException()),
     ]).timeout(timeout);
-    return (await lines.timeout(timeout, onTimeout: () => const []), code);
+    // ssh's last lines can land after its exit code; a ProxyCommand that
+    // outlives it can hold stderr open longer.
+    await stderrDone.future
+        .timeout(const Duration(seconds: 1), onTimeout: () {});
+    return (List<String>.unmodifiable(lines), code);
   } on TimeoutException {
     process.kill();
     throw const SshTunnelException("ssh didn't read the host key in time");
@@ -255,17 +339,31 @@ List<String> userKnownHostsFiles(Map<String, String> config) =>
       null => const ['~/.ssh/known_hosts', '~/.ssh/known_hosts2'],
     };
 
+/// The user's home, as ssh takes `~`: on Windows the profile, whatever
+/// `HOME` a shell set.
+String homeDirectory(Map<String, String> environment) {
+  final names =
+      Platform.isWindows ? ['USERPROFILE', 'HOME'] : ['HOME', 'USERPROFILE'];
+  return (names
+              .map((name) => environment[name] ?? Platform.environment[name])
+              .nonNulls
+              .firstOrNull ??
+          '')
+      .replaceAll(r'\', '/');
+}
+
 /// The file ssh adds new host keys to: the first `UserKnownHostsFile`.
 File userKnownHostsFile(
   Map<String, String> config, {
   Map<String, String> environment = const {},
 }) {
-  final home = (environment['HOME'] ??
-          Platform.environment['HOME'] ??
-          Platform.environment['USERPROFILE'] ??
-          '')
-      .replaceAll(r'\', '/');
+  final home = homeDirectory(environment);
   final first = userKnownHostsFiles(config).first;
+  if (first == 'none') {
+    throw const SshConfigException(
+      'UserKnownHostsFile is none, so there is no file to add the key to',
+    );
+  }
 
   final user = environment['USER'] ??
       Platform.environment['USER'] ??
@@ -283,12 +381,34 @@ File userKnownHostsFile(
         ),
     };
   });
-  return File(path);
+  final expanded = path.replaceAllMapped(RegExp(r'\$\{(\w+)\}'), (match) {
+    final name = match[1]!;
+    return environment[name] ??
+        Platform.environment[name] ??
+        (throw SshConfigException(
+          "can't tell which file UserKnownHostsFile $first names: "
+          '$name is not set',
+        ));
+  });
+  final file = File(expanded);
+  final isAbsolute = RegExp(r'^(/|[A-Za-z]:[\\/])').hasMatch(expanded);
+  if (!isAbsolute || expanded == '/dev/null' || expanded == 'NUL') {
+    throw SshConfigException(
+      "UserKnownHostsFile $first isn't a file to add the key to",
+    );
+  }
+  return file;
 }
 
 void _append(File file, List<String> entries) {
   try {
-    file.parent.createSync(recursive: true);
+    if (!file.parent.existsSync()) {
+      file.parent.createSync(recursive: true);
+      // As ssh makes ~/.ssh: the user's alone.
+      if (!Platform.isWindows) {
+        Process.runSync('chmod', ['700', file.parent.path]);
+      }
+    }
     final existing = file.existsSync() ? file.readAsStringSync() : '';
     final separator = existing.isEmpty || existing.endsWith('\n') ? '' : '\n';
     file.writeAsStringSync(

@@ -140,9 +140,42 @@ void main() {
             fingerprint: 'SHA256:fakeHostKeyFingerprintFakeHostKeyFingerpri',
           ),
         ),
-        throwsA(isA<SshHostKeyChangedException>()),
+        throwsA(
+          isA<SshUnknownHostKeyException>().having(
+            (exception) => exception.hostKey.fingerprint,
+            'fingerprint',
+            allOf(startsWith('SHA256:'), isNot(contains('fakeHostKey'))),
+          ),
+        ),
       );
       expect(await fixture.isKnownHost(), isFalse);
+    });
+
+    test("trusts a new key into the runner's own ~/.ssh/known_hosts", () async {
+      await fixture.forgetHostKeyForBareTarget();
+      addTearDown(fixture.rememberHostKeyForBareTarget);
+      const client = SystemSshClient();
+      Future<SshTunnel> openBare() => client.openTunnel(
+            fixture.bareTarget,
+            remoteHost: fixture.echoHost,
+            remotePort: fixture.echoPort,
+            onLog: logged(),
+          );
+
+      final unknown = await openBare().then<Object?>(
+        (tunnel) => tunnel.close(),
+        onError: (Object exception) => exception,
+      );
+      expect(unknown, isA<SshUnknownHostKeyException>());
+
+      await client.trustHostKey(
+        fixture.bareTarget,
+        (unknown! as SshUnknownHostKeyException).hostKey,
+      );
+
+      final tunnel = await openBare();
+      addTearDown(tunnel.close);
+      expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
     });
 
     test('refuses a new host key under StrictHostKeyChecking yes', () async {

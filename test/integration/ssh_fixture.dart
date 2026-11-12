@@ -159,26 +159,48 @@ exec ssh -F '${directory.path}/config' "\$@"
       }
     }
 
-    // ssh with no config checks the runner's own known_hosts.
-    final found = await Process.run('ssh-keygen', ['-F', _hostKeyName]);
-    if (found.exitCode != 0) {
-      final home =
-          Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
-      File('$home/.ssh/known_hosts').writeAsStringSync(
-        await _scannedHostKeys(),
-        mode: FileMode.append,
-      );
-    }
-  }
-
-  Future<String> _scannedHostKeys() async {
     final scan = await Process.run(
       'ssh-keyscan',
       ['-p', '$_port', '127.0.0.1'],
     );
     final keys = '${scan.stdout}';
     if (keys.trim().isEmpty) throw StateError('ssh-keyscan: ${scan.stderr}');
-    return keys;
+    _scannedHostKeys = keys;
+    await rememberHostKeyForBareTarget();
+  }
+
+  /// The sshd's keys, as ssh-keyscan read them once.
+  String? _scannedHostKeys;
+
+  /// The runner's own known_hosts, which ssh with no config checks.
+  File get runnerKnownHosts => File(
+        '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}'
+        '/.ssh/known_hosts',
+      );
+
+  /// Adds the sshd's keys to [runnerKnownHosts] unless it has them.
+  Future<void> rememberHostKeyForBareTarget() async {
+    final found = await Process.run(
+      'ssh-keygen',
+      ['-F', _hostKeyName, '-f', runnerKnownHosts.path],
+    );
+    if (found.exitCode == 0) return;
+
+    final file = runnerKnownHosts..parent.createSync(recursive: true);
+    final existing = file.existsSync() ? file.readAsStringSync() : '';
+    final separator = existing.isEmpty || existing.endsWith('\n') ? '' : '\n';
+    file.writeAsStringSync(
+      '$separator${_require(_scannedHostKeys, 'setUpAll')}',
+      mode: FileMode.append,
+    );
+  }
+
+  /// Removes the sshd's keys from [runnerKnownHosts].
+  Future<void> forgetHostKeyForBareTarget() async {
+    await Process.run(
+      'ssh-keygen',
+      ['-R', _hostKeyName, '-f', runnerKnownHosts.path],
+    );
   }
 
   /// Empties the fixture's known_hosts, so [target]'s key is unknown.
@@ -222,7 +244,7 @@ exec ssh -F '${directory.path}/config' "\$@"
   Future<void> setUp() async {
     if (skip case final reason?) throw StateError(reason);
 
-    _knownHosts.writeAsStringSync(await _scannedHostKeys());
+    _knownHosts.writeAsStringSync(_require(_scannedHostKeys, 'setUpAll'));
     if (_proxyPid.existsSync()) _proxyPid.deleteSync();
 
     final echo = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);

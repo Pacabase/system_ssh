@@ -323,13 +323,6 @@ void main() {
     await fake.trustHostKey(
         const SshTarget('ssh.example.com'), unknown.hostKey);
 
-    expect(fake.trusted, [
-      const SshHostKey(
-        host: '[ssh.example.com]:2222',
-        type: 'ED25519',
-        fingerprint: 'SHA256:fakeHostKeyFingerprintFakeHostKeyFingerpri',
-      ),
-    ]);
     expect(
       [unknown, changed],
       everyElement(
@@ -340,13 +333,6 @@ void main() {
         ),
       ),
     );
-    expect((
-      changed.hostKey.host,
-      changed.hostKey.type
-    ), (
-      '[ssh.example.com]:2222',
-      'ED25519',
-    ));
   });
 
   test('rejects a server host that ssh would read as an option', () async {

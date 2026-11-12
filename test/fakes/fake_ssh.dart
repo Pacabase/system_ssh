@@ -11,6 +11,7 @@ export 'fake_ssh_main.dart'
         AttemptMode,
         HostKeyMode,
         TrustMode,
+        checkHostIpEntries,
         fakeHostKeyEntry,
         fakeHostKeyFingerprint,
         fakeHostKeyName,

@@ -19,18 +19,17 @@
   ```
 
   It writes the key only if the server still offers that one, as ssh's
-  `accept-new` would write it. To keep trusting new keys unseen, catch the
-  exception and call `trustHostKey` without asking, or set
-  `StrictHostKeyChecking accept-new` for the host in the ssh config, which the
-  tunnel leaves alone. A config that sets `yes`, `accept-new` or `no` behaves
-  as before.
+  `accept-new` would write it; if the server offers another key by then, it
+  throws an `SshUnknownHostKeyException` with that key, for the app to ask
+  about. To keep trusting new keys unseen, catch the exception and call
+  `trustHostKey` without asking, or set `StrictHostKeyChecking accept-new` for
+  the host in the ssh config, which the tunnel leaves alone. A config that
+  sets `yes`, `accept-new` or `no` behaves as before, unless `ssh -G` can't
+  read it (see the README's "Options it sets").
 - A host key that doesn't match `known_hosts` throws an
   `SshHostKeyChangedException` with the key the server offers now, instead of
   a plain `SshTunnelException`; it is still an `SshTunnelException`, so
   catching that works as before.
-- **Breaking:** `SshClient` has the new `trustHostKey` method, so a fake that
-  implements `SshClient` needs it too; one that does nothing is enough for
-  tests that never act out an unknown key.
 - `openRemoteTunnel` opens a remote forward (`ssh -R`): the server listens on
   its `127.0.0.1`, and each connection there comes back to a host and port on
   your side, with the same options and failures as `openTunnel`. Leave out
@@ -69,10 +68,13 @@
   stops with its last tunnel or the app. When it drops, every tunnel on it
   fails `done` together. On Windows, which can't share a connection, each
   tunnel keeps its own ssh.
-- **Breaking:** `SshClient` has the new `openRemoteTunnel` and
-  `openSocketTunnel` methods, so a fake that implements `SshClient` needs them
-  too. Each can return its own tunnel, or throw `UnimplementedError` if your
-  tests never open one.
+- **Breaking:** `SshClient` has the new `openRemoteTunnel`,
+  `openSocketTunnel` and `trustHostKey` methods, so a fake that implements
+  `SshClient` needs them too. Each tunnel method can throw
+  `UnimplementedError` if your tests never open one, and `trustHostKey` can do
+  nothing if they never act out an unknown key. A fake acts one out with
+  `throw SshUnknownHostKeyException(const SshHostKey(host: ..., type: ...,
+  fingerprint: ...))`.
 
 ## 0.8.0
 

@@ -174,7 +174,9 @@ try {
 ```
 
 - `trustHostKey` connects again to read the key, without logging in, and
-  writes it only if the server still offers the one you showed. ssh writes the
+  writes it only if the key ssh gets has the fingerprint you showed; if the
+  server offers another by then, it throws an `SshUnknownHostKeyException`
+  with that one, to ask about instead. ssh writes the
   entry itself, as `accept-new` would: hashed if your config sets
   `HashKnownHosts`, under the `HostKeyAlias` or `[host]:port` it checks, in the
   first `UserKnownHostsFile` (`~/.ssh/known_hosts` by default).
@@ -259,6 +261,7 @@ unattended tunnel needs:
 | `BatchMode=yes` | your config leaves it at `no` |
 | `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
 | `ConnectTimeout=15` | your config sets none |
+| `trustHostKey`'s ssh | `StrictHostKeyChecking=accept-new`, a `UserKnownHostsFile` of a temp file before yours, `PreferredAuthentications=none`, `ClearAllForwardings=yes`, `PermitLocalCommand=no`, `ControlPath=none` and `BatchMode=yes`: it reads the key without logging in or forwarding |
 | `ServerAliveInterval=15` | your config sets none |
 | `ForkAfterAuthentication=no` | your config turns it on |
 

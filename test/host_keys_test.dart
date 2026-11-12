@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:system_ssh/src/host_keys.dart';
 import 'package:system_ssh/src/ssh_command.dart';
+import 'package:system_ssh/src/system_ssh_client.dart';
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
 import 'fakes/fake_ssh.dart';
+import 'fakes/fakes.dart';
 
 void main() {
   const server = SshTarget('ssh.example.com', port: 2222);
@@ -121,13 +125,18 @@ void main() {
       );
     });
 
-    test('reads a changed key whatever the config sets', () {
-      for (final config in [
-        askConfig,
-        {...askConfig, 'stricthostkeychecking': 'yes'},
+    test('reads a changed key whatever the config sets or ssh says', () {
+      final newerLog = [
+        for (final line in changedLog)
+          line.replaceFirst('Host key for', 'ED25519 host key for'),
+      ];
+      for (final (config, log) in [
+        (askConfig, changedLog),
+        ({...askConfig, 'stricthostkeychecking': 'yes'}, changedLog),
+        (askConfig, newerLog),
       ]) {
         expect(
-          hostKeyFailure(failure(changedLog), config),
+          hostKeyFailure(failure(log), config),
           isA<SshHostKeyChangedException>().having(
             (exception) => exception.hostKey,
             'hostKey',
@@ -139,6 +148,45 @@ void main() {
           ),
         );
       }
+    });
+
+    test("takes the target's unknown key over a jump host's banner", () {
+      final log = [
+        // A ProxyJump host's banner, printed first, can say anything.
+        'debug1: Server host key: ssh-ed25519 $otherHostKeyFingerprint',
+        'No ED25519 host key is known for $fakeHostKeyName and you have requested strict checking.',
+        ...unknownLog,
+      ];
+
+      expect(
+        (hostKeyFailure(failure(log), askConfig)! as SshUnknownHostKeyException)
+            .hostKey,
+        hostKey,
+      );
+    });
+
+    test("is null for a server's banner that only says a key changed", () {
+      for (final log in [
+        // ssh never said it gave up on the key.
+        changedLog.where((line) => !line.startsWith('Host key verification')),
+        // It logged in to the server after the banner.
+        [
+          ...changedLog,
+          'Authenticated to ssh.example.com ([10.0.0.1]:2222) using "publickey".',
+        ],
+      ]) {
+        expect(hostKeyFailure(failure(log.toList()), askConfig), isNull);
+      }
+    });
+
+    test("leaves a ProxyJump host's changed key alone", () {
+      expect(
+        hostKeyFailure(failure(changedLog), {
+          ...askConfig,
+          'hostname': 'server.internal',
+        }),
+        isNull,
+      );
     });
 
     test('is null for any other failure', () {
@@ -165,6 +213,7 @@ void main() {
       ('/home/alice/my keys/kh /etc/kh', '/home/alice/my keys/kh'),
       ('%d/.ssh/hosts_%u', '/home/alice/.ssh/hosts_alice'),
       ('/home/alice/100%%', '/home/alice/100%'),
+      ('C:/Users/alice/.ssh/known_hosts', 'C:/Users/alice/.ssh/known_hosts'),
       (
         r'C:\Users\alice\.ssh\known_hosts C:\kh2',
         r'C:\Users\alice\.ssh\known_hosts'
@@ -181,6 +230,42 @@ void main() {
       });
     }
 
+    test('fills in an environment variable', () {
+      expect(
+        userKnownHostsFile(
+          {'userknownhostsfile': r'${KNOWN}/known_hosts'},
+          environment: {...environment, 'KNOWN': '/srv/ssh'},
+        ).path,
+        '/srv/ssh/known_hosts',
+      );
+    });
+
+    for (final files in [
+      r'${SYSTEM_SSH_NOT_SET}/known_hosts',
+      '/dev/null',
+      'relative/known_hosts',
+    ]) {
+      test('refuses $files, which ssh would not read back', () {
+        expect(
+          () => userKnownHostsFile(
+            {'userknownhostsfile': files},
+            environment: environment,
+          ),
+          throwsA(isA<SshConfigException>()),
+        );
+      });
+    }
+
+    test('refuses UserKnownHostsFile none', () {
+      expect(
+        () => userKnownHostsFile(
+          {'userknownhostsfile': 'none'},
+          environment: environment,
+        ),
+        throwsA(isA<SshConfigException>()),
+      );
+    });
+
     test("refuses a file named by a token it can't fill in", () {
       expect(
         () => userKnownHostsFile(
@@ -188,6 +273,30 @@ void main() {
           environment: environment,
         ),
         throwsA(isA<SshConfigException>()),
+      );
+    });
+  });
+
+  group('fingerprintOf', () {
+    final blob = base64.decode(fakeHostKeyEntry.split(' ').last);
+
+    test('is what ssh-keygen -lf prints', () {
+      expect(fingerprintOf(blob), fakeHostKeyFingerprint);
+      expect(
+        fingerprintOf(blob, like: 'MD5:aa'),
+        'MD5:ec:f9:c7:64:19:bc:ea:ce:7b:99:65:15:c5:ee:9d:1c',
+      );
+    });
+
+    test('names a key type as ssh does', () {
+      expect(
+        [
+          'ssh-ed25519',
+          'ssh-rsa',
+          'ecdsa-sha2-nistp384',
+          'sk-ssh-ed25519@openssh.com',
+        ].map(keyTypeName),
+        ['ED25519', 'RSA', 'ECDSA', 'ED25519-SK'],
       );
     });
   });
@@ -332,6 +441,23 @@ void main() {
       );
     });
 
+    test('an unknown key at a fixed port is not a port in use', () async {
+      fake.hostKeyMode(HostKeyMode.unknown);
+      var checks = 0;
+
+      await expectLater(
+        openSystemForward(
+          server,
+          forward: localForwardTo('db.example.com', 3306),
+          localPort: 50000,
+          // Free when checked first, taken by the time ssh fails.
+          portIsFree: (_) async => checks++ == 0,
+          executable: fake.path,
+        ),
+        throwsA(isA<SshUnknownHostKeyException>()),
+      );
+    });
+
     test("an unknown ProxyJump host is ssh's failure, not one to trust",
         () async {
       fake.hostKeyMode(HostKeyMode.jumpUnknown);
@@ -364,6 +490,12 @@ void main() {
         );
         expect(arguments.sublist(arguments.length - 4),
             ['-p', '2222', '--', 'ssh.example.com']);
+        final readInto = RegExp('"([^"]+)"').firstMatch(
+          arguments.firstWhere(
+            (argument) => argument.startsWith('UserKnownHostsFile='),
+          ),
+        )![1]!;
+        expect(File(readInto).parent.existsSync(), isFalse);
       });
 
       test('adds the key after what known_hosts already holds', () async {
@@ -377,13 +509,15 @@ void main() {
         );
       });
 
-      test('writes nothing when the server now offers another key', () async {
+      test('writes nothing when ssh got another key than the one checked',
+          () async {
+        // The fake's log names the checked key, as a server's banner can.
         fake.trustMode(TrustMode.addsOther);
 
         await expectLater(
           client.trustHostKey(server, hostKey),
           throwsA(
-            isA<SshHostKeyChangedException>().having(
+            isA<SshUnknownHostKeyException>().having(
               (exception) => exception.hostKey.fingerprint,
               'fingerprint',
               otherHostKeyFingerprint,
@@ -391,6 +525,69 @@ void main() {
           ),
         );
         expect(fake.knownHosts.existsSync(), isFalse);
+      });
+
+      test('adds every entry ssh wrote for the key, hashed or by address',
+          () async {
+        fake.trustMode(TrustMode.checkHostIp);
+
+        await client.trustHostKey(server, hostKey);
+
+        expect(
+          fake.knownHosts.readAsStringSync(),
+          checkHostIpEntries.map((entry) => '$entry\n').join(),
+        );
+      });
+
+      test('adds the key once past a ProxyJump host it logged in to', () async {
+        fake.trustMode(TrustMode.viaJump);
+
+        await client.trustHostKey(server, hostKey);
+
+        expect(fake.knownHosts.readAsStringSync(), '$fakeHostKeyEntry\n');
+      });
+
+      test("says why when only a ProxyJump host's key was known", () async {
+        fake.trustMode(TrustMode.jumpOnly);
+
+        await expectLater(
+          client.trustHostKey(server, hostKey),
+          throwsA(
+            isA<SshTunnelException>().having(
+              (exception) => exception.message,
+              'message',
+              contains('Connection closed'),
+            ),
+          ),
+        );
+        expect(fake.knownHosts.existsSync(), isFalse);
+      });
+
+      test('adds the key from a server that lets ssh log in', () async {
+        fake.trustMode(TrustMode.authenticates);
+
+        await client
+            .trustHostKey(server, hostKey)
+            .timeout(const Duration(seconds: 10));
+
+        expect(fake.knownHosts.readAsStringSync(), '$fakeHostKeyEntry\n');
+      });
+
+      test('makes a missing ~/.ssh for the user alone', () async {
+        final knownHosts = File('${fake.directory}/home/.ssh/known_hosts');
+        fake.answerConfig([
+          'hostname ssh.example.com',
+          'port 2222',
+          'stricthostkeychecking ask',
+          'userknownhostsfile ${knownHosts.path}',
+        ]);
+
+        await client.trustHostKey(server, hostKey);
+
+        expect(knownHosts.readAsStringSync(), '$fakeHostKeyEntry\n');
+        if (!Platform.isWindows) {
+          expect(knownHosts.parent.statSync().mode & 0x1ff, 0x1c0);
+        }
       });
 
       test('writes nothing when known_hosts holds another key', () async {
@@ -432,6 +629,20 @@ void main() {
           client.trustHostKey(server, hostKey, abortTrigger: Future.value()),
           throwsA(isA<SshTunnelAbortedException>()),
         );
+        expect(fake.trustArguments, isNull);
+        expect(fake.knownHosts.existsSync(), isFalse);
+      });
+
+      test('stops reading the key when aborted', () async {
+        fake.trustMode(TrustMode.hang);
+        final abort = Completer<void>();
+
+        final trusting =
+            client.trustHostKey(server, hostKey, abortTrigger: abort.future);
+        await eventually(() => fake.trustArguments);
+        abort.complete();
+
+        await expectLater(trusting, throwsA(isA<SshTunnelAbortedException>()));
         expect(fake.knownHosts.existsSync(), isFalse);
       });
 

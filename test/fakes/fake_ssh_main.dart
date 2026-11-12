@@ -12,20 +12,50 @@ enum AttemptMode { ready, fail, notFound, bindFailure, hang, held }
 /// `jump-unknown` for a ProxyJump host that isn't known.
 enum HostKeyMode { unknown, changed, jumpUnknown }
 
-/// How the fake answers the ssh that reads a host key to trust it: `adds`
-/// writes [fakeHostKeyEntry], `addsOther` a key with another fingerprint,
-/// `known` finds it already known, `changed` finds another key known, and
-/// `unreachable` never connects.
-enum TrustMode { adds, addsOther, known, changed, unreachable }
+/// How the fake answers the ssh that reads a host key to trust it:
+/// - `adds` writes [fakeHostKeyEntry];
+/// - `addsOther` writes [otherHostKeyEntry] while its log, as a server's
+///   banner could, names [fakeHostKeyFingerprint];
+/// - `checkHostIp` writes the key twice, hashed and for the host's address;
+/// - `authenticates` writes it, logs in with `none`, then hangs;
+/// - `viaJump` logs in to a ProxyJump host first, then adds the key;
+/// - `jumpOnly` knows the jump host, then can't reach the server;
+/// - `known` finds it already known, `changed` finds another key known;
+/// - `unreachable` never connects, and `hang` never answers.
+enum TrustMode {
+  adds,
+  addsOther,
+  checkHostIp,
+  authenticates,
+  viaJump,
+  jumpOnly,
+  known,
+  changed,
+  unreachable,
+  hang,
+}
 
 const fakeHostKeyName = '[ssh.example.com]:2222';
+
+/// What `ssh-keygen -lf` prints for [fakeHostKeyEntry]'s key.
 const fakeHostKeyFingerprint =
-    'SHA256:fakeHostKeyFingerprintFakeHostKeyFingerpri';
+    'SHA256:JXCfe3dR9EQIJhqY/0OVqgU3aWg86KomYCIgZiW2EHI';
+
+/// What `ssh-keygen -lf` prints for [otherHostKeyEntry]'s key.
 const otherHostKeyFingerprint =
-    'SHA256:otherHostKeyFingerprintOtherHostKeyFingerp';
+    'SHA256:kDPTSEV9vPg8kh2Fn51kOtrobtrv8zEUGwO5NUqDhqg';
 const _fakeHostKey =
     'AAAAC3NzaC1lZDI1NTE5AAAAIGZha2UgaG9zdCBrZXkgZm9yIHRoZSB0ZXN0cyBvbmx5';
+const _otherHostKey =
+    'AAAAC3NzaC1lZDI1NTE5AAAAIG90aGVyIGhvc3Qga2V5IGZvciB0aGUgdGVzdHMhISEh';
 const fakeHostKeyEntry = '$fakeHostKeyName ssh-ed25519 $_fakeHostKey';
+const otherHostKeyEntry = '$fakeHostKeyName ssh-ed25519 $_otherHostKey';
+
+/// [fakeHostKeyEntry] as `HashKnownHosts` and `CheckHostIP` write it.
+const checkHostIpEntries = [
+  '|1|c2FsdA==|aGFzaA== ssh-ed25519 $_fakeHostKey',
+  '|1|c2FsdDI=|aGFzaDI= ssh-ed25519 $_fakeHostKey',
+];
 
 List<String> _changedKey(String fingerprint) => [
       'err:debug1: Server host key: ssh-ed25519 $fingerprint',
@@ -52,6 +82,7 @@ List<String> _changedKey(String fingerprint) => [
 /// - `err:<line>`, `echo:<text>` or `out:<bytes>` writes to stderr or stdout.
 /// - `env:<name>` writes the variable's value, or `<unset>`, to stdout.
 /// - `sleep:<milliseconds>`, `exit:<code>` or `hang`.
+/// - `write:<file>=<line>` appends the line to the file.
 /// - `spawn` starts a child that hangs.
 /// - `late:<line>` starts a child sharing stderr that writes the line
 ///   shortly after, so after this process has exited.
@@ -108,6 +139,12 @@ Future<void> _run(List<String> steps) async {
         stdout.writeln(Platform.environment[value] ?? '<unset>');
       case 'out':
         stdout.add(List.filled(int.parse(value), 0));
+      case 'write':
+        final equals = value.indexOf('=');
+        File(value.substring(0, equals)).writeAsStringSync(
+          '${value.substring(equals + 1)}\n',
+          mode: FileMode.append,
+        );
       case 'sleep':
         await Future<void>.delayed(Duration(milliseconds: int.parse(value)));
       case 'spawn':
@@ -312,23 +349,55 @@ Future<void> _trust(String directory, List<String> arguments) async {
   final mode = file('trust_mode').existsSync()
       ? TrustMode.values.byName(file('trust_mode').readAsStringSync())
       : TrustMode.adds;
-  final fingerprint = mode == TrustMode.addsOther
-      ? otherHostKeyFingerprint
-      : fakeHostKeyFingerprint;
+  const fingerprint = fakeHostKeyFingerprint;
   const denied =
       'err:user@ssh.example.com: Permission denied (publickey,password).';
+  const added = [
+    'err:debug1: Connecting to ssh.example.com port 2222.',
+    'err:debug1: Server host key: ssh-ed25519 $fingerprint',
+    "err:Warning: Permanently added '$fakeHostKeyName' (ED25519) to the list of known hosts.",
+  ];
 
-  if (mode case TrustMode.adds || TrustMode.addsOther) {
-    readInto.writeAsStringSync('$fakeHostKeyEntry\n');
+  switch (mode) {
+    case TrustMode.adds || TrustMode.authenticates:
+      readInto.writeAsStringSync('$fakeHostKeyEntry\n');
+    case TrustMode.addsOther:
+      readInto.writeAsStringSync('$otherHostKeyEntry\n');
+    case TrustMode.checkHostIp:
+      readInto.writeAsStringSync(checkHostIpEntries.map((e) => '$e\n').join());
+    case _:
   }
   await _run(switch (mode) {
-    TrustMode.adds || TrustMode.addsOther => [
-        'err:debug1: Connecting to ssh.example.com port 2222.',
-        'err:debug1: Server host key: ssh-ed25519 $fingerprint',
-        "err:Warning: Permanently added '$fakeHostKeyName' (ED25519) to the list of known hosts.",
+    TrustMode.adds || TrustMode.checkHostIp => [...added, denied, 'exit:255'],
+    // A man in the middle's banner, after its key exchange, claims both.
+    TrustMode.addsOther => [
+        ...added,
+        ..._changedKey(fingerprint).where((step) => step != 'exit:255'),
         denied,
         'exit:255',
       ],
+    TrustMode.viaJump => [
+        "err:debug1: Host 'jump.example.com' is known and matches the ED25519 host key.",
+        'err:Authenticated to jump.example.com ([10.0.0.2]:22) using "publickey".',
+        'sleep:200',
+        'write:${readInto.path}=$fakeHostKeyEntry',
+        ...added,
+        denied,
+        'exit:255',
+      ],
+    TrustMode.jumpOnly => [
+        "err:debug1: Host 'jump.example.com' is known and matches the ED25519 host key.",
+        'err:Authenticated to jump.example.com ([10.0.0.2]:22) using "publickey".',
+        'err:channel 0: open failed: connect failed: Connection refused',
+        'err:kex_exchange_identification: Connection closed by remote host',
+        'exit:255',
+      ],
+    TrustMode.authenticates => [
+        ...added,
+        'err:Authenticated to ssh.example.com ([10.0.0.1]:2222) using "none".',
+        'hang',
+      ],
+    TrustMode.hang => ['hang'],
     TrustMode.known => [
         'err:debug1: Server host key: ssh-ed25519 $fingerprint',
         "err:debug1: Host '$fakeHostKeyName' is known and matches the ED25519 host key.",

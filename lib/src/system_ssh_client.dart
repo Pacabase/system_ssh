@@ -59,11 +59,7 @@ final class SystemSshClient implements SshClient {
 
   @override
   Future<List<String>> configuredHosts() {
-    final home = environment['HOME'] ??
-        Platform.environment['HOME'] ??
-        Platform.environment['USERPROFILE'] ??
-        '';
-    final ssh = '${home.replaceAll(r'\', '/')}/.ssh';
+    final ssh = '${homeDirectory(environment)}/.ssh';
 
     return readConfigHosts('$ssh/config', sshDirectory: ssh);
   }
@@ -75,6 +71,9 @@ final class SystemSshClient implements SshClient {
     Future<void>? abortTrigger,
   }) async {
     checkServer(server);
+    var isAborted = false;
+    unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
+
     final environment = await _sshEnvironment();
     final ssh = resolveExecutable(executable, environment: environment);
     final config = await resolveConfig(
@@ -83,6 +82,7 @@ final class SystemSshClient implements SshClient {
       environment: environment,
       abortTrigger: abortTrigger,
     );
+    if (isAborted) throw const SshTunnelAbortedException();
 
     await trustSystemHostKey(
       server,
@@ -291,8 +291,9 @@ Future<SshTunnel> openSystemForward(
 
       try {
         return await start(localPort);
-      } on SshTunnelException {
-        if (await portIsFree(localPort)) rethrow;
+      } on SshTunnelException catch (exception) {
+        // A host key or a login that failed isn't about the port.
+        if (exception.isPermanent || await portIsFree(localPort)) rethrow;
         throw SshPortInUseException(localPort);
       }
     }
@@ -305,9 +306,11 @@ Future<SshTunnel> openSystemForward(
 
       try {
         return await start(port);
-      } on SshTunnelException {
+      } on SshTunnelException catch (exception) {
         // Another process can take the port before ssh binds it.
-        if (attempt == 3 || await portIsFree(port)) rethrow;
+        if (exception.isPermanent || attempt == 3 || await portIsFree(port)) {
+          rethrow;
+        }
       }
     }
   }

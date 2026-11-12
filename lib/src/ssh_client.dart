@@ -192,7 +192,7 @@ abstract interface class SshClient {
   /// [SshHostKeyChangedException].
   ///
   /// It connects to [server] again to read the key, but doesn't log in, and
-  /// writes it only if the server still offers that same key. ssh writes the
+  /// writes it only if the key ssh gets has [hostKey]'s fingerprint. ssh writes the
   /// entry as `StrictHostKeyChecking accept-new` would, hashed when the
   /// config sets `HashKnownHosts`, in the first `UserKnownHostsFile` the
   /// config names (`~/.ssh/known_hosts` by default).
@@ -204,7 +204,10 @@ abstract interface class SshClient {
   /// Completing [abortTrigger] first stops it, and nothing is written.
   ///
   /// Throws:
-  /// - [SshHostKeyChangedException] when the server now offers another key.
+  /// - [SshUnknownHostKeyException] with the key the server offers, when it
+  ///   isn't [hostKey]: ask the user about that one instead.
+  /// - [SshHostKeyChangedException] when `known_hosts` already holds another
+  ///   key for [server].
   /// - [SshTunnelException] when ssh can't reach the server to read its key.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshNotFoundException] when no `ssh` can be started.
