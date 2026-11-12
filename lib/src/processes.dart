@@ -133,7 +133,7 @@ String resolveExecutable(
       ? executable
       : '$executable.exe';
   return _find(name, path ?? Platform.environment['PATH'] ?? '') ??
-      (throw SshNotFoundException());
+      (throw sshNotFound());
 }
 
 String? _find(String name, String path) => path
@@ -144,13 +144,17 @@ String? _find(String name, String path) => path
     .where((candidate) => File(candidate).existsSync())
     .firstOrNull;
 
+/// [SshNotFoundException] with the hint for this platform.
+SshNotFoundException sshNotFound() =>
+    SshNotFoundException(onWindows: Platform.isWindows);
+
 /// [start]'s result, or [SshNotFoundException] when ssh exited with sh's code
 /// for a missing command; Windows fails to start instead.
 Future<T> notFoundOn127<T>(Future<T> Function() start) async {
   try {
     return await start();
   } on SshTunnelException catch (exception) {
-    if (exception.exitCode == 127) throw SshNotFoundException();
+    if (exception.exitCode == 127) throw sshNotFound();
     rethrow;
   }
 }
@@ -159,6 +163,6 @@ Future<Process> _start(Future<Process> Function() start) async {
   try {
     return await start();
   } on ProcessException {
-    throw SshNotFoundException();
+    throw sshNotFound();
   }
 }
