@@ -32,8 +32,12 @@ final class SshFixture {
         _ => null,
       };
 
-  /// The sshd, with host keys checked against the fixture's known_hosts.
+  /// The sshd, with host keys checked against the fixture's known_hosts,
+  /// which holds the sshd's key unless a test calls [forgetHostKey].
   SshTarget get target => SshTarget('127.0.0.1', port: _port);
+
+  /// How ssh names [target] in known_hosts.
+  String get hostKeyName => _hostKeyName;
 
   /// The sshd as the current user, for an ssh with no config at all.
   SshTarget get bareTarget => SshTarget(
@@ -148,12 +152,60 @@ exec ssh -F '${directory.path}/config' "\$@"
     for (var attempt = 1;; attempt++) {
       try {
         (await Socket.connect(InternetAddress.loopbackIPv4, _port!)).destroy();
-        return;
+        break;
       } on SocketException {
         if (attempt == 50) rethrow;
         await Future<void>.delayed(const Duration(milliseconds: 200));
       }
     }
+
+    final scan = await Process.run(
+      'ssh-keyscan',
+      ['-p', '$_port', '127.0.0.1'],
+    );
+    final keys = '${scan.stdout}';
+    if (keys.trim().isEmpty) throw StateError('ssh-keyscan: ${scan.stderr}');
+    _scannedHostKeys = keys;
+    await rememberHostKeyForBareTarget();
+  }
+
+  /// The sshd's keys, as ssh-keyscan read them once.
+  String? _scannedHostKeys;
+
+  /// The runner's own known_hosts, which ssh with no config checks.
+  File get runnerKnownHosts => File(
+        '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}'
+        '/.ssh/known_hosts',
+      );
+
+  /// Adds the sshd's keys to [runnerKnownHosts] unless it has them.
+  Future<void> rememberHostKeyForBareTarget() async {
+    final found = await Process.run(
+      'ssh-keygen',
+      ['-F', _hostKeyName, '-f', runnerKnownHosts.path],
+    );
+    if (found.exitCode == 0) return;
+
+    final file = runnerKnownHosts..parent.createSync(recursive: true);
+    final existing = file.existsSync() ? file.readAsStringSync() : '';
+    final separator = existing.isEmpty || existing.endsWith('\n') ? '' : '\n';
+    file.writeAsStringSync(
+      '$separator${_require(_scannedHostKeys, 'setUpAll')}',
+      mode: FileMode.append,
+    );
+  }
+
+  /// Removes the sshd's keys from [runnerKnownHosts].
+  Future<void> forgetHostKeyForBareTarget() async {
+    await Process.run(
+      'ssh-keygen',
+      ['-R', _hostKeyName, '-f', runnerKnownHosts.path],
+    );
+  }
+
+  /// Empties the fixture's known_hosts, so [target]'s key is unknown.
+  void forgetHostKey() {
+    if (_knownHosts.existsSync()) _knownHosts.deleteSync();
   }
 
   /// Runs an ssh-agent on [agentSocket] holding the key the sshd trusts.
@@ -192,7 +244,7 @@ exec ssh -F '${directory.path}/config' "\$@"
   Future<void> setUp() async {
     if (skip case final reason?) throw StateError(reason);
 
-    if (_knownHosts.existsSync()) _knownHosts.deleteSync();
+    _knownHosts.writeAsStringSync(_require(_scannedHostKeys, 'setUpAll'));
     if (_proxyPid.existsSync()) _proxyPid.deleteSync();
 
     final echo = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -228,6 +280,9 @@ exec ssh -F '${directory.path}/config' "\$@"
 
     return result.exitCode == 0;
   }
+
+  /// What the fixture's known_hosts holds.
+  Future<String> knownHostsText() => _knownHosts.readAsString();
 
   /// Writes a key for the test host that isn't the server's.
   Future<void> rememberWrongHostKey() async {

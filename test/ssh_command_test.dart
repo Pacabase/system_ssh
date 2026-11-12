@@ -133,7 +133,7 @@ void main() {
         ...['-o', 'ExitOnForwardFailure=yes'],
         ...['-o', 'ControlPath=none'],
         ...['-o', 'BatchMode=yes'],
-        ...['-o', 'StrictHostKeyChecking=accept-new'],
+        ...['-o', 'StrictHostKeyChecking=yes'],
         ...['-o', 'ConnectTimeout=15'],
         ...['-o', 'ServerAliveInterval=15'],
         '--',
@@ -147,7 +147,7 @@ void main() {
       expect(result, containsAllInOrder(['-o', 'BatchMode=yes']));
       expect(
         result,
-        containsAllInOrder(['-o', 'StrictHostKeyChecking=accept-new']),
+        containsAllInOrder(['-o', 'StrictHostKeyChecking=yes']),
       );
       expect(result, containsAllInOrder(['-o', 'ConnectTimeout=15']));
       expect(result, containsAllInOrder(['-o', 'ServerAliveInterval=15']));
@@ -182,7 +182,7 @@ void main() {
         ...['-o', 'ExitOnForwardFailure=yes'],
         ...['-o', 'ControlPath=none'],
         ...['-o', 'BatchMode=yes'],
-        ...['-o', 'StrictHostKeyChecking=accept-new'],
+        ...['-o', 'StrictHostKeyChecking=yes'],
         ...['-o', 'ConnectTimeout=15'],
         ...['-o', 'ServerAliveInterval=15'],
         '--',
@@ -256,18 +256,18 @@ void main() {
     });
 
     group('host keys', () {
-      test("accepts a new host key for ssh's default ask", () {
-        expect(
-          command(config: resolvedConfig()),
-          containsAllInOrder(['-o', 'StrictHostKeyChecking=accept-new']),
-        );
+      test("checks host keys strictly for ssh's default ask", () {
+        final result = command(config: resolvedConfig());
+
+        expect(result, containsAllInOrder(['-o', 'StrictHostKeyChecking=yes']));
+        expect(result, isNot(contains('StrictHostKeyChecking=accept-new')));
       });
 
       for (final value in ['yes', 'true', 'false', 'accept-new', 'off']) {
         test('leaves host key checking to ssh when the config sets $value', () {
           expect(
             command(config: resolvedConfig(strictHostKeyChecking: value)),
-            isNot(contains('StrictHostKeyChecking=accept-new')),
+            isNot(contains(startsWith('StrictHostKeyChecking='))),
           );
         });
       }

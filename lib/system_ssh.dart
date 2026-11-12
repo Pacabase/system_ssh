@@ -4,6 +4,7 @@ library;
 
 export 'src/exceptions.dart';
 export 'src/ssh_client.dart';
+export 'src/ssh_host_key.dart';
 export 'src/ssh_log.dart';
 export 'src/ssh_target.dart';
 export 'src/system_ssh_client.dart' show SystemSshClient;
