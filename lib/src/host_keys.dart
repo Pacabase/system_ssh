@@ -238,7 +238,7 @@ Future<void> trustSystemHostKey(
     final entries =
         read.readAsLinesSync().where((line) => line.trim().isNotEmpty).toList();
     if (entries.isEmpty) {
-      if (code == 127) throw SshNotFoundException();
+      if (code == 127) throw sshNotFound();
       // ssh wrote no new key, so no server got far enough to print a banner:
       // its log is ssh's own.
       if (changedHostKey(log) case final changed?) {

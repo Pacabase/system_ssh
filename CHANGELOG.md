@@ -1,5 +1,13 @@
 ## Unreleased
 
+- `package:system_ssh/interface.dart` has every type but `SystemSshClient`:
+  `SshClient` and its tunnels, logs, targets, host keys and exceptions, and the
+  terminal commands. It imports no `dart:io`, so code that only takes an
+  `SshClient`, such as UI or a fake in tests, depends on nothing that starts
+  ssh. `package:system_ssh/system_ssh.dart` still exports everything.
+- `SshNotFoundException()` takes `onWindows: true` for the hint to add
+  "OpenSSH Client" on Windows, rather than checking the platform itself; a
+  fake that throws one gets the same message on every platform.
 - **Breaking:** a tunnel no longer trusts a new host key unseen. Where the
   user's ssh config leaves `StrictHostKeyChecking` at `ask`, it used to pass
   `accept-new`, so the first connection trusted whatever key the server

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'ssh_client.dart';
 import 'ssh_host_key.dart';
 
@@ -25,9 +23,9 @@ final class SshException implements Exception {
 
 /// No `ssh` executable could be started.
 final class SshNotFoundException extends SshException {
-  /// An error that tells the user how to get ssh: on Windows, to add
-  /// "OpenSSH Client" under Optional features; elsewhere, to install OpenSSH.
-  factory SshNotFoundException() => Platform.isWindows
+  /// An error that tells the user how to get ssh: [onWindows], to add
+  /// "OpenSSH Client" under Optional features; otherwise, to install OpenSSH.
+  factory SshNotFoundException({bool onWindows = false}) => onWindows
       ? const SshNotFoundException._(
           'ssh was not found; add "OpenSSH Client" in Settings under '
           'Optional features',

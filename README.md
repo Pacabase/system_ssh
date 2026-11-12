@@ -299,9 +299,14 @@ Tested in CI against a real `sshd`, with each runner's own OpenSSH:
 
 ## Testing
 
-Depend on the `SshClient` interface, and pass a fake in tests:
+Depend on the `SshClient` interface, and pass a fake in tests. Code that only
+takes an `SshClient`, as this fake does, can import
+`package:system_ssh/interface.dart`: it has every type here but
+`SystemSshClient`, and imports no `dart:io`.
 
 ```dart
+import 'package:system_ssh/interface.dart';
+
 class FakeSshClient implements SshClient {
   @override
   Future<SshTunnel> openTunnel(SshTarget server,
@@ -318,6 +323,23 @@ class FakeSshClient implements SshClient {
           void Function(SshLog log)? onLog,
           Future<void>? abortTrigger}) =>
       throw const SshTunnelException('Permission denied (publickey).');
+
+  @override
+  Future<SshTunnel> openSocketTunnel(SshTarget server,
+          {required String remoteSocket,
+          int? localPort,
+          void Function(SshLog log)? onLog,
+          Future<void>? abortTrigger}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<SshRemoteTunnel> openRemoteTunnel(SshTarget server,
+          {String localHost = 'localhost',
+          required int localPort,
+          int? remotePort,
+          void Function(SshLog log)? onLog,
+          Future<void>? abortTrigger}) =>
+      throw UnimplementedError();
 
   @override
   Future<List<String>> configuredHosts() async => const ['ssh.example.com'];

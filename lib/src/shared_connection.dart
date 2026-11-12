@@ -432,7 +432,7 @@ final class _Connection {
         environment: environment,
       );
     } on ProcessException {
-      throw SshNotFoundException();
+      throw sshNotFound();
     }
     unawaited(process.stdin.close().then((_) {}, onError: (Object _) {}));
     final stdout = process.stdout
