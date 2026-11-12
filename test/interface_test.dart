@@ -100,9 +100,10 @@ void main() {
         if (_native.hasMatch(line)) offenders.add('$path: $line');
         if (_local.firstMatch(line)?[1] case final target?) {
           visit(
+            // Forward slashes on every OS, which File takes on Windows too.
             line.contains('package:system_ssh/')
                 ? 'lib/$target'
-                : file.parent.uri.resolve(target).toFilePath(),
+                : Uri(path: path).resolve(target).path,
           );
         }
       }
