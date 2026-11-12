@@ -1,5 +1,9 @@
-## Unreleased
+## 0.9.0
 
+- **Breaking:** `SshClient` has the new `openRemoteTunnel` and
+  `openSocketTunnel` methods, so a fake that implements `SshClient` needs them
+  too. Each can return its own tunnel, or throw `UnimplementedError` if your
+  tests never open one.
 - `openRemoteTunnel` opens a remote forward (`ssh -R`): the server listens on
   its `127.0.0.1`, and each connection there comes back to a host and port on
   your side, with the same options and failures as `openTunnel`. Leave out
@@ -38,10 +42,6 @@
   stops with its last tunnel or the app. When it drops, every tunnel on it
   fails `done` together. On Windows, which can't share a connection, each
   tunnel keeps its own ssh.
-- **Breaking:** `SshClient` has the new `openRemoteTunnel` and
-  `openSocketTunnel` methods, so a fake that implements `SshClient` needs them
-  too. Each can return its own tunnel, or throw `UnimplementedError` if your
-  tests never open one.
 
 ## 0.8.0
 
