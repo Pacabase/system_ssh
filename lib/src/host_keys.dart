@@ -344,8 +344,9 @@ List<String> userKnownHostsFiles(Map<String, String> config) =>
 String homeDirectory(Map<String, String> environment) {
   final names =
       Platform.isWindows ? ['USERPROFILE', 'HOME'] : ['HOME', 'USERPROFILE'];
-  return (names
-              .map((name) => environment[name] ?? Platform.environment[name])
+  // Variables the app sets for ssh come before the process's own.
+  return ([environment, Platform.environment]
+              .expand((variables) => names.map((name) => variables[name]))
               .nonNulls
               .firstOrNull ??
           '')
