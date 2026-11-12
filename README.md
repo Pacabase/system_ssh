@@ -301,11 +301,11 @@ Tested in CI against a real `sshd`, with each runner's own OpenSSH:
 
 Depend on the `SshClient` interface, and pass a fake in tests. Code that only
 takes an `SshClient`, as this fake does, can import
-`package:system_ssh/interface.dart`: it has every type here but
+`package:system_ssh/ssh_client.dart`: it has every type here but
 `SystemSshClient`, and imports no `dart:io`.
 
 ```dart
-import 'package:system_ssh/interface.dart';
+import 'package:system_ssh/ssh_client.dart';
 
 class FakeSshClient implements SshClient {
   @override

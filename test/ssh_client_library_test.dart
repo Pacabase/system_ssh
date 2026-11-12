@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:system_ssh/interface.dart';
+import 'package:system_ssh/ssh_client.dart';
 import 'package:test/test.dart';
 
-/// A fake that needs nothing but the interface library.
+/// A fake that needs nothing but ssh_client.dart.
 final class _FakeSshClient implements SshClient {
   @override
   Future<SshTunnel> openTunnel(
@@ -66,7 +66,7 @@ final _local = RegExp(
 );
 
 void main() {
-  test('a fake SshClient needs only the interface library', () async {
+  test('a fake SshClient needs only ssh_client.dart', () async {
     final SshClient client = _FakeSshClient();
 
     await expectLater(
@@ -88,7 +88,7 @@ void main() {
     );
   });
 
-  test('nothing the interface library reaches imports dart:io', () {
+  test('nothing ssh_client.dart reaches imports dart:io', () {
     final seen = <String>{};
     final offenders = <String>[];
 
@@ -109,7 +109,7 @@ void main() {
       }
     }
 
-    visit('lib/interface.dart');
+    visit('lib/ssh_client.dart');
 
     expect(seen, contains('lib/src/exceptions.dart'));
     expect(offenders, isEmpty);

@@ -1,6 +1,6 @@
 ## Unreleased
 
-- `package:system_ssh/interface.dart` has every type but `SystemSshClient`:
+- `package:system_ssh/ssh_client.dart` has every type but `SystemSshClient`:
   `SshClient` and its tunnels, logs, targets, host keys and exceptions, and the
   terminal commands. It imports no `dart:io`, so code that only takes an
   `SshClient`, such as UI or a fake in tests, depends on nothing that starts
