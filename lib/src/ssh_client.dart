@@ -1,4 +1,5 @@
 import 'exceptions.dart';
+import 'ssh_host_key.dart';
 import 'ssh_log.dart';
 import 'ssh_target.dart';
 
@@ -59,6 +60,11 @@ abstract interface class SshClient {
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
   /// - [SshTunnelException] when ssh exits before the forward is up.
+  /// - [SshUnknownHostKeyException] when the server's host key isn't in
+  ///   `known_hosts` yet and the config leaves `StrictHostKeyChecking` at
+  ///   `ask`; see [trustHostKey].
+  /// - [SshHostKeyChangedException] when the server's host key isn't the one
+  ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshException] when the tunnel can't be set up for another reason.
@@ -124,6 +130,11 @@ abstract interface class SshClient {
   /// - [SshTunnelException] when ssh exits before the forward is up, such as
   ///   when [remotePort] is taken on the server or its sshd doesn't allow
   ///   forwarding: `Error: remote port forwarding failed for listen port`.
+  /// - [SshUnknownHostKeyException] when the server's host key isn't in
+  ///   `known_hosts` yet and the config leaves `StrictHostKeyChecking` at
+  ///   `ask`; see [trustHostKey].
+  /// - [SshHostKeyChangedException] when the server's host key isn't the one
+  ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshException] when the forward can't be set up for another reason.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
@@ -152,6 +163,11 @@ abstract interface class SshClient {
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
   /// - [SshTunnelException] when ssh exits before the proxy is up.
+  /// - [SshUnknownHostKeyException] when the server's host key isn't in
+  ///   `known_hosts` yet and the config leaves `StrictHostKeyChecking` at
+  ///   `ask`; see [trustHostKey].
+  /// - [SshHostKeyChangedException] when the server's host key isn't the one
+  ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshException] when the proxy can't be set up for another reason.
@@ -169,4 +185,38 @@ abstract interface class SshClient {
   /// offering them to pick from: aliases, not `*` patterns or `!` negations.
   /// Empty when there is no config.
   Future<List<String>> configuredHosts();
+
+  /// Adds [hostKey], from an [SshUnknownHostKeyException], to the user's
+  /// `known_hosts`, once the user has checked its fingerprint, so tunnels to
+  /// [server] open from then on, and a later change to the key fails with an
+  /// [SshHostKeyChangedException].
+  ///
+  /// It connects to [server] again to read the key, but doesn't log in, and
+  /// writes it only if the key ssh gets has [hostKey]'s fingerprint. ssh writes the
+  /// entry as `StrictHostKeyChecking accept-new` would, hashed when the
+  /// config sets `HashKnownHosts`, in the first `UserKnownHostsFile` the
+  /// config names (`~/.ssh/known_hosts` by default).
+  ///
+  /// ```dart
+  /// await client.trustHostKey(server, exception.hostKey);
+  /// ```
+  ///
+  /// Completing [abortTrigger] first stops it, and nothing is written.
+  ///
+  /// Throws:
+  /// - [SshUnknownHostKeyException] with the key the server offers, when it
+  ///   isn't [hostKey]: ask the user about that one instead.
+  /// - [SshHostKeyChangedException] when `known_hosts` already holds another
+  ///   key for [server].
+  /// - [SshTunnelException] when ssh can't reach the server to read its key.
+  /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
+  /// - [SshNotFoundException] when no `ssh` can be started.
+  /// - [SshException] when the key can't be written to `known_hosts`.
+  /// - [ArgumentError] for a host or user ssh could misread, as
+  ///   [openTunnel] rejects.
+  Future<void> trustHostKey(
+    SshTarget server,
+    SshHostKey hostKey, {
+    Future<void>? abortTrigger,
+  });
 }

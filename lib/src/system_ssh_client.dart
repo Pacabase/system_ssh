@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'config_hosts.dart';
 import 'exceptions.dart';
+import 'host_keys.dart';
 import 'logger.dart';
 import 'login_shell.dart';
 import 'ports.dart';
@@ -11,6 +12,7 @@ import 'shared_connection.dart';
 import 'ssh_client.dart';
 import 'ssh_command.dart';
 import 'ssh_config.dart';
+import 'ssh_host_key.dart';
 import 'ssh_log.dart';
 import 'ssh_output.dart';
 import 'ssh_target.dart';
@@ -57,13 +59,39 @@ final class SystemSshClient implements SshClient {
 
   @override
   Future<List<String>> configuredHosts() {
-    final home = environment['HOME'] ??
-        Platform.environment['HOME'] ??
-        Platform.environment['USERPROFILE'] ??
-        '';
-    final ssh = '${home.replaceAll(r'\', '/')}/.ssh';
+    final ssh = '${homeDirectory(environment)}/.ssh';
 
     return readConfigHosts('$ssh/config', sshDirectory: ssh);
+  }
+
+  @override
+  Future<void> trustHostKey(
+    SshTarget server,
+    SshHostKey hostKey, {
+    Future<void>? abortTrigger,
+  }) async {
+    checkServer(server);
+    var isAborted = false;
+    unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
+
+    final environment = await _sshEnvironment();
+    final ssh = resolveExecutable(executable, environment: environment);
+    final config = await resolveConfig(
+      server,
+      executable: ssh,
+      environment: environment,
+      abortTrigger: abortTrigger,
+    );
+    if (isAborted) throw const SshTunnelAbortedException();
+
+    await trustSystemHostKey(
+      server,
+      hostKey,
+      executable: ssh,
+      config: config,
+      environment: environment,
+      abortTrigger: abortTrigger,
+    );
   }
 
   @override
@@ -210,13 +238,16 @@ Future<SshTunnel> openSystemForward(
     throw SshPortInUseException(localPort);
   }
   // Held while it opens, so a retry on a taken port reuses the login.
-  final shared = await pool?.connect(
-    server,
-    executable: ssh,
-    environment: environment,
-    config: config,
-    onLog: onLog,
-    abortTrigger: abortTrigger,
+  final shared = await checkingHostKeys(
+    config,
+    () async => pool?.connect(
+      server,
+      executable: ssh,
+      environment: environment,
+      config: config,
+      onLog: onLog,
+      abortTrigger: abortTrigger,
+    ),
   );
 
   Future<SshTunnel> start(int port) async {
@@ -260,8 +291,9 @@ Future<SshTunnel> openSystemForward(
 
       try {
         return await start(localPort);
-      } on SshTunnelException {
-        if (await portIsFree(localPort)) rethrow;
+      } on SshTunnelException catch (exception) {
+        // A host key or a login that failed isn't about the port.
+        if (exception.isPermanent || await portIsFree(localPort)) rethrow;
         throw SshPortInUseException(localPort);
       }
     }
@@ -274,15 +306,17 @@ Future<SshTunnel> openSystemForward(
 
       try {
         return await start(port);
-      } on SshTunnelException {
+      } on SshTunnelException catch (exception) {
         // Another process can take the port before ssh binds it.
-        if (attempt == 3 || await portIsFree(port)) rethrow;
+        if (exception.isPermanent || attempt == 3 || await portIsFree(port)) {
+          rethrow;
+        }
       }
     }
   }
 
   try {
-    return await open();
+    return await checkingHostKeys(config, open);
   } finally {
     shared?.release();
   }
@@ -327,13 +361,16 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   );
 
   if (pool != null) {
-    final shared = await pool.connect(
-      server,
-      executable: ssh,
-      environment: environment,
-      config: config,
-      onLog: onLog,
-      abortTrigger: abortTrigger,
+    final shared = await checkingHostKeys(
+      config,
+      () => pool.connect(
+        server,
+        executable: ssh,
+        environment: environment,
+        config: config,
+        onLog: onLog,
+        abortTrigger: abortTrigger,
+      ),
     );
     try {
       if (isAborted) throw const SshTunnelAbortedException();
@@ -364,16 +401,19 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   );
   logger.info(command.join(' '));
 
-  return notFoundOn127(
-    () async => SystemSshRemoteTunnel.attach(
-      await startWatched(command, environment: environment),
-      readiness: RemoteForwardReadiness(
-        remotePort ?? 0,
-        localHost: localHost,
-        localPort: localPort,
+  return checkingHostKeys(
+    config,
+    () => notFoundOn127(
+      () async => SystemSshRemoteTunnel.attach(
+        await startWatched(command, environment: environment),
+        readiness: RemoteForwardReadiness(
+          remotePort ?? 0,
+          localHost: localHost,
+          localPort: localPort,
+        ),
+        onLog: onLog,
+        abortTrigger: abortTrigger,
       ),
-      onLog: onLog,
-      abortTrigger: abortTrigger,
     ),
   );
 }

@@ -99,30 +99,125 @@ void main() {
       expect(logs.last.line, contains('Entering interactive session'));
     });
 
-    test('accepts and remembers a new host key when the config asks', () async {
+    test('asks about a new host key when the config does, then trusts it',
+        () async {
+      fixture.forgetHostKey();
+      final client = SystemSshClient(executable: fixture.ssh);
+
+      final unknown = await open().then<Object?>(
+        (_) => null,
+        onError: (Object exception) => exception,
+      );
+      expect(
+        unknown,
+        isA<SshUnknownHostKeyException>()
+            .having((exception) => exception.hostKey.host, 'host',
+                fixture.hostKeyName)
+            .having((exception) => exception.hostKey.fingerprint, 'fingerprint',
+                startsWith('SHA256:')),
+      );
       expect(await fixture.isKnownHost(), isFalse);
 
-      await open();
+      await client.trustHostKey(
+        fixture.target,
+        (unknown! as SshUnknownHostKeyException).hostKey,
+      );
 
       expect(await fixture.isKnownHost(), isTrue);
+      final tunnel = await open();
+      expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
     });
 
-    test('refuses a new host key under StrictHostKeyChecking yes', () async {
+    test("doesn't trust a key other than the one the server offers", () async {
+      fixture.forgetHostKey();
+
       await expectLater(
-        open(via: fixture.strictTarget),
-        sshFailure('Host key verification failed'),
+        SystemSshClient(executable: fixture.ssh).trustHostKey(
+          fixture.target,
+          SshHostKey(
+            host: fixture.hostKeyName,
+            type: 'ED25519',
+            fingerprint: 'SHA256:fakeHostKeyFingerprintFakeHostKeyFingerpri',
+          ),
+        ),
+        throwsA(
+          isA<SshUnknownHostKeyException>().having(
+            (exception) => exception.hostKey.fingerprint,
+            'fingerprint',
+            allOf(startsWith('SHA256:'), isNot(contains('fakeHostKey'))),
+          ),
+        ),
       );
       expect(await fixture.isKnownHost(), isFalse);
     });
 
-    test(
-      'refuses a changed host key even when new ones are accepted',
-      () async {
-        await fixture.rememberWrongHostKey();
+    test("trusts a new key into the runner's own ~/.ssh/known_hosts", () async {
+      await fixture.forgetHostKeyForBareTarget();
+      addTearDown(fixture.rememberHostKeyForBareTarget);
+      const client = SystemSshClient();
+      Future<SshTunnel> openBare() => client.openTunnel(
+            fixture.bareTarget,
+            remoteHost: fixture.echoHost,
+            remotePort: fixture.echoPort,
+            onLog: logged(),
+          );
 
-        await expectLater(open(), sshFailure('Host key verification failed'));
-      },
-    );
+      final unknown = await openBare().then<Object?>(
+        (tunnel) => tunnel.close(),
+        onError: (Object exception) => exception,
+      );
+      expect(unknown, isA<SshUnknownHostKeyException>());
+
+      await client.trustHostKey(
+        fixture.bareTarget,
+        (unknown! as SshUnknownHostKeyException).hostKey,
+      );
+
+      final tunnel = await openBare();
+      addTearDown(tunnel.close);
+      expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
+    });
+
+    test('refuses a new host key under StrictHostKeyChecking yes', () async {
+      fixture.forgetHostKey();
+
+      await expectLater(
+        open(via: fixture.strictTarget),
+        throwsA(
+          isA<SshTunnelException>()
+              .having((exception) => exception, 'type',
+                  isNot(isA<SshUnknownHostKeyException>()))
+              .having((exception) => exception.message, 'message',
+                  contains('Host key verification failed')),
+        ),
+      );
+      expect(await fixture.isKnownHost(), isFalse);
+    });
+
+    test('refuses a changed host key, and trusting another over it', () async {
+      await fixture.rememberWrongHostKey();
+      final wrong = await fixture.knownHostsText();
+
+      final changed = await open().then<Object?>(
+        (_) => null,
+        onError: (Object exception) => exception,
+      );
+      expect(
+        changed,
+        isA<SshHostKeyChangedException>()
+            .having((exception) => exception.hostKey.host, 'host',
+                fixture.hostKeyName)
+            .having((exception) => exception.isPermanent, 'isPermanent', true),
+      );
+      await expectLater(
+        SystemSshClient(executable: fixture.ssh).trustHostKey(
+          fixture.target,
+          (changed! as SshHostKeyChangedException).hostKey,
+        ),
+        throwsA(isA<SshHostKeyChangedException>()),
+      );
+      expect(await fixture.knownHostsText(), wrong);
+    });
 
     test('retries with a fresh port when the picked one is taken', () async {
       final taken = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);

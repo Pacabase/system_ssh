@@ -85,10 +85,10 @@ List<String> sshCommand(
     ],
     // No terminal answers a password prompt here; fail instead of waiting.
     if (isDefault('batchmode', 'no')) ...['-o', 'BatchMode=yes'],
-    // No terminal answers ssh's unknown-host prompt; a changed key still fails.
+    // No terminal answers ssh's unknown-host prompt; the caller asks instead.
     if (isDefault('stricthostkeychecking', 'ask')) ...[
       '-o',
-      'StrictHostKeyChecking=accept-new',
+      'StrictHostKeyChecking=yes',
     ],
     if (isDefault('connecttimeout', 'none')) ...['-o', 'ConnectTimeout=15'],
     if (isDefault('serveraliveinterval', '0')) ...[
