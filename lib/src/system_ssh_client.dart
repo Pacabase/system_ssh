@@ -258,10 +258,11 @@ Future<SshTunnel> openSystemForward(
   );
   if (isAborted) throw const SshTunnelAbortedException();
   // A taken port, or an address this computer lacks, needs no login to say
-  // so. Port 0 checks the address alone.
+  // so. Port 0 checks the address alone; every computer has 127.0.0.1, and
+  // skipping it keeps tunnels opened together on the same login.
   if (pool != null) {
     if (localPort == null) {
-      await isPortFree(0, address: bindAddress);
+      if (bindAddress != '127.0.0.1') await isPortFree(0, address: bindAddress);
     } else if (!await isFree(localPort)) {
       throw SshPortInUseException(localPort, address: bindAddress);
     }
