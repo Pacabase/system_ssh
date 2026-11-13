@@ -81,6 +81,25 @@ void main() {
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
     });
 
+    test('listens on the bind address it is given', () async {
+      final tunnel = await openSystemForward(
+        fixture.target,
+        forward: localForwardTo(
+          fixture.echoHost,
+          fixture.echoPort,
+          bindAddress: '0.0.0.0',
+        ),
+        bindAddress: '0.0.0.0',
+        onLog: logged(),
+        executable: fixture.ssh,
+      );
+      addTearDown(tunnel.close);
+
+      // 0.0.0.0 is every address of this computer, 127.0.0.1 among them.
+      expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
+      expect(await isPortFree(tunnel.localPort, address: '0.0.0.0'), isFalse);
+    });
+
     test('forwards the local port to host and port once ssh says so', () async {
       final logs = <SshLog>[];
       final tunnel = await open(onLog: logs.add);

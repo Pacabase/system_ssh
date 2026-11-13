@@ -308,6 +308,47 @@ void main() {
     });
   });
 
+  group('the address a forward listens on', () {
+    test('goes in front of the local port, bracketed for IPv6', () {
+      expect(
+        localForward(5432,
+            bindAddress: '172.17.0.1', remoteHost: 'db', remotePort: 5432),
+        ['-L', '172.17.0.1:5432:db:5432'],
+      );
+      expect(
+        localForwardToSocket(2375,
+            bindAddress: '::', remoteSocket: '/run/d.sock'),
+        ['-L', '[::]:2375:/run/d.sock'],
+      );
+      expect(
+          dynamicForward(1080, bindAddress: '0.0.0.0'), ['-D', '0.0.0.0:1080']);
+      expect(dynamicForward(1080), ['-D', '127.0.0.1:1080']);
+    });
+
+    for (final address in ['127.0.0.1', '0.0.0.0', '172.17.0.1', '::1', '::']) {
+      test('accepts $address', () => checkBindAddress(address));
+    }
+
+    for (final address in [
+      'localhost',
+      '*',
+      '',
+      '1.2.3',
+      '256.0.0.1',
+      'fe80::1%en0'
+    ]) {
+      test('rejects ${address.isEmpty ? 'an empty address' : address}', () {
+        expect(
+          () => checkBindAddress(address),
+          throwsA(
+            isArgumentError.having(
+                (error) => error.name, 'name', 'bindAddress'),
+          ),
+        );
+      });
+    }
+  });
+
   group('bracketIPv6', () {
     for (final (host, bracketed) in [
       ('::1', '[::1]'),

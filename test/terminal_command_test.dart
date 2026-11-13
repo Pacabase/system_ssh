@@ -96,6 +96,43 @@ void main() {
     }
   });
 
+  group('a bind address', () {
+    const server = SshTarget('ssh.example.com');
+
+    test('is where each command listens', () {
+      expect(
+        tunnelCommand(
+          server,
+          bindAddress: '172.17.0.1',
+          remoteHost: 'db.example.com',
+          remotePort: 5432,
+          localPort: 15432,
+        ),
+        'ssh -N -L 172.17.0.1:15432:db.example.com:5432 ssh.example.com',
+      );
+      expect(
+        socketTunnelCommand(
+          server,
+          bindAddress: '0.0.0.0',
+          remoteSocket: '/var/run/docker.sock',
+          localPort: 2375,
+        ),
+        'ssh -N -L 0.0.0.0:2375:/var/run/docker.sock ssh.example.com',
+      );
+      expect(
+        socksProxyCommand(server, bindAddress: '::1', localPort: 1080),
+        'ssh -N -D [::1]:1080 ssh.example.com',
+      );
+    });
+
+    test('that is not an IP address is rejected', () {
+      expect(
+        () => socksProxyCommand(server, bindAddress: 'localhost', localPort: 1),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('socksProxyCommand', () {
     test('serves a SOCKS proxy through the server', () {
       expect(

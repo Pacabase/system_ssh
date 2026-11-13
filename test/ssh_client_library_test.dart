@@ -10,6 +10,7 @@ final class _FakeSshClient implements SshClient {
     SshTarget server, {
     required String remoteHost,
     required int remotePort,
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
@@ -20,6 +21,7 @@ final class _FakeSshClient implements SshClient {
   Future<SshTunnel> openSocketTunnel(
     SshTarget server, {
     required String remoteSocket,
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
@@ -40,6 +42,7 @@ final class _FakeSshClient implements SshClient {
   @override
   Future<SshTunnel> openSocksProxy(
     SshTarget server, {
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,

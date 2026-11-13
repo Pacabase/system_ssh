@@ -23,16 +23,36 @@ void checkHost(String host, String name) {
 
 void checkLocalPort(int port) => checkPort(port, 'localPort');
 
+/// A forward listens on an IP address; ssh would look a name up, or bind
+/// every address for `*`.
+void checkBindAddress(String address) {
+  try {
+    address.contains(':')
+        ? Uri.parseIPv6Address(address)
+        : Uri.parseIPv4Address(address);
+  } on FormatException {
+    throw ArgumentError.value(address, 'bindAddress', 'is not an IP address');
+  }
+}
+
+String _listen(String bindAddress, int port) =>
+    '${bracketIPv6(bindAddress)}:$port';
+
 void checkPort(int port, String name) {
   if (port < 1 || port > 65535) throw RangeError.range(port, 1, 65535, name);
 }
 
 List<String> localForward(
   int localPort, {
+  String bindAddress = '127.0.0.1',
   required String remoteHost,
   required int remotePort,
 }) =>
-    ['-L', '127.0.0.1:$localPort:${bracketIPv6(remoteHost)}:$remotePort'];
+    [
+      '-L',
+      [_listen(bindAddress, localPort), bracketIPv6(remoteHost), remotePort]
+          .join(':'),
+    ];
 
 // ssh reads a forward without a `/` as a host, splits it at `:`, and newer
 // versions expand `%` tokens and `${VAR}` in socket paths.
@@ -46,9 +66,10 @@ void checkSocketPath(String path, String name) {
 
 List<String> localForwardToSocket(
   int localPort, {
+  String bindAddress = '127.0.0.1',
   required String remoteSocket,
 }) =>
-    ['-L', '127.0.0.1:$localPort:$remoteSocket'];
+    ['-L', '${_listen(bindAddress, localPort)}:$remoteSocket'];
 
 /// A [remotePort] of 0 has the server pick one.
 List<String> remoteForward(
@@ -58,7 +79,11 @@ List<String> remoteForward(
 }) =>
     ['-R', '127.0.0.1:$remotePort:${bracketIPv6(localHost)}:$localPort'];
 
-List<String> dynamicForward(int localPort) => ['-D', '127.0.0.1:$localPort'];
+List<String> dynamicForward(
+  int localPort, {
+  String bindAddress = '127.0.0.1',
+}) =>
+    ['-D', _listen(bindAddress, localPort)];
 
 /// A `-o` beats ~/.ssh/config, so options are set only where [config]
 /// leaves ssh's default, or where it couldn't be read at all.

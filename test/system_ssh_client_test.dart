@@ -142,6 +142,28 @@ void main() {
       });
     }
 
+    test('rejects a bind address that is not an IP address', () async {
+      for (final open in [
+        () => SystemSshClient(executable: '/nonexistent/ssh').openTunnel(
+              server,
+              remoteHost: 'db.example.com',
+              remotePort: 3306,
+              bindAddress: 'localhost',
+            ),
+        () => SystemSshClient(executable: '/nonexistent/ssh').openSocketTunnel(
+              server,
+              remoteSocket: '/run/d.sock',
+              bindAddress: '*',
+            ),
+        () => SystemSshClient(executable: '/nonexistent/ssh').openSocksProxy(
+              server,
+              bindAddress: 'my-laptop',
+            ),
+      ]) {
+        await expectLater(open(), throwsInvalid('bindAddress', anything));
+      }
+    });
+
     for (final port in [1, 65535]) {
       test('accepts local port $port', () async {
         await expectLater(
@@ -252,6 +274,43 @@ void main() {
     }
 
     CountingPorts takenPorts() => CountingPorts((_) async => taken.port);
+
+    test('listens on the bind address it is given', () async {
+      fake.attemptModes([AttemptMode.ready]);
+      final port = await pickFreePort();
+
+      final tunnel = await openSystemForward(
+        server,
+        forward: localForwardTo('db.example.com', 3306, bindAddress: '0.0.0.0'),
+        bindAddress: '0.0.0.0',
+        executable: fake.path,
+        freePort: () async => port,
+        portIsFree: (_) async => true,
+      );
+      addTearDown(tunnel.close);
+
+      expect(
+          fake.attempts.single, contains('0.0.0.0:$port:db.example.com:3306'));
+    });
+
+    test('says which address a taken port is taken on', () async {
+      await expectLater(
+        openSystemForward(
+          server,
+          forward:
+              localForwardTo('db.example.com', 3306, bindAddress: '0.0.0.0'),
+          bindAddress: '0.0.0.0',
+          localPort: 5432,
+          executable: fake.path,
+          portIsFree: (_) async => false,
+        ),
+        throwsA(
+          isA<SshPortInUseException>()
+              .having((exception) => exception.address, 'address', '0.0.0.0')
+              .having((exception) => exception.port, 'port', 5432),
+        ),
+      );
+    });
 
     test('opens on the picked port with the command for the server', () async {
       fake.attemptModes([AttemptMode.ready]);

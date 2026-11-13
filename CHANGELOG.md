@@ -1,3 +1,31 @@
+## Unreleased
+
+- `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`
+  to listen on instead of `127.0.0.1`: an IP address of this computer, such
+  as Docker's bridge `172.17.0.1` so containers can reach the tunnel, or
+  `0.0.0.0` for every network. Whatever can reach that address can use the
+  tunnel, with no login of its own, so the default stays `127.0.0.1`:
+
+  ```dart
+  final tunnel = await client.openTunnel(
+    const SshTarget('ssh.example.com'),
+    remoteHost: 'db.example.com',
+    remotePort: 5432,
+    bindAddress: '172.17.0.1',
+  );
+  // From a container: postgres://172.17.0.1:${tunnel.localPort}
+  ```
+
+  A name such as `localhost` or `*` throws an `ArgumentError`, and an
+  address this computer doesn't have throws an `SshException` saying so,
+  rather than an `SshPortInUseException`. `SshPortInUseException` has the
+  `address` the port is taken on. `tunnelCommand`, `socketTunnelCommand`
+  and `socksProxyCommand` take `bindAddress` too.
+- **Breaking:** `SshClient`'s `openTunnel`, `openSocketTunnel` and
+  `openSocksProxy` have the new `bindAddress` parameter, so a fake that
+  implements `SshClient` needs it too: add
+  `String bindAddress = '127.0.0.1',` to each.
+
 ## 0.9.1
 
 - `tunnelCommand` and `remoteTunnelCommand` throw an `ArgumentError` for a

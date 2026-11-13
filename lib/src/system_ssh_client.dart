@@ -99,13 +99,19 @@ final class SystemSshClient implements SshClient {
     SshTarget server, {
     required String remoteHost,
     required int remotePort,
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
       openSystemForward(
         server,
-        forward: localForwardTo(remoteHost, remotePort),
+        forward: localForwardTo(
+          remoteHost,
+          remotePort,
+          bindAddress: bindAddress,
+        ),
+        bindAddress: bindAddress,
         localPort: localPort,
         onLog: onLog,
         abortTrigger: abortTrigger,
@@ -118,13 +124,15 @@ final class SystemSshClient implements SshClient {
   Future<SshTunnel> openSocketTunnel(
     SshTarget server, {
     required String remoteSocket,
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
       openSystemForward(
         server,
-        forward: localForwardToSocketAt(remoteSocket),
+        forward: localForwardToSocketAt(remoteSocket, bindAddress: bindAddress),
+        bindAddress: bindAddress,
         localPort: localPort,
         onLog: onLog,
         abortTrigger: abortTrigger,
@@ -157,13 +165,15 @@ final class SystemSshClient implements SshClient {
   @override
   Future<SshTunnel> openSocksProxy(
     SshTarget server, {
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
       openSystemForward(
         server,
-        forward: dynamicForward,
+        forward: dynamicForwardOn(bindAddress),
+        bindAddress: bindAddress,
         localPort: localPort,
         onLog: onLog,
         abortTrigger: abortTrigger,
@@ -183,22 +193,36 @@ final _unsafeInUser = RegExp(r'''[\s'"`$;&|<>(){}/]|[\x00-\x1f]''');
 
 List<String> Function(int localPort) localForwardTo(
   String remoteHost,
-  int remotePort,
-) {
+  int remotePort, {
+  String bindAddress = '127.0.0.1',
+}) {
   checkHost(remoteHost, 'remoteHost');
+  checkBindAddress(bindAddress);
 
   return (port) => localForward(
         port,
+        bindAddress: bindAddress,
         remoteHost: remoteHost,
         remotePort: remotePort,
       );
 }
 
 List<String> Function(int localPort) localForwardToSocketAt(
-  String remoteSocket,
-) {
+  String remoteSocket, {
+  String bindAddress = '127.0.0.1',
+}) {
   checkSocketPath(remoteSocket, 'remoteSocket');
-  return (port) => localForwardToSocket(port, remoteSocket: remoteSocket);
+  checkBindAddress(bindAddress);
+  return (port) => localForwardToSocket(
+        port,
+        bindAddress: bindAddress,
+        remoteSocket: remoteSocket,
+      );
+}
+
+List<String> Function(int localPort) dynamicForwardOn(String bindAddress) {
+  checkBindAddress(bindAddress);
+  return (port) => dynamicForward(port, bindAddress: bindAddress);
 }
 
 /// [SystemSshClient.openTunnel] and [SystemSshClient.openSocksProxy], with
@@ -206,18 +230,21 @@ List<String> Function(int localPort) localForwardToSocketAt(
 Future<SshTunnel> openSystemForward(
   SshTarget server, {
   required List<String> Function(int localPort) forward,
+  String bindAddress = '127.0.0.1',
   int? localPort,
   void Function(SshLog log)? onLog,
   Future<void>? abortTrigger,
   String executable = 'ssh',
   Map<String, String> environment = const {},
-  Future<int> Function() freePort = pickFreePort,
-  Future<bool> Function(int port) portIsFree = isPortFree,
+  Future<int> Function()? freePort,
+  Future<bool> Function(int port)? portIsFree,
   Duration configTimeout = const Duration(seconds: 5),
   ConnectionPool? pool,
 }) async {
   checkServer(server);
   if (localPort != null) checkLocalPort(localPort);
+  final isFree = portIsFree ?? (port) => isPortFree(port, address: bindAddress);
+  final pickPort = freePort ?? () => pickFreePort(address: bindAddress);
 
   var isAborted = false;
   unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
@@ -231,8 +258,8 @@ Future<SshTunnel> openSystemForward(
   );
   if (isAborted) throw const SshTunnelAbortedException();
   // A taken port needs no login to say so.
-  if (pool != null && localPort != null && !await portIsFree(localPort)) {
-    throw SshPortInUseException(localPort);
+  if (pool != null && localPort != null && !await isFree(localPort)) {
+    throw SshPortInUseException(localPort, address: bindAddress);
   }
   // Held while it opens, so a retry on a taken port reuses the login.
   final shared = await checkingHostKeys(
@@ -274,6 +301,7 @@ Future<SshTunnel> openSystemForward(
       () async => SystemSshTunnel.attach(
         await startWatched(command, environment: environment),
         localPort: port,
+        bindAddress: bindAddress,
         onLog: onLog,
         abortTrigger: abortTrigger,
       ),
@@ -283,29 +311,31 @@ Future<SshTunnel> openSystemForward(
   Future<SshTunnel> open() async {
     if (localPort != null) {
       if (isAborted) throw const SshTunnelAbortedException();
-      if (!await portIsFree(localPort)) throw SshPortInUseException(localPort);
+      if (!await isFree(localPort)) {
+        throw SshPortInUseException(localPort, address: bindAddress);
+      }
       if (isAborted) throw const SshTunnelAbortedException();
 
       try {
         return await start(localPort);
       } on SshTunnelException catch (exception) {
         // A host key or a login that failed isn't about the port.
-        if (exception.isPermanent || await portIsFree(localPort)) rethrow;
-        throw SshPortInUseException(localPort);
+        if (exception.isPermanent || await isFree(localPort)) rethrow;
+        throw SshPortInUseException(localPort, address: bindAddress);
       }
     }
 
     for (var attempt = 1;; attempt++) {
       if (isAborted) throw const SshTunnelAbortedException();
 
-      final port = await freePort();
+      final port = await pickPort();
       if (isAborted) throw const SshTunnelAbortedException();
 
       try {
         return await start(port);
       } on SshTunnelException catch (exception) {
         // Another process can take the port before ssh binds it.
-        if (exception.isPermanent || attempt == 3 || await portIsFree(port)) {
+        if (exception.isPermanent || attempt == 3 || await isFree(port)) {
           rethrow;
         }
       }
