@@ -257,9 +257,14 @@ Future<SshTunnel> openSystemForward(
     abortTrigger: abortTrigger,
   );
   if (isAborted) throw const SshTunnelAbortedException();
-  // A taken port needs no login to say so.
-  if (pool != null && localPort != null && !await isFree(localPort)) {
-    throw SshPortInUseException(localPort, address: bindAddress);
+  // A taken port, or an address this computer lacks, needs no login to say
+  // so. Port 0 checks the address alone.
+  if (pool != null) {
+    if (localPort == null) {
+      await isPortFree(0, address: bindAddress);
+    } else if (!await isFree(localPort)) {
+      throw SshPortInUseException(localPort, address: bindAddress);
+    }
   }
   // Held while it opens, so a retry on a taken port reuses the login.
   final shared = await checkingHostKeys(

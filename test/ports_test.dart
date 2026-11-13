@@ -35,6 +35,13 @@ void main() {
         isTrue);
   });
 
+  test('isPortFree on :: leaves IPv4 alone, as ssh does', () async {
+    final socket = await ServerSocket.bind(InternetAddress.anyIPv4, 0);
+    addTearDown(socket.close);
+
+    expect(await isPortFree(socket.port, address: '::'), isTrue);
+  });
+
   // 192.0.2.1 is TEST-NET-1, kept for documentation, so no computer has it.
   test('says an address is not this computer\'s, rather than taken', () async {
     await expectLater(

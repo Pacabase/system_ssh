@@ -2,9 +2,10 @@
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`
   to listen on instead of `127.0.0.1`: an IP address of this computer, such
-  as Docker's bridge `172.17.0.1` so containers can reach the tunnel, or
-  `0.0.0.0` for every network. Whatever can reach that address can use the
-  tunnel, with no login of its own, so the default stays `127.0.0.1`:
+  as Docker's bridge `172.17.0.1` on Linux so containers can reach the
+  tunnel, `0.0.0.0` for every IPv4 network or `::` for every IPv6 one.
+  Whatever can reach that address can use the tunnel, with no login of its
+  own, so the default stays `127.0.0.1`:
 
   ```dart
   final tunnel = await client.openTunnel(

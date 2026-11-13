@@ -7,7 +7,8 @@ import 'ssh_target.dart';
 /// to listen on (`127.0.0.1` by default), reach the remote host and port it
 /// was opened to, or, for a SOCKS proxy, the ones they ask for.
 abstract interface class SshTunnel {
-  /// The port to connect to.
+  /// The port to connect to, on the address the tunnel was opened to listen
+  /// on.
   int get localPort;
 
   /// Completes when [close] stops ssh. When ssh exits on its own, because the
@@ -49,9 +50,9 @@ abstract interface class SshClient {
   ///
   /// It listens on [bindAddress], an IP address of this computer:
   /// `127.0.0.1` by default, so only this computer can use it. Another
-  /// address, such as Docker's bridge `172.17.0.1` or `0.0.0.0` for every
-  /// network, lets whatever can reach it use the tunnel, with no login of
-  /// its own.
+  /// address, such as Docker's bridge `172.17.0.1` on Linux, `0.0.0.0` for
+  /// every IPv4 network or `::` for every IPv6 one, lets whatever can reach
+  /// it use the tunnel, with no login of its own.
   ///
   /// [onLog] gets an [SshLog] for each non-blank line ssh writes while it
   /// connects, then, until [SshTunnel.close], everything but [SshProgress]:

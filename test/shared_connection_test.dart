@@ -577,6 +577,18 @@ void main() {
     });
   });
 
+  test('an address this computer lacks fails before the shared login',
+      () async {
+    final shared =
+        SystemSshClient(executable: fake.path, shareConnections: true);
+
+    await expectLater(
+      shared.openSocksProxy(server, bindAddress: '192.0.2.1'),
+      throwsA(isA<SshException>()),
+    );
+    expect(fake.attempts, isEmpty);
+  });
+
   test('SystemSshClient shares only when asked', () async {
     fake.attemptModes([AttemptMode.ready]);
 
@@ -595,6 +607,11 @@ void main() {
       'forward 127.0.0.1:${proxy.localPort}',
       forwardOf(tunnel),
     ]);
+
+    final elsewhere =
+        await shared.openSocksProxy(server, bindAddress: '0.0.0.0');
+    addTearDown(elsewhere.close);
+    expect(operations().last, 'forward 0.0.0.0:${elsewhere.localPort}');
 
     final own =
         await SystemSshClient(executable: fake.path).openSocksProxy(server);

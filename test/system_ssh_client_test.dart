@@ -275,22 +275,101 @@ void main() {
 
     CountingPorts takenPorts() => CountingPorts((_) async => taken.port);
 
-    test('listens on the bind address it is given', () async {
-      fake.attemptModes([AttemptMode.ready]);
-      final port = await pickFreePort();
+    group('a bind address', () {
+      SystemSshClient client() => SystemSshClient(executable: fake.path);
 
-      final tunnel = await openSystemForward(
-        server,
-        forward: localForwardTo('db.example.com', 3306, bindAddress: '0.0.0.0'),
-        bindAddress: '0.0.0.0',
-        executable: fake.path,
-        freePort: () async => port,
-        portIsFree: (_) async => true,
-      );
-      addTearDown(tunnel.close);
+      final methods = <(
+        String,
+        Future<SshTunnel> Function(String address, int? localPort),
+        List<String> Function(String address, int port),
+      )>[
+        (
+          'openTunnel',
+          (address, localPort) => client().openTunnel(
+                server,
+                remoteHost: 'db.example.com',
+                remotePort: 3306,
+                bindAddress: address,
+                localPort: localPort,
+              ),
+          (address, port) => localForward(
+                port,
+                bindAddress: address,
+                remoteHost: 'db.example.com',
+                remotePort: 3306,
+              ),
+        ),
+        (
+          'openSocketTunnel',
+          (address, localPort) => client().openSocketTunnel(
+                server,
+                remoteSocket: '/run/d.sock',
+                bindAddress: address,
+                localPort: localPort,
+              ),
+          (address, port) => localForwardToSocket(
+                port,
+                bindAddress: address,
+                remoteSocket: '/run/d.sock',
+              ),
+        ),
+        (
+          'openSocksProxy',
+          (address, localPort) => client().openSocksProxy(
+                server,
+                bindAddress: address,
+                localPort: localPort,
+              ),
+          (address, port) => dynamicForward(port, bindAddress: address),
+        ),
+      ];
 
-      expect(
-          fake.attempts.single, contains('0.0.0.0:$port:db.example.com:3306'));
+      for (final (name, open, forward) in methods) {
+        test('$name listens there', () async {
+          fake.attemptModes([AttemptMode.ready]);
+
+          final tunnel = await open('0.0.0.0', null);
+          addTearDown(tunnel.close);
+
+          expect(fake.attempts, [
+            sshCommand(server, forward: forward('0.0.0.0', tunnel.localPort))
+                .sublist(1),
+          ]);
+        });
+
+        for (final localPort in [null, 5432]) {
+          test(
+              '$name says 192.0.2.1 is not this computer\'s '
+              '(${localPort == null ? 'a picked port' : 'a fixed port'})',
+              () async {
+            await expectLater(
+              open('192.0.2.1', localPort),
+              throwsA(
+                isA<SshException>().having(
+                  (exception) => exception.message,
+                  'message',
+                  "192.0.2.1 isn't an address of this computer",
+                ),
+              ),
+            );
+            expect(fake.attempts, isEmpty);
+          });
+        }
+      }
+
+      test('can be IPv6', () async {
+        fake.attemptModes([AttemptMode.ready]);
+
+        final proxy = await client().openSocksProxy(server, bindAddress: '::1');
+        addTearDown(proxy.close);
+
+        expect(fake.attempts, [
+          sshCommand(
+            server,
+            forward: dynamicForward(proxy.localPort, bindAddress: '::1'),
+          ).sublist(1),
+        ]);
+      });
     });
 
     test('says which address a taken port is taken on', () async {
