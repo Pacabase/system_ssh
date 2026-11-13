@@ -1,4 +1,4 @@
-## Unreleased
+## 0.9.1
 
 - `tunnelCommand` and `remoteTunnelCommand` throw an `ArgumentError` for a
   `remoteHost` or `localHost` that `openTunnel` and `openRemoteTunnel`
