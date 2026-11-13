@@ -1,4 +1,4 @@
-## Unreleased
+## 0.9.2
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`
   to listen on instead of `127.0.0.1`: an IP address of this computer, such
