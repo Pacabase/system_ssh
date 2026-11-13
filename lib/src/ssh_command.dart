@@ -11,6 +11,16 @@ List<String> destinationArguments(SshTarget server) => [
       server.host,
     ];
 
+// ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped, and a
+// forward reads a `/` as the start of a socket path.
+final _unsafeInHost = RegExp(r'''[\s'"`$;&|<>(){}\\/]|[\x00-\x1f]''');
+
+void checkHost(String host, String name) {
+  if (host.contains(_unsafeInHost)) {
+    throw ArgumentError.value(host, name, 'is not a valid host');
+  }
+}
+
 void checkLocalPort(int port) => checkPort(port, 'localPort');
 
 void checkPort(int port, String name) {

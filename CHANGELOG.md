@@ -1,3 +1,25 @@
+## Unreleased
+
+- `tunnelCommand` and `remoteTunnelCommand` throw an `ArgumentError` for a
+  `remoteHost` or `localHost` that `openTunnel` and `openRemoteTunnel`
+  reject, such as a socket path or a host holding spaces or shell
+  characters, instead of returning a command ssh would misread. An app that
+  checks a tunnel by building its command, before saving it, now catches
+  these too:
+
+  ```dart
+  try {
+    remoteTunnelCommand(
+      server,
+      localHost: '/var/run/docker.sock',
+      localPort: 3000,
+      remotePort: 8080,
+    );
+  } on ArgumentError {
+    // Not a tunnel ssh can open.
+  }
+  ```
+
 ## 0.9.0
 
 - **Breaking:** `SshClient` has the new `openRemoteTunnel`,

@@ -53,6 +53,20 @@ void main() {
       );
     });
 
+    for (final host in ['/var/run/docker.sock', 'db;reboot', 'db example']) {
+      test('rejects a destination ssh would misread: $host', () {
+        expect(
+          () => tunnelCommand(
+            const SshTarget('ssh.example.com'),
+            remoteHost: host,
+            remotePort: 5432,
+            localPort: 15432,
+          ),
+          throwsArgumentError,
+        );
+      });
+    }
+
     for (final port in [0, 65536]) {
       test('rejects local port $port', () {
         expect(
@@ -146,6 +160,20 @@ void main() {
         'ssh -N -R 127.0.0.1:8080:[::1]:3000 ssh.example.com',
       );
     });
+
+    for (final host in ['/var/run/docker.sock', 'localhost;reboot']) {
+      test('rejects a local host ssh would misread: $host', () {
+        expect(
+          () => remoteTunnelCommand(
+            const SshTarget('ssh.example.com'),
+            localHost: host,
+            localPort: 3000,
+            remotePort: 8080,
+          ),
+          throwsArgumentError,
+        );
+      });
+    }
 
     test('rejects ports outside 1 to 65535', () {
       const server = SshTarget('ssh.example.com');
