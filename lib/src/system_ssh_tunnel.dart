@@ -5,6 +5,7 @@ import 'dart:io';
 import 'exceptions.dart';
 import 'logger.dart';
 import 'ssh_client.dart';
+import 'ssh_command.dart';
 import 'ssh_log.dart';
 import 'ssh_output.dart';
 
@@ -28,6 +29,7 @@ final class SystemSshTunnel implements SshTunnel {
   static Future<SystemSshTunnel> attach(
     Process process, {
     required int localPort,
+    String bindAddress = '127.0.0.1',
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async =>
@@ -36,7 +38,7 @@ final class SystemSshTunnel implements SshTunnel {
         await ForwardProcess.attach(
           process,
           readiness: LocalForwardReadiness(localPort),
-          describe: () => '127.0.0.1:$localPort',
+          describe: () => '${bracketIPv6(bindAddress)}:$localPort',
           onLog: onLog,
           abortTrigger: abortTrigger,
         ),

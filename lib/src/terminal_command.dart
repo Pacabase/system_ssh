@@ -9,19 +9,27 @@ import 'ssh_target.dart';
 ///
 /// Throws an [ArgumentError] for a [server] host starting with `-`, which ssh
 /// would read as an option, a [remoteHost] that `openTunnel` rejects (such as
-/// a socket path, or one holding spaces or shell characters), or a
-/// [localPort] outside 1 to 65535.
+/// a socket path, or one holding spaces or shell characters), a
+/// [bindAddress] that isn't an IP address, or a [localPort] outside 1 to
+/// 65535.
 String tunnelCommand(
   SshTarget server, {
   required String remoteHost,
   required int remotePort,
+  String bindAddress = '127.0.0.1',
   required int localPort,
 }) {
   checkLocalPort(localPort);
   checkHost(remoteHost, 'remoteHost');
+  checkBindAddress(bindAddress);
   return _command(
     server,
-    localForward(localPort, remoteHost: remoteHost, remotePort: remotePort),
+    localForward(
+      localPort,
+      bindAddress: bindAddress,
+      remoteHost: remoteHost,
+      remotePort: remotePort,
+    ),
   );
 }
 
@@ -30,17 +38,24 @@ String tunnelCommand(
 /// ssh.example.com`.
 ///
 /// Throws an [ArgumentError] for a [server] host starting with `-`, a
-/// [remoteSocket] ssh would misread, or a [localPort] outside 1 to 65535.
+/// [remoteSocket] ssh would misread, a [bindAddress] that isn't an IP
+/// address, or a [localPort] outside 1 to 65535.
 String socketTunnelCommand(
   SshTarget server, {
   required String remoteSocket,
+  String bindAddress = '127.0.0.1',
   required int localPort,
 }) {
   checkLocalPort(localPort);
   checkSocketPath(remoteSocket, 'remoteSocket');
+  checkBindAddress(bindAddress);
   return _command(
     server,
-    localForwardToSocket(localPort, remoteSocket: remoteSocket),
+    localForwardToSocket(
+      localPort,
+      bindAddress: bindAddress,
+      remoteSocket: remoteSocket,
+    ),
   );
 }
 
@@ -71,10 +86,19 @@ String remoteTunnelCommand(
 /// terminal, such as `ssh -N -D 127.0.0.1:1080 ssh.example.com`.
 ///
 /// Throws an [ArgumentError] for a [server] host starting with `-`, which ssh
-/// would read as an option, or a [localPort] outside 1 to 65535.
-String socksProxyCommand(SshTarget server, {required int localPort}) {
+/// would read as an option, a [bindAddress] that isn't an IP address, or a
+/// [localPort] outside 1 to 65535.
+String socksProxyCommand(
+  SshTarget server, {
+  String bindAddress = '127.0.0.1',
+  required int localPort,
+}) {
   checkLocalPort(localPort);
-  return _command(server, dynamicForward(localPort));
+  checkBindAddress(bindAddress);
+  return _command(
+    server,
+    dynamicForward(localPort, bindAddress: bindAddress),
+  );
 }
 
 String _command(SshTarget server, List<String> forward) {

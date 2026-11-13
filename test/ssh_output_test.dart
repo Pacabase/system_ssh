@@ -159,4 +159,19 @@ void main() {
     expect(isListeningOn(line, 500), isFalse);
     expect(isListeningOn(line, 50000), isFalse);
   });
+
+  test('isListeningOn matches the port on any address', () {
+    expect(
+      isListeningOn(
+        'debug1: Local forwarding listening on 172.17.0.1 port 5000.',
+        5000,
+      ),
+      isTrue,
+    );
+    expect(
+      isListeningOn(
+          'debug1: Local forwarding listening on :: port 5000.', 5000),
+      isTrue,
+    );
+  });
 }

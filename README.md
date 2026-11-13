@@ -29,7 +29,15 @@ Future<void> main() async {
 ```
 
 - `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
-- `localPort` forwards a fixed `127.0.0.1` port instead of a free one.
+- `localPort` forwards a fixed port instead of a free one.
+- `bindAddress` has the tunnel listen on another IP address of this
+  computer: on Linux, Docker's bridge `172.17.0.1`, so containers can use
+  it; `0.0.0.0` for every IPv4 network, or `::` for every IPv6 one (a tunnel
+  listens on one or the other). Whatever can reach that address can use the
+  tunnel, with no login of its own, so keep the default `127.0.0.1` unless
+  that's what you want. `openSocketTunnel` and `openSocksProxy` take it too.
+  With Docker Desktop on macOS or Windows, containers reach the default
+  through `host.docker.internal` instead.
 - `onLog` gets what ssh says as an `SshLog` with its `line`: `SshProgress`
   while it connects, `SshForwardFailed` with a `reason` for a connection
   through the open tunnel that couldn't be made (Windows' sshd doesn't say),
@@ -141,6 +149,8 @@ final cache = await client.openTunnel(server, remoteHost: 'cache', remotePort: 6
 - When it drops, every tunnel on it fails `done` together.
 - Two tunnels can't share the same remote forward (the same `remotePort`, or
   a server-picked port to the same local one); the second throws.
+- Two tunnels on the same `localPort` but different `bindAddress`es each
+  get the other's `SshForwardFailed`, since ssh names only the port.
 - Windows' OpenSSH can't share a connection, so there each tunnel keeps its
   own ssh.
 
@@ -269,9 +279,9 @@ If `ssh -G` fails or takes over 5 seconds, it adds every option above but
 `ForkAfterAuthentication=no`, so a `StrictHostKeyChecking accept-new` or `no`
 in your config becomes `yes`.
 
-The forward or proxy binds `127.0.0.1` only, and a remote forward asks the
-server for its `127.0.0.1` only, which it gets unless its sshd sets
-`GatewayPorts yes`. `close()`, or your process
+The forward or proxy binds `127.0.0.1` unless you pass another
+`bindAddress`, and a remote forward asks the server for its `127.0.0.1`
+only, which it gets unless its sshd sets `GatewayPorts yes`. `close()`, or your process
 exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it
 started.
 

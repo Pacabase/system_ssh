@@ -81,6 +81,74 @@ void main() {
       expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
     });
 
+    group('on a bind address', () {
+      InternetAddress? lan;
+
+      setUpAll(() async {
+        final addresses = [
+          for (final interface
+              in await NetworkInterface.list(type: InternetAddressType.IPv4))
+            ...interface.addresses.where((address) => !address.isLoopback),
+        ];
+        lan = addresses.firstOrNull;
+      });
+
+      Future<String> echoAt(InternetAddress address, int port) async {
+        final socket = await Socket.connect(address, port);
+        addTearDown(socket.destroy);
+        socket.done.ignore();
+        socket.add(utf8.encode('ping'));
+        return utf8.decode(
+          await socket
+              .expand((chunk) => chunk)
+              .take(4)
+              .toList()
+              .timeout(const Duration(seconds: 5)),
+        );
+      }
+
+      Future<SshTunnel> openOn(String address) async {
+        final tunnel =
+            await SystemSshClient(executable: fixture.ssh).openTunnel(
+          fixture.target,
+          remoteHost: fixture.echoHost,
+          remotePort: fixture.echoPort,
+          bindAddress: address,
+          onLog: logged(),
+        );
+        addTearDown(tunnel.close);
+        return tunnel;
+      }
+
+      test('0.0.0.0 forwards from every IPv4 address', () async {
+        final here = lan;
+        if (here == null) {
+          return markTestSkipped('no IPv4 address but loopback');
+        }
+        final tunnel = await openOn('0.0.0.0');
+
+        expect(await echoAt(here, tunnel.localPort), 'ping');
+        expect(
+          await echoAt(InternetAddress.loopbackIPv4, tunnel.localPort),
+          'ping',
+        );
+      });
+
+      test('another address forwards from it alone', () async {
+        final here = lan;
+        if (here == null) {
+          return markTestSkipped('no IPv4 address but loopback');
+        }
+        final tunnel = await openOn(here.address);
+
+        expect(await echoAt(here, tunnel.localPort), 'ping');
+        await expectLater(
+          Socket.connect(InternetAddress.loopbackIPv4, tunnel.localPort),
+          throwsA(isA<SocketException>()),
+        );
+      });
+    });
+
     test('forwards the local port to host and port once ssh says so', () async {
       final logs = <SshLog>[];
       final tunnel = await open(onLog: logs.add);

@@ -3,11 +3,12 @@ import 'ssh_host_key.dart';
 import 'ssh_log.dart';
 import 'ssh_target.dart';
 
-/// An open tunnel: connections to `127.0.0.1:`[localPort] reach the remote
-/// host and port it was opened to, or, for a SOCKS proxy, the ones they ask
-/// for.
+/// An open tunnel: connections to [localPort], on the address it was opened
+/// to listen on (`127.0.0.1` by default), reach the remote host and port it
+/// was opened to, or, for a SOCKS proxy, the ones they ask for.
 abstract interface class SshTunnel {
-  /// The `127.0.0.1` port to connect to.
+  /// The port to connect to, on the address the tunnel was opened to listen
+  /// on.
   int get localPort;
 
   /// Completes when [close] stops ssh. When ssh exits on its own, because the
@@ -36,7 +37,7 @@ abstract interface class SshRemoteTunnel {
 /// socket), remote forwards and SOCKS proxies (dynamic forwards). An interface, so an app can swap in a fake in its
 /// tests.
 abstract interface class SshClient {
-  /// Forwards [localPort] on `127.0.0.1`, or a free port when it is null,
+  /// Forwards [localPort] on [bindAddress], or a free port when it is null,
   /// through [server] to [remoteHost]:[remotePort], as [server] sees them.
   ///
   /// ```dart
@@ -46,6 +47,12 @@ abstract interface class SshClient {
   ///   remotePort: 5432,
   /// );
   /// ```
+  ///
+  /// It listens on [bindAddress], an IP address of this computer:
+  /// `127.0.0.1` by default, so only this computer can use it. Another
+  /// address, such as Docker's bridge `172.17.0.1` on Linux, `0.0.0.0` for
+  /// every IPv4 network or `::` for every IPv6 one, lets whatever can reach
+  /// it use the tunnel, with no login of its own.
   ///
   /// [onLog] gets an [SshLog] for each non-blank line ssh writes while it
   /// connects, then, until [SshTunnel.close], everything but [SshProgress]:
@@ -67,20 +74,23 @@ abstract interface class SshClient {
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshPortInUseException] when [localPort] is taken.
-  /// - [SshException] when the tunnel can't be set up for another reason.
+  /// - [SshException] when [bindAddress] isn't an address of this computer,
+  ///   or the tunnel can't be set up for another reason.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
-  ///   starting with `-` or holding spaces or shell characters, or a
-  ///   [localPort] outside 1 to 65535.
+  ///   starting with `-` or holding spaces or shell characters, a
+  ///   [bindAddress] that isn't an IP address, or a [localPort] outside 1 to
+  ///   65535.
   Future<SshTunnel> openTunnel(
     SshTarget server, {
     required String remoteHost,
     required int remotePort,
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   });
 
-  /// Forwards [localPort] on `127.0.0.1`, or a free port when it is null,
+  /// Forwards [localPort] on [bindAddress], or a free port when it is null,
   /// to the Unix socket at [remoteSocket] on [server], such as a Docker or
   /// PostgreSQL socket.
   ///
@@ -95,7 +105,8 @@ abstract interface class SshClient {
   /// The server needs an sshd that serves Unix sockets, as OpenSSH does on
   /// Linux and macOS, and a login allowed to open [remoteSocket]. A
   /// connection it can't make comes to [onLog] as an [SshForwardFailed].
-  /// [onLog] and [abortTrigger] otherwise work as in [openTunnel].
+  /// [bindAddress], [onLog] and [abortTrigger] otherwise work as in
+  /// [openTunnel].
   ///
   /// Throws as [openTunnel] does, and an [ArgumentError] for a
   /// [remoteSocket] that isn't an absolute path, or holds `:`, `%` or `$`,
@@ -103,6 +114,7 @@ abstract interface class SshClient {
   Future<SshTunnel> openSocketTunnel(
     SshTarget server, {
     required String remoteSocket,
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
@@ -149,8 +161,8 @@ abstract interface class SshClient {
     Future<void>? abortTrigger,
   });
 
-  /// Serves a SOCKS5 proxy on `127.0.0.1:`[localPort], or a free port when it
-  /// is null, whose connections [server] makes.
+  /// Serves a SOCKS5 proxy on [bindAddress]:[localPort], or a free port when
+  /// it is null, whose connections [server] makes.
   ///
   /// ```dart
   /// final proxy = await client.openSocksProxy(
@@ -158,7 +170,7 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [onLog] and [abortTrigger] work as in [openTunnel].
+  /// [bindAddress], [onLog] and [abortTrigger] work as in [openTunnel].
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
@@ -170,12 +182,15 @@ abstract interface class SshClient {
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshPortInUseException] when [localPort] is taken.
-  /// - [SshException] when the proxy can't be set up for another reason.
+  /// - [SshException] when [bindAddress] isn't an address of this computer,
+  ///   or the proxy can't be set up for another reason.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
-  ///   starting with `-` or holding spaces or shell characters, or a
-  ///   [localPort] outside 1 to 65535.
+  ///   starting with `-` or holding spaces or shell characters, a
+  ///   [bindAddress] that isn't an IP address, or a [localPort] outside 1 to
+  ///   65535.
   Future<SshTunnel> openSocksProxy(
     SshTarget server, {
+    String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,

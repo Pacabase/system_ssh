@@ -85,6 +85,10 @@ void main() {
         exception.toString(),
         'SshPortInUseException: 127.0.0.1:5432 is already in use',
       );
+      expect(
+        const SshPortInUseException(5432, address: '172.17.0.1').message,
+        '172.17.0.1:5432 is already in use',
+      );
     });
   });
 }

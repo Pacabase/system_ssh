@@ -161,15 +161,19 @@ final class SshConfigException extends SshException {
   String toString() => 'SshConfigException: $message';
 }
 
-/// The `127.0.0.1` port asked of [SshClient.openTunnel],
-/// [SshClient.openSocketTunnel] or [SshClient.openSocksProxy] is taken.
+/// The port asked of [SshClient.openTunnel], [SshClient.openSocketTunnel] or
+/// [SshClient.openSocksProxy] is taken on the address it would listen on.
 final class SshPortInUseException extends SshException {
-  /// An error saying [port] on `127.0.0.1` is already in use.
-  const SshPortInUseException(this.port)
-      : super('127.0.0.1:$port is already in use');
+  /// An error saying [port] on [address] is already in use.
+  const SshPortInUseException(this.port, {this.address = '127.0.0.1'})
+      : super('$address:$port is already in use');
 
   /// The port that is taken.
   final int port;
+
+  /// The address it is taken on, `127.0.0.1` unless the tunnel asked for
+  /// another.
+  final String address;
 
   @override
   bool get isPermanent => true;

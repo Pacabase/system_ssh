@@ -46,8 +46,7 @@ SshTunnelException tunnelFailure(List<String> log, int code) {
 bool isListeningOn(String line, int localPort) =>
     _listening.firstMatch(line)?[1] == '$localPort';
 
-final _listening =
-    RegExp(r'Local forwarding listening on 127\.0\.0\.1 port (\d+)\b');
+final _listening = RegExp(r'Local forwarding listening on \S+ port (\d+)\b');
 
 bool isSessionStarted(String line) =>
     line.contains('Entering interactive session');

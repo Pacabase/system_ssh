@@ -280,7 +280,14 @@ Future<void> _ssh(String directory, List<String> arguments) async {
 
   final forward =
       arguments.indexWhere((argument) => ['-L', '-D', '-R'].contains(argument));
-  final spec = arguments[forward + 1].split(':');
+  // A bracketed IPv6 address holds colons of its own.
+  final bracketed = RegExp(r'^\[([^\]]*)\]:(.*)').firstMatch(
+    arguments[forward + 1],
+  );
+  final spec = bracketed == null
+      ? arguments[forward + 1].split(':')
+      : [bracketed[1]!, ...bracketed[2]!.split(':')];
+  final address = spec[0];
   final port = spec[1];
 
   if (arguments[forward] == '-R') {
@@ -312,7 +319,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
   }
 
   final listening =
-      'debug1: Local forwarding listening on 127.0.0.1 port $port.';
+      'debug1: Local forwarding listening on $address port $port.';
 
   await _run(switch (mode) {
     AttemptMode.ready => [
@@ -328,7 +335,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
     AttemptMode.hang || AttemptMode.held => ['hang'],
     AttemptMode.bindFailure => [
         'err:$listening',
-        'err:bind [127.0.0.1]:$port: Address already in use',
+        'err:bind [$address]:$port: Address already in use',
         'err:channel_setup_fwd_listener_tcpip: cannot listen to port: $port',
         'err:Could not request local forwarding.',
         'exit:255',
