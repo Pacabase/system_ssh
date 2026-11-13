@@ -179,16 +179,13 @@ final class SystemSshClient implements SshClient {
 }
 
 // ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped.
-final _unsafeInHost = RegExp(r'''[\s'"`$;&|<>(){}\\/]|[\x00-\x1f]''');
 final _unsafeInUser = RegExp(r'''[\s'"`$;&|<>(){}/]|[\x00-\x1f]''');
 
 List<String> Function(int localPort) localForwardTo(
   String remoteHost,
   int remotePort,
 ) {
-  if (remoteHost.contains(_unsafeInHost)) {
-    throw ArgumentError.value(remoteHost, 'remoteHost', 'is not a valid host');
-  }
+  checkHost(remoteHost, 'remoteHost');
 
   return (port) => localForward(
         port,
@@ -336,9 +333,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   ConnectionPool? pool,
 }) async {
   checkServer(server);
-  if (localHost.contains(_unsafeInHost)) {
-    throw ArgumentError.value(localHost, 'localHost', 'is not a valid host');
-  }
+  checkHost(localHost, 'localHost');
   checkLocalPort(localPort);
   if (remotePort != null) checkPort(remotePort, 'remotePort');
 
@@ -419,9 +414,10 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
 }
 
 void checkServer(SshTarget server) {
-  if (server.host.startsWith('-') || server.host.contains(_unsafeInHost)) {
+  if (server.host.startsWith('-')) {
     throw ArgumentError.value(server.host, 'server', 'is not a valid host');
   }
+  checkHost(server.host, 'server');
   if (server.user case final user?
       when user.startsWith('-') || user.contains(_unsafeInUser)) {
     throw ArgumentError.value(user, 'server', 'is not a valid user');

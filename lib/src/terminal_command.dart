@@ -8,7 +8,9 @@ import 'ssh_target.dart';
 /// nobody watches, so ssh can ask for a password or a new host key there.
 ///
 /// Throws an [ArgumentError] for a [server] host starting with `-`, which ssh
-/// would read as an option, or a [localPort] outside 1 to 65535.
+/// would read as an option, a [remoteHost] that `openTunnel` rejects (such as
+/// a socket path, or one holding spaces or shell characters), or a
+/// [localPort] outside 1 to 65535.
 String tunnelCommand(
   SshTarget server, {
   required String remoteHost,
@@ -16,6 +18,7 @@ String tunnelCommand(
   required int localPort,
 }) {
   checkLocalPort(localPort);
+  checkHost(remoteHost, 'remoteHost');
   return _command(
     server,
     localForward(localPort, remoteHost: remoteHost, remotePort: remotePort),
@@ -46,8 +49,9 @@ String socketTunnelCommand(
 /// ssh.example.com`.
 ///
 /// Throws an [ArgumentError] for a [server] host starting with `-`, which ssh
-/// would read as an option, or a [localPort] or [remotePort] outside 1 to
-/// 65535.
+/// would read as an option, a [localHost] that `openRemoteTunnel` rejects
+/// (such as a socket path, or one holding spaces or shell characters), or a
+/// [localPort] or [remotePort] outside 1 to 65535.
 String remoteTunnelCommand(
   SshTarget server, {
   String localHost = 'localhost',
@@ -55,6 +59,7 @@ String remoteTunnelCommand(
   required int remotePort,
 }) {
   checkLocalPort(localPort);
+  checkHost(localHost, 'localHost');
   checkPort(remotePort, 'remotePort');
   return _command(
     server,
