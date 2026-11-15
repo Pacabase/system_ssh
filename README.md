@@ -208,7 +208,7 @@ try {
 An app started from the macOS Dock or Finder gets none of what your shell
 profile sets: its `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`. On Linux a
 desktop launcher usually reads `~/.profile`, but not `~/.bashrc`, `~/.zshrc`
-or `~/.zprofile`. A `ProxyCommand` running `cloudflared` or `aws` from
+or `~/.zprofile`. A `ProxyCommand` running `aws` from
 Homebrew then isn't found, and an `SSH_AUTH_SOCK` exported in your shell
 profile isn't used. Turn on
 `loginShell` to give ssh your login shell's `PATH`, `HOME`, `DISPLAY` and
