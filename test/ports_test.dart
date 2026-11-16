@@ -47,7 +47,7 @@ void main() {
     await expectLater(
       isPortFree(5432, address: '192.0.2.1'),
       throwsA(
-        isA<SshException>().having(
+        isA<SshAddressUnavailableException>().having(
           (exception) => exception.message,
           'message',
           "192.0.2.1 isn't an address of this computer",
@@ -56,7 +56,7 @@ void main() {
     );
     await expectLater(
       pickFreePort(address: '192.0.2.1'),
-      throwsA(isA<SshException>()),
+      throwsA(isA<SshAddressUnavailableException>()),
     );
   });
 }

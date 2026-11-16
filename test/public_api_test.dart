@@ -299,31 +299,6 @@ void main() {
     );
   });
 
-  test('exports every exception, permanent or temporary', () {
-    final permanent = <SshPermanentException>[
-      SshNotFoundException(),
-      const SshConfigException('boom'),
-      const SshPortInUseException(5432),
-      const SshLoginRefusedException('boom', exitCode: 255),
-      const SshHostKeyRefusedException('boom'),
-      SshUnknownHostKeyException(_hostKey),
-      SshHostKeyChangedException(_hostKey),
-    ];
-    final temporary = <SshTemporaryException>[
-      const SshHostNotFoundException('boom'),
-      const SshUnreachableException('boom', log: ['debug1: Connecting']),
-      const SshDroppedException('boom'),
-      const SshAddressUnavailableException('10.0.0.9'),
-      const SshFailedException('boom'),
-    ];
-
-    expect(
-      [...permanent, ...temporary, const SshTunnelAbortedException()]
-          .map((exception) => exception.message),
-      everyElement(isNotEmpty),
-    );
-  });
-
   test('lets a switch name every exception', () {
     String reason(SshException exception) => switch (exception) {
           SshNotFoundException() => 'no ssh',

@@ -453,6 +453,23 @@ void main() {
       );
     });
 
+    test('an unknown key at a taken picked port is not retried', () async {
+      fake.hostKeyMode(HostKeyMode.unknown);
+      final ports = CountingPorts();
+
+      await expectLater(
+        openSystemForward(
+          server,
+          forward: localForwardTo('db.example.com', 3306),
+          freePort: ports.next,
+          portIsFree: (_) async => false,
+          executable: fake.path,
+        ),
+        throwsA(isA<SshUnknownHostKeyException>()),
+      );
+      expect(ports.picks, 1);
+    });
+
     test("an unknown ProxyJump host is ssh's failure, not one to trust",
         () async {
       fake.hostKeyMode(HostKeyMode.jumpUnknown);
@@ -547,7 +564,7 @@ void main() {
         await expectLater(
           client.trustHostKey(server, hostKey),
           throwsA(
-            isA<SshException>().having(
+            isA<SshUnreachableException>().having(
               (exception) => exception.message,
               'message',
               contains('Connection closed'),
@@ -636,6 +653,32 @@ void main() {
         abort.complete();
 
         await expectLater(trusting, throwsA(isA<SshTunnelAbortedException>()));
+        expect(fake.knownHosts.existsSync(), isFalse);
+      });
+
+      test("gives up when ssh doesn't read the key in time", () async {
+        fake.trustMode(TrustMode.hang);
+
+        await expectLater(
+          trustSystemHostKey(
+            server,
+            hostKey,
+            executable: fake.path,
+            config: {
+              'hostname': 'ssh.example.com',
+              'port': '22',
+              'userknownhostsfile': fake.knownHosts.path,
+            },
+            timeout: const Duration(milliseconds: 200),
+          ),
+          throwsA(
+            isA<SshUnreachableException>().having(
+              (exception) => exception.message,
+              'message',
+              "ssh didn't read the host key in time",
+            ),
+          ),
+        );
         expect(fake.knownHosts.existsSync(), isFalse);
       });
 

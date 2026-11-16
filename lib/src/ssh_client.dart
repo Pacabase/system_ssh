@@ -72,9 +72,10 @@ abstract interface class SshClient {
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
-  /// - Another [SshException] when ssh exits before the forward is up, of
-  ///   the class its reason calls for, such as an [SshLoginRefusedException]
-  ///   or an [SshUnreachableException].
+  /// - Another [SshException] when ssh exits before the forward is up, or it
+  ///   can't be set up: the class its reason calls for, such as an
+  ///   [SshLoginRefusedException] or [SshUnreachableException], else an
+  ///   [SshFailedException].
   /// - [SshUnknownHostKeyException] when the server's host key isn't in
   ///   `known_hosts` yet and the config leaves `StrictHostKeyChecking` at
   ///   `ask`; see [trustHostKey].
@@ -84,8 +85,6 @@ abstract interface class SshClient {
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.
-  /// - [SshFailedException] when the tunnel can't be set up for another
-  ///   reason.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
   ///   starting with `-` or holding spaces or shell characters, a
   ///   [bindAddress] that isn't an IP address, or a [localPort] outside 1 to
@@ -149,17 +148,17 @@ abstract interface class SshClient {
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
-  /// - Another [SshException] when ssh exits before the forward is up, such as
-  ///   when [remotePort] is taken on the server or its sshd doesn't allow
-  ///   forwarding: `Error: remote port forwarding failed for listen port`.
+  /// - Another [SshException] when ssh exits before the forward is up, or it
+  ///   can't be set up: the class its reason calls for, else an
+  ///   [SshFailedException], as when [remotePort] is taken on the server or
+  ///   its sshd doesn't allow forwarding:
+  ///   `Error: remote port forwarding failed for listen port`.
   /// - [SshUnknownHostKeyException] when the server's host key isn't in
   ///   `known_hosts` yet and the config leaves `StrictHostKeyChecking` at
   ///   `ask`; see [trustHostKey].
   /// - [SshHostKeyChangedException] when the server's host key isn't the one
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
-  /// - [SshFailedException] when the forward can't be set up for another
-  ///   reason.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
   ///   starting with `-` or holding spaces or shell characters, or a
   ///   [localPort] or [remotePort] outside 1 to 65535.
@@ -185,7 +184,9 @@ abstract interface class SshClient {
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
-  /// - Another [SshException] when ssh exits before the proxy is up.
+  /// - Another [SshException] when ssh exits before the proxy is up, or it
+  ///   can't be set up: the class its reason calls for, else an
+  ///   [SshFailedException].
   /// - [SshUnknownHostKeyException] when the server's host key isn't in
   ///   `known_hosts` yet and the config leaves `StrictHostKeyChecking` at
   ///   `ask`; see [trustHostKey].
@@ -195,8 +196,6 @@ abstract interface class SshClient {
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.
-  /// - [SshFailedException] when the proxy can't be set up for another
-  ///   reason.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
   ///   starting with `-` or holding spaces or shell characters, a
   ///   [bindAddress] that isn't an IP address, or a [localPort] outside 1 to
@@ -236,8 +235,9 @@ abstract interface class SshClient {
   ///   isn't [hostKey]: ask the user about that one instead.
   /// - [SshHostKeyChangedException] when `known_hosts` already holds another
   ///   key for [server].
-  /// - An [SshUnreachableException] when ssh can't reach the server to read
-  ///   its key.
+  /// - Another [SshException] when ssh can't read the server's key: the
+  ///   class its reason calls for, such as an [SshHostNotFoundException] or,
+  ///   when it doesn't answer in time, an [SshUnreachableException].
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshNotFoundException] when no `ssh` can be started.
   /// - [SshFailedException] when the key can't be written to `known_hosts`.

@@ -19,8 +19,11 @@ import 'ssh_host_key.dart';
 ///
 /// A `switch` over the classes puts each in the app's own words. A later
 /// version may add a class, which breaks a `switch` that names every one, so
-/// the CHANGELOG calls that out.
+/// it comes as a breaking release with a **Breaking:** CHANGELOG entry; one
+/// that only catches the two groups keeps working.
 sealed class SshException implements Exception {
+  /// An error that says [message], with what ssh wrote in [log] and its
+  /// [exitCode].
   const SshException(this.message, {this.log = const [], this.exitCode});
 
   /// What went wrong, in ssh's words when ssh said why.
@@ -33,19 +36,38 @@ sealed class SshException implements Exception {
   /// ssh's exit code, if it exited.
   final int? exitCode;
 
+  // Spelled out, since an obfuscated build renames runtimeType.
   @override
-  String toString() => 'SshException: $message';
+  String toString() => '${switch (this) {
+        SshNotFoundException() => 'SshNotFoundException',
+        SshConfigException() => 'SshConfigException',
+        SshPortInUseException() => 'SshPortInUseException',
+        SshLoginRefusedException() => 'SshLoginRefusedException',
+        SshHostKeyRefusedException() => 'SshHostKeyRefusedException',
+        SshUnknownHostKeyException() => 'SshUnknownHostKeyException',
+        SshHostKeyChangedException() => 'SshHostKeyChangedException',
+        SshHostNotFoundException() => 'SshHostNotFoundException',
+        SshUnreachableException() => 'SshUnreachableException',
+        SshDroppedException() => 'SshDroppedException',
+        SshAddressUnavailableException() => 'SshAddressUnavailableException',
+        SshFailedException() => 'SshFailedException',
+        SshTunnelAbortedException() => 'SshTunnelAbortedException',
+      }}: $message';
 }
 
 /// Trying again can't work until the user changes something: a host key, a
 /// login, the ssh config or a port in use.
 sealed class SshPermanentException extends SshException {
+  /// An error that says [message], with what ssh wrote in [log] and its
+  /// [exitCode].
   const SshPermanentException(super.message, {super.log, super.exitCode});
 }
 
 /// Trying again may work: the network, the server or this computer may come
 /// back, or the failure was a race.
 sealed class SshTemporaryException extends SshException {
+  /// An error that says [message], with what ssh wrote in [log] and its
+  /// [exitCode].
   const SshTemporaryException(super.message, {super.log, super.exitCode});
 }
 
@@ -63,20 +85,15 @@ final class SshNotFoundException extends SshPermanentException {
         );
 
   const SshNotFoundException._(super.message);
-
-  @override
-  String toString() => 'SshNotFoundException: $message';
 }
 
 /// The user's ssh config for the host stops the tunnel: it sets
-/// `ClearAllForwardings`, or ssh can't read it, for a bad option, a syntax
-/// error or the file's owner or permissions.
+/// `ClearAllForwardings`, ssh can't read it, for a bad option, a syntax error
+/// or the file's owner or permissions, or it allows no algorithm the server
+/// offers (`Unable to negotiate`).
 final class SshConfigException extends SshPermanentException {
   /// An error saying, in [message], what in the config stops the tunnel.
   const SshConfigException(super.message, {super.log, super.exitCode});
-
-  @override
-  String toString() => 'SshConfigException: $message';
 }
 
 /// The port asked of [SshClient.openTunnel], [SshClient.openSocketTunnel] or
@@ -92,9 +109,6 @@ final class SshPortInUseException extends SshPermanentException {
   /// The address it is taken on, `127.0.0.1` unless the tunnel asked for
   /// another.
   final String address;
-
-  @override
-  String toString() => 'SshPortInUseException: $message';
 }
 
 /// The server refused every login ssh tried, such as a key it doesn't know or
@@ -109,23 +123,18 @@ final class SshPortInUseException extends SshPermanentException {
 final class SshLoginRefusedException extends SshPermanentException {
   /// An error saying, in [message], how the server refused the login.
   const SshLoginRefusedException(super.message, {super.log, super.exitCode});
-
-  @override
-  String toString() => 'SshLoginRefusedException: $message';
 }
 
-/// ssh refused the server's host key, where the user's ssh config sets
-/// `StrictHostKeyChecking` to `yes`, or the key differs from `known_hosts`.
+/// ssh refused a host key that isn't asked about: the user's ssh config sets
+/// `StrictHostKeyChecking yes`, or a `ProxyJump` host's key is unknown or
+/// changed.
 ///
-/// Where the config leaves `StrictHostKeyChecking` at `ask`, an
-/// [SshUnknownHostKeyException] or [SshHostKeyChangedException] comes
-/// instead, with the key the server offers.
+/// For the server's own key, where the config leaves `StrictHostKeyChecking`
+/// at `ask`, an [SshUnknownHostKeyException] or [SshHostKeyChangedException]
+/// comes instead, with the key the server offers.
 final class SshHostKeyRefusedException extends SshPermanentException {
   /// An error saying, in [message], why ssh refused the host key.
   const SshHostKeyRefusedException(super.message, {super.log, super.exitCode});
-
-  @override
-  String toString() => 'SshHostKeyRefusedException: $message';
 }
 
 /// The server's host key isn't in `known_hosts` yet, so ssh refused it rather
@@ -156,9 +165,6 @@ final class SshUnknownHostKeyException extends SshPermanentException {
 
   /// The key the server offered.
   final SshHostKey hostKey;
-
-  @override
-  String toString() => 'SshUnknownHostKeyException: $message';
 }
 
 /// The server offers a host key other than the one `known_hosts` holds for it,
@@ -178,9 +184,6 @@ final class SshHostKeyChangedException extends SshPermanentException {
 
   /// The key the server offers now.
   final SshHostKey hostKey;
-
-  @override
-  String toString() => 'SshHostKeyChangedException: $message';
 }
 
 /// The server's name didn't resolve. That can mean a typo, but also no
@@ -188,9 +191,6 @@ final class SshHostKeyChangedException extends SshPermanentException {
 final class SshHostNotFoundException extends SshTemporaryException {
   /// An error saying, in [message], which name didn't resolve.
   const SshHostNotFoundException(super.message, {super.log, super.exitCode});
-
-  @override
-  String toString() => 'SshHostNotFoundException: $message';
 }
 
 /// The server didn't answer: the connection was refused, timed out or had no
@@ -198,20 +198,14 @@ final class SshHostNotFoundException extends SshTemporaryException {
 final class SshUnreachableException extends SshTemporaryException {
   /// An error saying, in [message], how the server didn't answer.
   const SshUnreachableException(super.message, {super.log, super.exitCode});
-
-  @override
-  String toString() => 'SshUnreachableException: $message';
 }
 
-/// The connection was up and went down: the server closed or reset it, or
-/// stopped answering ssh's keepalives. A failed [SshForward.done] says this
-/// when ssh's last lines say so.
+/// The connection went down: the server closed or reset it, before the login
+/// or after, or stopped answering ssh's keepalives. A failed
+/// [SshForward.done] says this when ssh's last lines say so.
 final class SshDroppedException extends SshTemporaryException {
   /// An error saying, in [message], how the connection went down.
   const SshDroppedException(super.message, {super.log, super.exitCode});
-
-  @override
-  String toString() => 'SshDroppedException: $message';
 }
 
 /// The `bindAddress` a tunnel was asked to listen on isn't an address of this
@@ -224,9 +218,6 @@ final class SshAddressUnavailableException extends SshTemporaryException {
 
   /// The address the tunnel was asked to listen on.
   final String address;
-
-  @override
-  String toString() => 'SshAddressUnavailableException: $message';
 }
 
 /// Any other failure, with ssh's words in [message] when it said why. Trying
@@ -238,9 +229,6 @@ final class SshAddressUnavailableException extends SshTemporaryException {
 final class SshFailedException extends SshTemporaryException {
   /// An error that says [message].
   const SshFailedException(super.message, {super.log, super.exitCode});
-
-  @override
-  String toString() => 'SshFailedException: $message';
 }
 
 /// The `abortTrigger` passed to [SshClient.openTunnel],
@@ -249,7 +237,4 @@ final class SshFailedException extends SshTemporaryException {
 final class SshTunnelAbortedException extends SshException {
   /// An error saying the tunnel was aborted.
   const SshTunnelAbortedException() : super('the tunnel was aborted');
-
-  @override
-  String toString() => 'SshTunnelAbortedException: $message';
 }

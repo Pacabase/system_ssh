@@ -27,17 +27,14 @@ typedef _Failure = SshException Function(
 
 // In the order to check them: a key, login or config at fault wins over the
 // network error ssh may print after it. A server's banner can say anything,
-// so the network errors are matched on ssh's own wording only.
+// so what a banner could also say is matched on ssh's own wording only. A
+// changed host key alone is a warning: ssh says it failed only when it stops.
 final _failures = <(RegExp, _Failure)>[
+  (_anyOf(['Host key verification failed']), SshHostKeyRefusedException.new),
   (
-    _anyOf([
-      'Host key verification failed',
-      'REMOTE HOST IDENTIFICATION HAS CHANGED'
-    ]),
-    SshHostKeyRefusedException.new,
-  ),
-  (
-    _anyOf(['Permission denied (', 'Too many authentication failures']),
+    RegExp(
+      r'^(\S+: )?Permission denied \(|Too many authentication failures',
+    ),
     SshLoginRefusedException.new,
   ),
   (
@@ -49,17 +46,21 @@ final _failures = <(RegExp, _Failure)>[
     ]),
     SshConfigException.new,
   ),
+  (RegExp('^Unable to negotiate with '), SshConfigException.new),
   (_anyOf(['Could not resolve hostname']), SshHostNotFoundException.new),
   (
     RegExp(
-      r'^(ssh: )?connect to host .* port \d+: |^kex_exchange_identification: |'
+      r'^(ssh: )?connect to host .* port \d+: |'
+      '^(kex|ssh)_exchange_identification: |'
       '^Connection timed out during banner exchange',
     ),
     SshUnreachableException.new,
   ),
   (
     RegExp(
-      '^Connection to .* closed by remote host|^Connection reset by |'
+      r'^([a-z_]+: )*(send disconnect: )?Connection (reset|closed) by |'
+      '^Connection to .* closed by remote host|'
+      r'^(\w+: )?Connection to .* port \d+: |'
       r'^Timeout, server .* not responding|: Broken pipe$',
     ),
     SshDroppedException.new,

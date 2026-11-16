@@ -262,17 +262,17 @@ try {
 |---|---|
 | **`SshPermanentException`** | |
 | `SshNotFoundException` | no `ssh` could be started; on Windows the message says how to add OpenSSH Client |
-| `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error or the file's owner or permissions |
+| `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`) |
 | `SshPortInUseException` | the `localPort` you asked for is taken; `port` and `address` say which |
 | `SshLoginRefusedException` | the server refused every login: `Permission denied (publickey)`, too many keys tried |
-| `SshHostKeyRefusedException` | ssh refused the host key where your config sets `StrictHostKeyChecking yes` |
+| `SshHostKeyRefusedException` | ssh refused a host key that isn't asked about: your config sets `StrictHostKeyChecking yes`, or a `ProxyJump` host's key is unknown or changed |
 | `SshUnknownHostKeyException` | the server's host key isn't in `known_hosts` yet, and your config leaves `StrictHostKeyChecking` at `ask`; see [Host keys](#host-keys) |
 | `SshHostKeyChangedException` | the server's host key doesn't match the one `known_hosts` holds for it |
 | **`SshTemporaryException`** | |
 | `SshHostNotFoundException` | the server's name didn't resolve, which offline it won't |
 | `SshUnreachableException` | the connection was refused, timed out or had no route |
-| `SshDroppedException` | the connection was up and went down: closed, reset or stopped answering |
-| `SshAddressUnavailableException` | the `bindAddress` isn't an address of this computer, at least not yet |
+| `SshDroppedException` | the server closed or reset the connection, before the login or after, or stopped answering |
+| `SshAddressUnavailableException` | the `bindAddress` isn't an address of this computer, at least not yet, such as a VPN's or Docker's before it comes up |
 | `SshFailedException` | anything else, in ssh's words when it said why |
 | **Neither** | |
 | `SshTunnelAbortedException` | `abortTrigger` completed first |
@@ -280,8 +280,9 @@ try {
 
 Each has the `message`, and the `log` of everything ssh wrote and its
 `exitCode` when ssh said why. A `switch` over the classes puts each in your
-own words; a later version may add a class, so the CHANGELOG says when one
-comes.
+own words. A later version may add a class, which breaks a `switch` that names
+every one, so it comes as a breaking release; catching the two groups keeps
+working.
 
 ## Options it sets
 

@@ -4,19 +4,25 @@
   reads ssh's text, and `isPermanent` goes: each class sits under
   `SshPermanentException`, when trying again can't work until the user
   changes something, or `SshTemporaryException`, when it can. Each is
-  permanent or temporary exactly as `isPermanent` was.
+  permanent or temporary as `isPermanent` was, but for two fixes: ssh's
+  `Unable to negotiate` (no algorithm in common with the server) is now
+  permanent, and its warning that a host key changed, where the config lets
+  ssh go on, no longer makes a later failure permanent. A failure without
+  ssh's exit code, such as a shared connection that doesn't answer, is no
+  longer taken for a port in use at a taken `localPort`, nor retried on a
+  new picked port.
 
   ```dart
   try {
-    return await client.openTunnel(server, remoteHost: 'db', remotePort: 5432);
+    await client.openTunnel(server, remoteHost: 'db', remotePort: 5432);
   } on SshTemporaryException {
     // Wait a little and try again.
   } on SshPermanentException catch (exception) {
-    final reason = switch (exception) {
+    showError(switch (exception) {
       SshLoginRefusedException() => 'The server refused the login.',
       SshPortInUseException(:final port) => 'Port $port is already in use.',
       _ => exception.message,
-    };
+    });
   }
   ```
 
@@ -35,8 +41,10 @@
     throws the class it acts out, such as
     `SshLoginRefusedException('Permission denied (publickey).')`, or
     `SshFailedException(...)`.
-  - A `switch` that names every class breaks when a later version adds
-    one; the CHANGELOG says when.
+
+  A later version that adds a class breaks a `switch` that names every one,
+  so it comes as a breaking release; code that catches the two groups keeps
+  working.
 
 - `SshTunnel` and `SshRemoteTunnel` share a supertype, `SshForward`, with
   their `done` and `close()`, so code that waits on or closes whatever it

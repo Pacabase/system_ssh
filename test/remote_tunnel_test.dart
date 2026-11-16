@@ -222,7 +222,7 @@ void main() {
       await expectLater(
         open(remotePort: 8080),
         throwsA(
-          isA<SshException>()
+          isA<SshFailedException>()
               .having(
                 (exception) => exception.message,
                 'message',

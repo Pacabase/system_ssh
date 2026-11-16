@@ -96,7 +96,7 @@ void main() {
         SystemSshClient(executable: fake.path)
             .openSocketTunnel(server, remoteSocket: socket),
         throwsA(
-          isA<SshException>().having(
+          isA<SshUnreachableException>().having(
             (exception) => exception.message,
             'message',
             contains('Connection refused'),

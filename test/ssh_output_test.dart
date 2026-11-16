@@ -74,11 +74,16 @@ void main() {
     for (final (line, type) in [
       ('Host key verification failed.', SshHostKeyRefusedException),
       (
-        '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @',
-        SshHostKeyRefusedException,
+        'Unable to negotiate with 10.0.0.1 port 22: no matching host key type found. Their offer: ssh-rsa',
+        SshConfigException,
       ),
       (
         'user@ssh.example.com: Permission denied (publickey).',
+        SshLoginRefusedException,
+      ),
+      ('Permission denied (publickey).', SshLoginRefusedException),
+      (
+        'ssh.example.com: Permission denied (publickey,password).',
         SshLoginRefusedException,
       ),
       (
@@ -132,6 +137,19 @@ void main() {
         'Connection timed out during banner exchange',
         SshUnreachableException,
       ),
+      (
+        'ssh_exchange_identification: read: Connection reset by peer',
+        SshUnreachableException,
+      ),
+      ('Connection closed by 10.0.0.1 port 22', SshDroppedException),
+      (
+        'client_loop: send disconnect: Connection reset by peer',
+        SshDroppedException,
+      ),
+      (
+        'ssh_dispatch_run_fatal: Connection to 10.0.0.1 port 22: Operation timed out',
+        SshDroppedException,
+      ),
       // How Windows' ssh says a local port is taken.
       ('bind [127.0.0.1]:56882: Permission denied', SshFailedException),
       ('something ssh has never said', SshFailedException),
@@ -156,6 +174,27 @@ void main() {
       );
     });
 
+    test("isn't a refused host key for ssh's warning alone", () {
+      expect(
+        tunnelFailure([
+          '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @',
+          'Password authentication is disabled to avoid man-in-the-middle attacks.',
+          'Error: remote port forwarding failed for listen port 8080',
+        ], 255),
+        isA<SshFailedException>(),
+      );
+    });
+
+    test("isn't a refused login for a banner that says so", () {
+      expect(
+        tunnelFailure([
+          'Welcome! Permission denied (unless you are an admin).',
+          'Error: remote port forwarding failed for listen port 8080',
+        ], 255),
+        isA<SshFailedException>(),
+      );
+    });
+
     test("isn't swayed by a banner's words", () {
       expect(
         tunnelFailure([
@@ -166,13 +205,28 @@ void main() {
       );
     });
 
+    for (final banner in [
+      'Notice: Connection closed by policy after 1 hour.',
+      'We are unable to negotiate with legacy clients.',
+    ]) {
+      test('reads "$banner" as a banner', () {
+        expect(
+          tunnelFailure([
+            banner,
+            'Error: remote port forwarding failed for listen port 8080',
+          ], 255),
+          isA<SshFailedException>(),
+        );
+      });
+    }
+
     test("ignores a forwarded connection's failure", () {
       expect(
         tunnelFailure([
-          'channel 3: open failed: connect failed: Connection refused',
-          'Connection closed by 10.0.0.1 port 22',
+          'channel 3: open failed: administratively prohibited: open failed',
+          'Connection to ssh.example.com closed by remote host.',
         ], 255),
-        isA<SshFailedException>(),
+        isA<SshDroppedException>(),
       );
     });
 
