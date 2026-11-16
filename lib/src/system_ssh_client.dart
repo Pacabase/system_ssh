@@ -36,7 +36,8 @@ final class SystemSshClient implements SshClient {
 
   /// Whether ssh also gets the `PATH`, `HOME`, `DISPLAY` and `SSH_` variables
   /// the user's login shell sets, which a GUI app doesn't inherit. The shell
-  /// runs once per process, on the first tunnel.
+  /// runs on the first tunnel, and the first read that works is kept for the
+  /// process. A tunnel whose read fails goes without, and the next one retries.
   final bool loginShell;
 
   /// Variables ssh gets on top of the rest, such as an `AWS_PROFILE` for a
