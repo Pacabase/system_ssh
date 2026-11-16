@@ -36,7 +36,8 @@ final class SystemSshClient implements SshClient {
 
   /// Whether ssh also gets the `PATH`, `HOME`, `DISPLAY` and `SSH_` variables
   /// the user's login shell sets, which a GUI app doesn't inherit. The shell
-  /// runs once per process, on the first tunnel.
+  /// runs on the first tunnel, and the first read that works is kept for the
+  /// process. A tunnel whose read fails goes without, and the next one retries.
   final bool loginShell;
 
   /// Variables ssh gets on top of the rest, such as an `AWS_PROFILE` for a
@@ -49,7 +50,7 @@ final class SystemSshClient implements SshClient {
   ///
   /// The connection is this process's own, never one the user's
   /// `ControlMaster` set up, and it stops once its last tunnel closes, or
-  /// with the app. When it drops, every tunnel on it fails [SshTunnel.done]
+  /// with the app. When it drops, every tunnel on it fails [SshForward.done]
   /// together. Windows' OpenSSH can't share a connection, so there each
   /// tunnel keeps its own ssh.
   final bool shareConnections;

@@ -1,5 +1,36 @@
 ## Unreleased
 
+- `SshTunnel` and `SshRemoteTunnel` share a supertype, `SshForward`, with
+  their `done` and `close()`, so code that waits on or closes whatever it
+  opened, local or remote, can take either one without a wrapper:
+
+  ```dart
+  final forwards = <SshForward>[
+    await client.openTunnel(server, remoteHost: 'db', remotePort: 5432),
+    await client.openRemoteTunnel(server, localPort: 3000),
+  ];
+  await Future.wait(forwards.map((forward) => forward.close()));
+  ```
+
+  Fakes that implement `SshTunnel` or `SshRemoteTunnel` need no change.
+
+- With `loginShell: true`, a login shell that fails, prints something
+  unexpected or takes longer than 5 seconds no longer leaves every later
+  tunnel without the user's `PATH` and `SSH_AUTH_SOCK` for the rest of the
+  process. That tunnel still runs without them, but the next one reads the
+  shell again, so a long-running app recovers on its own. The first read
+  that works is kept, as before, and tunnels opened while a read is running
+  wait for that one read rather than each starting a shell:
+
+  ```dart
+  final client = SystemSshClient(loginShell: true);
+  // Each tunnel retries the login shell until one read works.
+  final tunnel = await client.openTunnel(
+    const SshTarget('myserver'),
+    remoteHost: 'localhost',
+    remotePort: 5432,
+  );
+  ```
 - Once a tunnel's `abortTrigger` completes, `onLog` gets nothing more from
   that attempt. A line ssh wrote as it was stopped could reach `onLog` as a
   warning, as if the tunnel had opened, so an app that shows warnings no
