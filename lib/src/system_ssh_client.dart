@@ -324,9 +324,10 @@ Future<SshTunnel> openSystemForward(
 
       try {
         return await start(localPort);
-      } on SshTunnelException catch (exception) {
-        // A host key or a login that failed isn't about the port.
-        if (exception.isPermanent || await isFree(localPort)) rethrow;
+      } on SshTemporaryException catch (exception) {
+        // A host key or a login that failed isn't about the port, nor is a
+        // failure without ssh's exit.
+        if (exception.exitCode == null || await isFree(localPort)) rethrow;
         throw SshPortInUseException(localPort, address: bindAddress);
       }
     }
@@ -339,9 +340,9 @@ Future<SshTunnel> openSystemForward(
 
       try {
         return await start(port);
-      } on SshTunnelException catch (exception) {
+      } on SshTemporaryException catch (exception) {
         // Another process can take the port before ssh binds it.
-        if (exception.isPermanent || attempt == 3 || await isFree(port)) {
+        if (exception.exitCode == null || attempt == 3 || await isFree(port)) {
           rethrow;
         }
       }
@@ -413,7 +414,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
       if (abort.isAborted || port == null) {
         await handle.close();
         abort.throwIfAborted();
-        throw const SshException(
+        throw const SshFailedException(
           "ssh didn't say which port the server picked",
         );
       }

@@ -222,15 +222,15 @@ void main() {
       await expectLater(
         open(remotePort: 8080),
         throwsA(
-          isA<SshTunnelException>()
+          isA<SshFailedException>()
               .having(
                 (exception) => exception.message,
                 'message',
                 'Error: remote port forwarding failed for listen port 8080',
               )
               .having(
-                (exception) => exception.isPermanent,
-                'isPermanent',
+                (exception) => exception is SshPermanentException,
+                'is permanent',
                 isFalse,
               ),
         ),

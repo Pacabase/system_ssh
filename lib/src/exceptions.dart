@@ -1,28 +1,78 @@
 import 'ssh_client.dart';
 import 'ssh_host_key.dart';
 
-/// Something went wrong opening a tunnel.
+/// Something went wrong opening a tunnel, or an open one went down.
 ///
-/// The subclasses say what; this class itself is thrown when the tunnel
-/// can't be set up for a reason that isn't ssh's.
-final class SshException implements Exception {
-  /// An error that says [message].
-  const SshException(this.message);
+/// Every failure is one of these classes, under [SshPermanentException] when
+/// trying again can't work until the user changes something, or
+/// [SshTemporaryException] when it can. An app that retries catches the two:
+///
+/// ```dart
+/// try {
+///   return await client.openTunnel(server, remoteHost: 'db', remotePort: 5432);
+/// } on SshTemporaryException {
+///   // Wait a little and try again.
+/// } on SshPermanentException catch (exception) {
+///   // Stop, and tell the user what to change.
+/// }
+/// ```
+///
+/// A `switch` over the classes puts each in the app's own words. A later
+/// version may add a class, which breaks a `switch` that names every one, so
+/// it comes as a breaking release with a **Breaking:** CHANGELOG entry; one
+/// that only catches the two groups keeps working.
+sealed class SshException implements Exception {
+  /// An error that says [message], with what ssh wrote in [log] and its
+  /// [exitCode].
+  const SshException(this.message, {this.log = const [], this.exitCode});
 
-  /// What went wrong.
+  /// What went wrong, in ssh's words when ssh said why.
   final String message;
 
-  /// Whether trying again can't work until the user changes something, such
-  /// as a host key, a login, the ssh config or a port in use. A dropped
-  /// connection, a timeout or a host that doesn't resolve while offline isn't.
-  bool get isPermanent => false;
+  /// Everything ssh wrote while it tried, including `-v` progress, as of when
+  /// it exited. Empty when the failure wasn't ssh's.
+  final List<String> log;
 
+  /// ssh's exit code, if it exited.
+  final int? exitCode;
+
+  // Spelled out, since an obfuscated build renames runtimeType.
   @override
-  String toString() => 'SshException: $message';
+  String toString() => '${switch (this) {
+        SshNotFoundException() => 'SshNotFoundException',
+        SshConfigException() => 'SshConfigException',
+        SshPortInUseException() => 'SshPortInUseException',
+        SshLoginRefusedException() => 'SshLoginRefusedException',
+        SshHostKeyRefusedException() => 'SshHostKeyRefusedException',
+        SshUnknownHostKeyException() => 'SshUnknownHostKeyException',
+        SshHostKeyChangedException() => 'SshHostKeyChangedException',
+        SshHostNotFoundException() => 'SshHostNotFoundException',
+        SshUnreachableException() => 'SshUnreachableException',
+        SshDroppedException() => 'SshDroppedException',
+        SshAddressUnavailableException() => 'SshAddressUnavailableException',
+        SshFailedException() => 'SshFailedException',
+        SshTunnelAbortedException() => 'SshTunnelAbortedException',
+      }}: $message';
+}
+
+/// Trying again can't work until the user changes something: a host key, a
+/// login, the ssh config or a port in use.
+sealed class SshPermanentException extends SshException {
+  /// An error that says [message], with what ssh wrote in [log] and its
+  /// [exitCode].
+  const SshPermanentException(super.message, {super.log, super.exitCode});
+}
+
+/// Trying again may work: the network, the server or this computer may come
+/// back, or the failure was a race.
+sealed class SshTemporaryException extends SshException {
+  /// An error that says [message], with what ssh wrote in [log] and its
+  /// [exitCode].
+  const SshTemporaryException(super.message, {super.log, super.exitCode});
 }
 
 /// No `ssh` executable could be started.
-final class SshNotFoundException extends SshException {
+final class SshNotFoundException extends SshPermanentException {
   /// An error that tells the user how to get ssh: [onWindows], to add
   /// "OpenSSH Client" under Optional features; otherwise, to install OpenSSH.
   factory SshNotFoundException({bool onWindows = false}) => onWindows
@@ -35,58 +85,56 @@ final class SshNotFoundException extends SshException {
         );
 
   const SshNotFoundException._(super.message);
-
-  @override
-  bool get isPermanent => true;
-
-  @override
-  String toString() => 'SshNotFoundException: $message';
 }
 
-/// The `abortTrigger` passed to [SshClient.openTunnel],
-/// [SshClient.openSocketTunnel], [SshClient.openRemoteTunnel] or
-/// [SshClient.openSocksProxy] completed before the tunnel opened.
-final class SshTunnelAbortedException extends SshException {
-  /// An error saying the tunnel was aborted.
-  const SshTunnelAbortedException() : super('the tunnel was aborted');
-
-  @override
-  String toString() => 'SshTunnelAbortedException: $message';
+/// The user's ssh config for the host stops the tunnel: it sets
+/// `ClearAllForwardings`, ssh can't read it, for a bad option, a syntax error
+/// or the file's owner or permissions, or it allows no algorithm the server
+/// offers (`Unable to negotiate`).
+final class SshConfigException extends SshPermanentException {
+  /// An error saying, in [message], what in the config stops the tunnel.
+  const SshConfigException(super.message, {super.log, super.exitCode});
 }
 
-/// ssh exited on its own: before the tunnel was open, when opening it, or
-/// after, when the connection dropped (from [SshForward.done]).
-final class SshTunnelException extends SshException {
-  /// An error that says [message], which is what a fake [SshClient] throws
-  /// to act out a failure. [log] defaults to empty, [exitCode] to null and
-  /// [isPermanent] to false.
-  ///
-  /// ```dart
-  /// throw const SshTunnelException(
-  ///   'Permission denied (publickey).',
-  ///   exitCode: 255,
-  ///   isPermanent: true,
-  /// );
-  /// ```
-  const SshTunnelException(
-    super.message, {
-    this.log = const [],
-    this.exitCode,
-    this.isPermanent = false,
-  });
+/// The port asked of [SshClient.openTunnel], [SshClient.openSocketTunnel] or
+/// [SshClient.openSocksProxy] is taken on the address it would listen on.
+final class SshPortInUseException extends SshPermanentException {
+  /// An error saying [port] on [address] is already in use.
+  const SshPortInUseException(this.port, {this.address = '127.0.0.1'})
+      : super('$address:$port is already in use');
 
-  @override
-  final bool isPermanent;
+  /// The port that is taken.
+  final int port;
 
-  /// Everything ssh wrote while it tried, including `-v` progress, as of
-  /// when it exited.
-  final List<String> log;
+  /// The address it is taken on, `127.0.0.1` unless the tunnel asked for
+  /// another.
+  final String address;
+}
 
-  /// ssh's exit code, if it exited.
-  final int? exitCode;
+/// The server refused every login ssh tried, such as a key it doesn't know or
+/// too many keys offered.
+///
+/// ```dart
+/// throw const SshLoginRefusedException(
+///   'Permission denied (publickey).',
+///   exitCode: 255,
+/// );
+/// ```
+final class SshLoginRefusedException extends SshPermanentException {
+  /// An error saying, in [message], how the server refused the login.
+  const SshLoginRefusedException(super.message, {super.log, super.exitCode});
+}
 
-  @override
-  String toString() => 'SshTunnelException: $message';
+/// ssh refused a host key that isn't asked about: the user's ssh config sets
+/// `StrictHostKeyChecking yes`, or a `ProxyJump` host's key is unknown or
+/// changed.
+///
+/// For the server's own key, where the config leaves `StrictHostKeyChecking`
+/// at `ask`, an [SshUnknownHostKeyException] or [SshHostKeyChangedException]
+/// comes instead, with the key the server offers.
+final class SshHostKeyRefusedException extends SshPermanentException {
+  /// An error saying, in [message], why ssh refused the host key.
+  const SshHostKeyRefusedException(super.message, {super.log, super.exitCode});
 }
 
 /// The server's host key isn't in `known_hosts` yet, so ssh refused it rather
@@ -107,20 +155,16 @@ final class SshTunnelException extends SshException {
 /// It is thrown only where the user's ssh config leaves
 /// `StrictHostKeyChecking` at `ask`, as a terminal would ask there. A config
 /// that sets `yes`, `accept-new` or `no` gets what it asks for.
-final class SshUnknownHostKeyException extends SshTunnelException {
+final class SshUnknownHostKeyException extends SshPermanentException {
   /// An error saying the server offers [hostKey], which isn't known yet.
   SshUnknownHostKeyException(this.hostKey, {super.log, super.exitCode})
       : super(
           '${hostKey.host} is not a known host; its ${hostKey.type} key '
           'fingerprint is ${hostKey.fingerprint}',
-          isPermanent: true,
         );
 
   /// The key the server offered.
   final SshHostKey hostKey;
-
-  @override
-  String toString() => 'SshUnknownHostKeyException: $message';
 }
 
 /// The server offers a host key other than the one `known_hosts` holds for it,
@@ -130,53 +174,67 @@ final class SshUnknownHostKeyException extends SshTunnelException {
 /// Nothing is trusted or written; trying again can't work until the user
 /// removes the old key, such as with `ssh-keygen -R`, after finding out why it
 /// changed.
-final class SshHostKeyChangedException extends SshTunnelException {
+final class SshHostKeyChangedException extends SshPermanentException {
   /// An error saying [hostKey] is what the server offers now.
   SshHostKeyChangedException(this.hostKey, {super.log, super.exitCode})
       : super(
           'the host key for ${hostKey.host} has changed; it now offers the '
           '${hostKey.type} key ${hostKey.fingerprint}',
-          isPermanent: true,
         );
 
   /// The key the server offers now.
   final SshHostKey hostKey;
-
-  @override
-  String toString() => 'SshHostKeyChangedException: $message';
 }
 
-/// The user's ssh config for the host stops the tunnel from working, for
-/// example by setting `ClearAllForwardings`, so trying again can't work until
-/// they change it.
-final class SshConfigException extends SshException {
-  /// An exception saying, in [message], which setting stops the tunnel.
-  const SshConfigException(super.message);
-
-  @override
-  bool get isPermanent => true;
-
-  @override
-  String toString() => 'SshConfigException: $message';
+/// The server's name didn't resolve. That can mean a typo, but also no
+/// network yet, so trying again may work.
+final class SshHostNotFoundException extends SshTemporaryException {
+  /// An error saying, in [message], which name didn't resolve.
+  const SshHostNotFoundException(super.message, {super.log, super.exitCode});
 }
 
-/// The port asked of [SshClient.openTunnel], [SshClient.openSocketTunnel] or
-/// [SshClient.openSocksProxy] is taken on the address it would listen on.
-final class SshPortInUseException extends SshException {
-  /// An error saying [port] on [address] is already in use.
-  const SshPortInUseException(this.port, {this.address = '127.0.0.1'})
-      : super('$address:$port is already in use');
+/// The server didn't answer: the connection was refused, timed out or had no
+/// route, or ssh didn't finish a step in time.
+final class SshUnreachableException extends SshTemporaryException {
+  /// An error saying, in [message], how the server didn't answer.
+  const SshUnreachableException(super.message, {super.log, super.exitCode});
+}
 
-  /// The port that is taken.
-  final int port;
+/// The connection went down: the server closed or reset it, before the login
+/// or after, or stopped answering ssh's keepalives. A failed
+/// [SshForward.done] says this when ssh's last lines say so.
+final class SshDroppedException extends SshTemporaryException {
+  /// An error saying, in [message], how the connection went down.
+  const SshDroppedException(super.message, {super.log, super.exitCode});
+}
 
-  /// The address it is taken on, `127.0.0.1` unless the tunnel asked for
-  /// another.
+/// The `bindAddress` a tunnel was asked to listen on isn't an address of this
+/// computer, at least not yet: a network such as Docker's bridge may come up
+/// later.
+final class SshAddressUnavailableException extends SshTemporaryException {
+  /// An error saying [address] isn't on this computer.
+  const SshAddressUnavailableException(this.address)
+      : super("$address isn't an address of this computer");
+
+  /// The address the tunnel was asked to listen on.
   final String address;
+}
 
-  @override
-  bool get isPermanent => true;
+/// Any other failure, with ssh's words in [message] when it said why. Trying
+/// again may work.
+///
+/// ```dart
+/// throw const SshFailedException('ssh exited with code 255', exitCode: 255);
+/// ```
+final class SshFailedException extends SshTemporaryException {
+  /// An error that says [message].
+  const SshFailedException(super.message, {super.log, super.exitCode});
+}
 
-  @override
-  String toString() => 'SshPortInUseException: $message';
+/// The `abortTrigger` passed to [SshClient.openTunnel],
+/// [SshClient.openSocketTunnel], [SshClient.openRemoteTunnel] or
+/// [SshClient.openSocksProxy] completed before the tunnel opened.
+final class SshTunnelAbortedException extends SshException {
+  /// An error saying the tunnel was aborted.
+  const SshTunnelAbortedException() : super('the tunnel was aborted');
 }

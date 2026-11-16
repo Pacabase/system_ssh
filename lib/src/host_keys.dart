@@ -43,8 +43,8 @@ String? knownHostsName(Map<String, String> config) {
 /// [exception] as an [SshHostKeyChangedException] or, when [config] asks
 /// about host keys, an [SshUnknownHostKeyException], or null when it is
 /// neither.
-SshTunnelException? hostKeyFailure(
-  SshTunnelException exception,
+SshException? hostKeyFailure(
+  SshException exception,
   Map<String, String> config,
 ) {
   final log = exception.log;
@@ -164,7 +164,7 @@ Future<T> checkingHostKeys<T>(
 ) async {
   try {
     return await open();
-  } on SshTunnelException catch (exception) {
+  } on SshException catch (exception) {
     if (hostKeyFailure(exception, config) case final failure?) throw failure;
     rethrow;
   }
@@ -264,7 +264,7 @@ Future<void> trustSystemHostKey(
         .toSet();
     final key = offered.length == 1 ? offered.single : null;
     if (key == null) {
-      throw SshException("couldn't read the host key ssh got: $entries");
+      throw SshFailedException("couldn't read the host key ssh got: $entries");
     }
     if (key.fingerprint != hostKey.fingerprint) {
       throw SshUnknownHostKeyException(key, log: log, exitCode: code);
@@ -319,7 +319,9 @@ Future<(List<String>, int)> _run(
         .timeout(const Duration(seconds: 1), onTimeout: () {});
     return (List<String>.unmodifiable(lines), code);
   } on TimeoutException {
-    throw const SshTunnelException("ssh didn't read the host key in time");
+    throw const SshUnreachableException(
+      "ssh didn't read the host key in time",
+    );
   }
 }
 
@@ -411,7 +413,7 @@ void _append(File file, List<String> entries) {
       flush: true,
     );
   } on FileSystemException catch (exception) {
-    throw SshException(
+    throw SshFailedException(
       "couldn't add the host key to ${file.path}: ${exception.message}",
     );
   }

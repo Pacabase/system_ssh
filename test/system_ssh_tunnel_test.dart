@@ -23,18 +23,14 @@ void main() {
     String message, {
     Object? log = anything,
     int exitCode = 255,
-    bool isPermanent = false,
+    Type type = SshFailedException,
   }) =>
       throwsA(
-        isA<SshTunnelException>()
+        isA<SshException>()
+            .having((exception) => exception.runtimeType, 'type', type)
             .having((exception) => exception.message, 'message', message)
             .having((exception) => exception.log, 'log', log)
-            .having((exception) => exception.exitCode, 'exitCode', exitCode)
-            .having(
-              (exception) => exception.isPermanent,
-              'isPermanent',
-              isPermanent,
-            ),
+            .having((exception) => exception.exitCode, 'exitCode', exitCode),
       );
 
   group('attach', () {
@@ -44,7 +40,7 @@ void main() {
 
       await expectLater(
         SystemSshTunnel.attach(process, localPort: localPort),
-        throwsTunnelException(denied, isPermanent: true),
+        throwsTunnelException(denied, type: SshLoginRefusedException),
       );
     });
 
@@ -121,7 +117,7 @@ void main() {
 
       await expectLater(
         SystemSshTunnel.attach(process, localPort: localPort),
-        throwsA(isA<SshTunnelException>()),
+        throwsA(isA<SshFailedException>()),
       );
     });
 
@@ -161,6 +157,7 @@ void main() {
           throwsTunnelException(
             refused,
             log: ['OpenSSH_9.6p1, LibreSSL 3.3.6', connectingLine, refused],
+            type: SshUnreachableException,
           ),
         );
       },
@@ -189,7 +186,7 @@ void main() {
         SystemSshTunnel.attach(process, localPort: localPort),
         throwsTunnelException(
           'Host key verification failed.',
-          isPermanent: true,
+          type: SshHostKeyRefusedException,
         ),
       );
     });
@@ -208,6 +205,7 @@ void main() {
         ).timeout(const Duration(seconds: 3)),
         throwsTunnelException(
           'ssh: connect to host ssh.example.com port 22: Connection refused',
+          type: SshUnreachableException,
         ),
       );
     });
@@ -224,7 +222,7 @@ void main() {
 
       await expectLater(
         SystemSshTunnel.attach(process, localPort: localPort, onLog: logs.add),
-        throwsA(isA<SshTunnelException>()),
+        throwsA(isA<SshLoginRefusedException>()),
       );
 
       expect(logs, const [SshProgress(connectingLine), SshMessage(denied)]);
@@ -405,7 +403,7 @@ void main() {
 
       await expectLater(
         tunnel.done.timeout(const Duration(seconds: 10)),
-        throwsTunnelException(denied, isPermanent: true),
+        throwsTunnelException(denied, type: SshLoginRefusedException),
       );
     });
 
@@ -428,6 +426,7 @@ void main() {
         throwsTunnelException(
           closed,
           log: ['debug1: channel 0: new [port listener]', closed],
+          type: SshDroppedException,
         ),
       );
     });
@@ -461,7 +460,7 @@ void main() {
       await expectLater(
         tunnel.done.timeout(const Duration(seconds: 10)),
         throwsA(
-          isA<SshTunnelException>().having(
+          isA<SshException>().having(
             (exception) => exception.log,
             'log',
             [for (var line = 11; line <= 30; line++) 'debug1: line $line'],

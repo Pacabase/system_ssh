@@ -219,7 +219,7 @@ final class _Connection {
     // cancel would then close it for both tunnels.
     if (_adding.contains(forward) ||
         _forwards.any((each) => each.forward == forward)) {
-      throw SshTunnelException(
+      throw SshFailedException(
         'another tunnel on this connection already forwards '
         '${forward.description}',
       );
@@ -243,7 +243,7 @@ final class _Connection {
       if (_dropError case final error?) throw error;
       if (result == null) {
         _retire(forward);
-        throw const SshTunnelException(
+        throw const SshUnreachableException(
           'the shared connection did not answer',
         );
       }
@@ -335,8 +335,9 @@ final class _Connection {
 
   /// Every forward fails with why the master went down.
   void _dropped(Object error) {
-    _dropError =
-        error is SshException ? error : SshException('ssh failed: $error');
+    _dropError = error is SshException
+        ? error
+        : SshFailedException('ssh failed: $error');
     isStopping = true;
     _forget();
     for (final forward in [..._forwards]) {
@@ -462,7 +463,7 @@ Directory _masterDirectory() {
   try {
     return base.createTempSync('ssh');
   } on FileSystemException catch (exception) {
-    throw SshException(
+    throw SshFailedException(
       'could not make a directory for the shared connection in '
       '${base.path}: ${exception.message}',
     );

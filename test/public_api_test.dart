@@ -299,42 +299,25 @@ void main() {
     );
   });
 
-  test('exports every exception as an SshException with a message', () {
-    final exceptions = <SshException>[
-      const SshException('boom'),
-      SshNotFoundException(),
-      const SshTunnelAbortedException(),
-      const SshTunnelException('boom', exitCode: 255),
-      const SshPortInUseException(5432),
-      const SshConfigException('boom'),
-      SshUnknownHostKeyException(_hostKey),
-      SshHostKeyChangedException(_hostKey),
-    ];
+  test('lets a switch name every exception', () {
+    String reason(SshException exception) => switch (exception) {
+          SshNotFoundException() => 'no ssh',
+          SshConfigException() => 'config',
+          SshPortInUseException(:final port) => 'port $port in use',
+          SshLoginRefusedException() => 'login refused',
+          SshHostKeyRefusedException() => 'host key refused',
+          SshUnknownHostKeyException(:final hostKey) =>
+            'unknown ${hostKey.host}',
+          SshHostKeyChangedException() => 'host key changed',
+          SshHostNotFoundException() => 'host not found',
+          SshUnreachableException() => 'unreachable',
+          SshDroppedException() => 'dropped',
+          SshAddressUnavailableException(:final address) => 'no $address',
+          SshFailedException() => 'failed',
+          SshTunnelAbortedException() => 'aborted',
+        };
 
-    expect(
-      exceptions.map((exception) => exception.message),
-      everyElement(isNotEmpty),
-    );
-  });
-
-  test('says whether retrying an exception can work', () {
-    const tunnelException = SshTunnelException(
-      'Host key verification failed.',
-      log: ['debug1: Connecting to ssh.example.com port 22.'],
-      exitCode: 255,
-      isPermanent: true,
-    );
-    const portInUse = SshPortInUseException(5432);
-
-    expect(const SshException('boom').isPermanent, isFalse);
-    expect(SshNotFoundException().isPermanent, isTrue);
-    expect(const SshTunnelAbortedException().isPermanent, isFalse);
-    expect(const SshConfigException('boom').isPermanent, isTrue);
-    expect(tunnelException.log,
-        ['debug1: Connecting to ssh.example.com port 22.']);
-    expect(
-        (tunnelException.exitCode, tunnelException.isPermanent), (255, true));
-    expect((portInUse.port, portInUse.isPermanent), (5432, true));
+    expect(reason(const SshPortInUseException(5432)), 'port 5432 in use');
   });
 
   test('acts out an unknown host key and trusts it', () async {
@@ -352,9 +335,9 @@ void main() {
     expect(
       [unknown, changed],
       everyElement(
-        isA<SshTunnelException>().having(
-          (exception) => exception.isPermanent,
-          'isPermanent',
+        isA<SshException>().having(
+          (exception) => exception is SshPermanentException,
+          'is permanent',
           isTrue,
         ),
       ),

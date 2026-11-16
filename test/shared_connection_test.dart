@@ -149,6 +149,37 @@ void main() {
     expect(fake.attempts, isEmpty);
   });
 
+  group("a failure ssh didn't report on a taken port", () {
+    setUp(() {
+      fake
+        ..attemptModes([AttemptMode.ready])
+        ..muxModes(['hang', 'ok']);
+    });
+
+    test('is not a port in use at a fixed port', () async {
+      var checks = 0;
+
+      await expectLater(
+        open(
+          localPort: await pickFreePort(),
+          // Free in both checks before the forward, taken once it fails.
+          portIsFree: (_) async => checks++ < 2,
+        ),
+        throwsA(isA<SshUnreachableException>()),
+      );
+    });
+
+    test('is not retried at a picked port', () async {
+      final ports = CountingPorts();
+
+      await expectLater(
+        open(ports: ports, portIsFree: (_) async => false),
+        throwsA(isA<SshUnreachableException>()),
+      );
+      expect(ports.picks, 1);
+    });
+  });
+
   test('finishes closing when ssh -O cancel cannot run', () async {
     fake.attemptModes([AttemptMode.ready]);
     final tunnel = await open();
@@ -169,7 +200,7 @@ void main() {
     await expectLater(
       open(localPort: await pickFreePort()),
       throwsA(
-        isA<SshTunnelException>().having(
+        isA<SshUnreachableException>().having(
           (exception) => exception.message,
           'message',
           contains('did not answer'),
@@ -258,7 +289,7 @@ void main() {
   test('a failed login fails every tunnel waiting on it, once', () async {
     fake.attemptModes([AttemptMode.fail, AttemptMode.ready]);
     final failure = throwsA(
-      isA<SshTunnelException>().having(
+      isA<SshUnreachableException>().having(
         (exception) => exception.message,
         'message',
         contains('Connection refused'),
@@ -330,7 +361,7 @@ void main() {
     await expectLater(
       openRemote(remotePort: 8080),
       throwsA(
-        isA<SshTunnelException>().having(
+        isA<SshFailedException>().having(
           (exception) => exception.message,
           'message',
           contains('already forwards'),
@@ -371,8 +402,8 @@ void main() {
 
       Process.killPid(fake.attemptPid(1)!, ProcessSignal.sigkill);
 
-      await expectLater(first.done, throwsA(isA<SshTunnelException>()));
-      await expectLater(second.done, throwsA(isA<SshTunnelException>()));
+      await expectLater(first.done, throwsA(isA<SshException>()));
+      await expectLater(second.done, throwsA(isA<SshException>()));
       await first.close();
       await second.close();
       expect(operations(), hasLength(2));

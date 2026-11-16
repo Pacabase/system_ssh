@@ -37,6 +37,6 @@ Future<ServerSocket> _bind(String address, int port) =>
 
 void _throwIfNotHere(String address, SocketException exception) {
   if (_notHere.contains(exception.osError?.errorCode)) {
-    throw SshException("$address isn't an address of this computer");
+    throw SshAddressUnavailableException(address);
   }
 }

@@ -40,8 +40,8 @@ void main() {
     'Host key verification failed.',
   ];
 
-  SshTunnelException failure(List<String> log) =>
-      SshTunnelException(log.last, log: log, exitCode: 255, isPermanent: true);
+  SshException failure(List<String> log) =>
+      SshHostKeyRefusedException(log.last, log: log, exitCode: 255);
 
   group('knownHostsName', () {
     for (final (config, name) in [
@@ -73,8 +73,7 @@ void main() {
         isA<SshUnknownHostKeyException>()
             .having((exception) => exception.hostKey, 'hostKey', hostKey)
             .having((exception) => exception.log, 'log', unknownLog)
-            .having((exception) => exception.exitCode, 'exitCode', 255)
-            .having((exception) => exception.isPermanent, 'isPermanent', true),
+            .having((exception) => exception.exitCode, 'exitCode', 255),
       );
       expect(
         result!.message,
@@ -417,11 +416,7 @@ void main() {
       await expectLater(
         open(),
         throwsA(
-          isA<SshTunnelException>()
-              .having((exception) => exception, 'type',
-                  isNot(isA<SshUnknownHostKeyException>()))
-              .having(
-                  (exception) => exception.isPermanent, 'isPermanent', isTrue),
+          isA<SshHostKeyRefusedException>(),
         ),
       );
     });
@@ -458,6 +453,23 @@ void main() {
       );
     });
 
+    test('an unknown key at a taken picked port is not retried', () async {
+      fake.hostKeyMode(HostKeyMode.unknown);
+      final ports = CountingPorts();
+
+      await expectLater(
+        openSystemForward(
+          server,
+          forward: localForwardTo('db.example.com', 3306),
+          freePort: ports.next,
+          portIsFree: (_) async => false,
+          executable: fake.path,
+        ),
+        throwsA(isA<SshUnknownHostKeyException>()),
+      );
+      expect(ports.picks, 1);
+    });
+
     test("an unknown ProxyJump host is ssh's failure, not one to trust",
         () async {
       fake.hostKeyMode(HostKeyMode.jumpUnknown);
@@ -465,11 +477,10 @@ void main() {
       await expectLater(
         open(),
         throwsA(
-          isA<SshTunnelException>()
-              .having((exception) => exception, 'type',
-                  isNot(isA<SshUnknownHostKeyException>()))
-              .having((exception) => exception.message, 'message',
-                  contains('Host key verification failed')),
+          isA<SshHostKeyRefusedException>().having(
+              (exception) => exception.message,
+              'message',
+              contains('Host key verification failed')),
         ),
       );
     });
@@ -553,7 +564,7 @@ void main() {
         await expectLater(
           client.trustHostKey(server, hostKey),
           throwsA(
-            isA<SshTunnelException>().having(
+            isA<SshUnreachableException>().having(
               (exception) => exception.message,
               'message',
               contains('Connection closed'),
@@ -614,11 +625,10 @@ void main() {
         await expectLater(
           client.trustHostKey(server, hostKey),
           throwsA(
-            isA<SshTunnelException>()
-                .having((exception) => exception.message, 'message',
-                    contains('Connection refused'))
-                .having((exception) => exception.isPermanent, 'isPermanent',
-                    isFalse),
+            isA<SshUnreachableException>().having(
+                (exception) => exception.message,
+                'message',
+                contains('Connection refused')),
           ),
         );
         expect(fake.knownHosts.existsSync(), isFalse);
@@ -643,6 +653,32 @@ void main() {
         abort.complete();
 
         await expectLater(trusting, throwsA(isA<SshTunnelAbortedException>()));
+        expect(fake.knownHosts.existsSync(), isFalse);
+      });
+
+      test("gives up when ssh doesn't read the key in time", () async {
+        fake.trustMode(TrustMode.hang);
+
+        await expectLater(
+          trustSystemHostKey(
+            server,
+            hostKey,
+            executable: fake.path,
+            config: {
+              'hostname': 'ssh.example.com',
+              'port': '22',
+              'userknownhostsfile': fake.knownHosts.path,
+            },
+            timeout: const Duration(milliseconds: 200),
+          ),
+          throwsA(
+            isA<SshUnreachableException>().having(
+              (exception) => exception.message,
+              'message',
+              "ssh didn't read the host key in time",
+            ),
+          ),
+        );
         expect(fake.knownHosts.existsSync(), isFalse);
       });
 

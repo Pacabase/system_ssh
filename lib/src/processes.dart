@@ -52,7 +52,8 @@ final class _WatchedChild extends WrappedProcess {
       unawaited(process.stdout.drain<void>());
       unawaited(process.stderr.drain<void>());
       _close(process.stdin);
-      throw const SshException('could not start the shell that watches ssh');
+      throw const SshFailedException(
+          'could not start the shell that watches ssh');
     }
     unawaited(watcher.stdout.drain<void>());
     unawaited(watcher.stderr.drain<void>());
@@ -153,7 +154,7 @@ SshNotFoundException sshNotFound() =>
 Future<T> notFoundOn127<T>(Future<T> Function() start) async {
   try {
     return await start();
-  } on SshTunnelException catch (exception) {
+  } on SshException catch (exception) {
     if (exception.exitCode == 127) throw sshNotFound();
     rethrow;
   }

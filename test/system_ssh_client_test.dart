@@ -346,7 +346,7 @@ void main() {
             await expectLater(
               open('192.0.2.1', localPort),
               throwsA(
-                isA<SshException>().having(
+                isA<SshAddressUnavailableException>().having(
                   (exception) => exception.message,
                   'message',
                   "192.0.2.1 isn't an address of this computer",
@@ -577,7 +577,7 @@ void main() {
       await expectLater(
         open(ports: ports),
         throwsA(
-          isA<SshTunnelException>().having(
+          isA<SshUnreachableException>().having(
             (exception) => exception.exitCode,
             'exitCode',
             255,
@@ -608,7 +608,7 @@ void main() {
       await expectLater(
         open(ports: ports),
         throwsA(
-          isA<SshTunnelException>().having(
+          isA<SshFailedException>().having(
             (exception) => exception.message,
             'message',
             contains('cannot listen to port: ${taken.port}'),
@@ -724,7 +724,7 @@ void main() {
         await expectLater(
           open(localPort: await pickFreePort(), ports: ports),
           throwsA(
-            isA<SshTunnelException>().having(
+            isA<SshUnreachableException>().having(
               (exception) => exception.exitCode,
               'exitCode',
               255,
@@ -856,7 +856,7 @@ void main() {
         await expectLater(
           openProxy(ports: ports),
           throwsA(
-            isA<SshTunnelException>().having(
+            isA<SshUnreachableException>().having(
               (exception) => exception.exitCode,
               'exitCode',
               255,
@@ -923,7 +923,7 @@ void main() {
         await expectLater(
           openProxy(localPort: await pickFreePort()),
           throwsA(
-            isA<SshTunnelException>().having(
+            isA<SshUnreachableException>().having(
               (exception) => exception.exitCode,
               'exitCode',
               255,
@@ -953,17 +953,11 @@ void main() {
         await expectLater(
           openProxy(),
           throwsA(
-            isA<SshConfigException>()
-                .having(
-                  (exception) => exception.message,
-                  'message',
-                  contains('ClearAllForwardings'),
-                )
-                .having(
-                  (exception) => exception.isPermanent,
-                  'isPermanent',
-                  isTrue,
-                ),
+            isA<SshConfigException>().having(
+              (exception) => exception.message,
+              'message',
+              contains('ClearAllForwardings'),
+            ),
           ),
         );
         expect(fake.attempts, isEmpty);
@@ -1020,17 +1014,11 @@ void main() {
       await expectLater(
         open(),
         throwsA(
-          isA<SshConfigException>()
-              .having(
-                (exception) => exception.message,
-                'message',
-                contains('ClearAllForwardings'),
-              )
-              .having(
-                (exception) => exception.isPermanent,
-                'isPermanent',
-                isTrue,
-              ),
+          isA<SshConfigException>().having(
+            (exception) => exception.message,
+            'message',
+            contains('ClearAllForwardings'),
+          ),
         ),
       );
       expect(fake.attempts, isEmpty);

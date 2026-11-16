@@ -44,7 +44,7 @@ Future<Process> startInJob(
 _Handle _createJob() {
   final job = _createJobObject(nullptr, nullptr);
   if (job == nullptr) {
-    throw const SshException('could not create a Windows job object');
+    throw const SshFailedException('could not create a Windows job object');
   }
 
   final limits = calloc<_ExtendedLimits>();
@@ -59,7 +59,7 @@ _Handle _createJob() {
         0;
     if (!isSet) {
       _closeHandle(job);
-      throw const SshException('could not set up a Windows job object');
+      throw const SshFailedException('could not set up a Windows job object');
     }
   } finally {
     calloc.free(limits);

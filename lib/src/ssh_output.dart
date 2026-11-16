@@ -8,19 +8,7 @@ final _progress = RegExp(
   r'^(debug\d|OpenSSH_|Authenticated to |Transferred: |Bytes per second: |Warning: Permanently added |Allocated port \d+ for remote forward )',
 );
 
-// What ssh says when only a change to keys, config or the server can help.
-final _permanent = RegExp(
-  'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|'
-  r'Permission denied \(|Too many authentication failures|'
-  'bad configuration option|Bad owner or permissions|'
-  'no argument after keyword|garbage at end of line',
-  caseSensitive: false,
-);
-
 bool isProgress(String line) => _progress.hasMatch(line);
-
-bool isPermanentFailure(List<String> log) =>
-    log.where((line) => !isProgress(line)).any(_permanent.hasMatch);
 
 String failureMessage(List<String> log) {
   final lines = log.where((line) => line.trim().isNotEmpty).toList();
@@ -31,14 +19,69 @@ String failureMessage(List<String> log) {
   return reason.join('\n');
 }
 
-/// ssh's exit with [code], saying why from [log].
-SshTunnelException tunnelFailure(List<String> log, int code) {
+typedef _Failure = SshException Function(
+  String message, {
+  List<String> log,
+  int? exitCode,
+});
+
+// In the order to check them: a key, login or config at fault wins over the
+// network error ssh may print after it. A server's banner can say anything,
+// so what a banner could also say is matched on ssh's own wording only. A
+// changed host key alone is a warning: ssh says it failed only when it stops.
+final _failures = <(RegExp, _Failure)>[
+  (_anyOf(['Host key verification failed']), SshHostKeyRefusedException.new),
+  (
+    RegExp(
+      r'^(\S+: )?Permission denied \(|Too many authentication failures',
+    ),
+    SshLoginRefusedException.new,
+  ),
+  (
+    _anyOf([
+      'bad configuration option',
+      'Bad owner or permissions',
+      'no argument after keyword',
+      'garbage at end of line',
+    ]),
+    SshConfigException.new,
+  ),
+  (RegExp('^Unable to negotiate with '), SshConfigException.new),
+  (_anyOf(['Could not resolve hostname']), SshHostNotFoundException.new),
+  (
+    RegExp(
+      r'^(ssh: )?connect to host .* port \d+: |'
+      '^(kex|ssh)_exchange_identification: |'
+      '^Connection timed out during banner exchange',
+    ),
+    SshUnreachableException.new,
+  ),
+  (
+    RegExp(
+      r'^([a-z_]+: )*(send disconnect: )?Connection (reset|closed) by |'
+      '^Connection to .* closed by remote host|'
+      r'^(\w+: )?Connection to .* port \d+: |'
+      r'^Timeout, server .* not responding|: Broken pipe$',
+    ),
+    SshDroppedException.new,
+  ),
+];
+
+RegExp _anyOf(List<String> phrases) =>
+    RegExp(phrases.map(RegExp.escape).join('|'), caseSensitive: false);
+
+/// ssh's exit with [code], as the class its lines in [log] say. A forwarded
+/// connection's failure is about its destination, not why ssh exited.
+SshException tunnelFailure(List<String> log, int code) {
   final reason = failureMessage(log);
-  return SshTunnelException(
+  final errors = log.where((line) => classify(line) is SshMessage).toList();
+  final failure =
+      _failures.where((each) => errors.any(each.$1.hasMatch)).firstOrNull?.$2 ??
+          SshFailedException.new;
+  return failure(
     reason.isEmpty ? 'ssh exited with code $code' : reason,
     log: List.unmodifiable(log),
     exitCode: code,
-    isPermanent: isPermanentFailure(log),
   );
 }
 

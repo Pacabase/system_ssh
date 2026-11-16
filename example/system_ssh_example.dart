@@ -13,12 +13,12 @@ Future<void> main() async {
       remoteHost: 'db.example.com',
       remotePort: 5432,
     );
-  } on SshTunnelException catch (exception) {
-    stderr.writeln('ssh failed: ${exception.message}');
+  } on SshPermanentException catch (exception) {
+    stderr.writeln('Fix this first: ${exception.message}');
     exitCode = 1;
     return;
   } on SshException catch (exception) {
-    stderr.writeln(exception.message);
+    stderr.writeln('ssh failed, try again: ${exception.message}');
     exitCode = 1;
     return;
   }
@@ -26,7 +26,7 @@ Future<void> main() async {
   print('db.example.com:5432 is on 127.0.0.1:${tunnel.localPort}');
   try {
     await Future.any([ProcessSignal.sigint.watch().first, tunnel.done]);
-  } on SshTunnelException catch (exception) {
+  } on SshException catch (exception) {
     stderr.writeln('The tunnel dropped: ${exception.message}');
     exitCode = 1;
   }
