@@ -3,9 +3,10 @@ import 'ssh_host_key.dart';
 import 'ssh_log.dart';
 import 'ssh_target.dart';
 
-/// A forward that is open: an [SshTunnel] (a local forward or a SOCKS proxy)
-/// or an [SshRemoteTunnel]. Code that only waits on or closes what it opened,
-/// whichever kind, can take an [SshForward]:
+/// A forward that is open: an [SshTunnel] (a local forward, to a port or a
+/// Unix socket, or a SOCKS proxy) or an [SshRemoteTunnel]. Code that only
+/// waits on or closes what it opened, whichever kind, can take an
+/// [SshForward]:
 ///
 /// ```dart
 /// Future<void> closeAll(Iterable<SshForward> forwards) =>
