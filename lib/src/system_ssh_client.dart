@@ -50,7 +50,7 @@ final class SystemSshClient implements SshClient {
   ///
   /// The connection is this process's own, never one the user's
   /// `ControlMaster` set up, and it stops once its last tunnel closes, or
-  /// with the app. When it drops, every tunnel on it fails [SshTunnel.done]
+  /// with the app. When it drops, every tunnel on it fails [SshForward.done]
   /// together. Windows' OpenSSH can't share a connection, so there each
   /// tunnel keeps its own ssh.
   final bool shareConnections;
