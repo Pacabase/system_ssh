@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'abort_signal.dart';
 import 'config_hosts.dart';
 import 'exceptions.dart';
 import 'forwards.dart';
@@ -73,8 +74,7 @@ final class SystemSshClient implements SshClient {
     Future<void>? abortTrigger,
   }) async {
     checkServer(server);
-    var isAborted = false;
-    unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
+    final abort = AbortSignal(abortTrigger);
 
     final environment = await _sshEnvironment();
     final ssh = resolveExecutable(executable, environment: environment);
@@ -84,7 +84,7 @@ final class SystemSshClient implements SshClient {
       environment: environment,
       abortTrigger: abortTrigger,
     );
-    if (isAborted) throw const SshTunnelAbortedException();
+    abort.throwIfAborted();
 
     await trustSystemHostKey(
       server,
@@ -248,8 +248,7 @@ Future<SshTunnel> openSystemForward(
   final isFree = portIsFree ?? (port) => isPortFree(port, address: bindAddress);
   final pickPort = freePort ?? () => pickFreePort(address: bindAddress);
 
-  var isAborted = false;
-  unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
+  final abort = AbortSignal(abortTrigger);
 
   final (ssh, config) = await _resolve(
     server,
@@ -258,7 +257,7 @@ Future<SshTunnel> openSystemForward(
     configTimeout: configTimeout,
     abortTrigger: abortTrigger,
   );
-  if (isAborted) throw const SshTunnelAbortedException();
+  abort.throwIfAborted();
   // A taken port, or an address this computer lacks, needs no login to say
   // so. Port 0 checks the address alone; every computer has 127.0.0.1, and
   // skipping it keeps tunnels opened together on the same login.
@@ -289,9 +288,9 @@ Future<SshTunnel> openSystemForward(
         onLog: onLog,
         abortTrigger: abortTrigger,
       );
-      if (isAborted) {
+      if (abort.isAborted) {
         await handle.close();
-        throw const SshTunnelAbortedException();
+        abort.throwIfAborted();
       }
       return SystemSshTunnel(port, handle);
     }
@@ -317,11 +316,11 @@ Future<SshTunnel> openSystemForward(
 
   Future<SshTunnel> open() async {
     if (localPort != null) {
-      if (isAborted) throw const SshTunnelAbortedException();
+      abort.throwIfAborted();
       if (!await isFree(localPort)) {
         throw SshPortInUseException(localPort, address: bindAddress);
       }
-      if (isAborted) throw const SshTunnelAbortedException();
+      abort.throwIfAborted();
 
       try {
         return await start(localPort);
@@ -334,10 +333,10 @@ Future<SshTunnel> openSystemForward(
     }
 
     for (var attempt = 1;; attempt++) {
-      if (isAborted) throw const SshTunnelAbortedException();
+      abort.throwIfAborted();
 
       final port = await pickPort();
-      if (isAborted) throw const SshTunnelAbortedException();
+      abort.throwIfAborted();
 
       try {
         return await start(port);
@@ -375,8 +374,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   checkLocalPort(localPort);
   if (remotePort != null) checkPort(remotePort, 'remotePort');
 
-  var isAborted = false;
-  unawaited(abortTrigger?.then((_) => isAborted = true, onError: (_) {}));
+  final abort = AbortSignal(abortTrigger);
 
   final (ssh, config) = await _resolve(
     server,
@@ -385,7 +383,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
     configTimeout: configTimeout,
     abortTrigger: abortTrigger,
   );
-  if (isAborted) throw const SshTunnelAbortedException();
+  abort.throwIfAborted();
 
   final forward = RemoteForward(
     remotePort ?? 0,
@@ -406,16 +404,16 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
       ),
     );
     try {
-      if (isAborted) throw const SshTunnelAbortedException();
+      abort.throwIfAborted();
       final (handle, printed) = await shared.forward(
         forward,
         onLog: onLog,
         abortTrigger: abortTrigger,
       );
       final port = remotePort ?? int.tryParse(printed);
-      if (isAborted || port == null) {
+      if (abort.isAborted || port == null) {
         await handle.close();
-        if (isAborted) throw const SshTunnelAbortedException();
+        abort.throwIfAborted();
         throw const SshFailedException(
           "ssh didn't say which port the server picked",
         );

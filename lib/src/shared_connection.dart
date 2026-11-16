@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'abort_signal.dart';
 import 'exceptions.dart';
 import 'forwards.dart';
 import 'logger.dart';
@@ -190,20 +191,9 @@ final class _Connection {
   }) async {
     _holds++;
     _waiting.add(onLog);
-    final aborted = Completer<void>();
-    unawaited(
-      abortTrigger?.then(
-        (_) {
-          if (!aborted.isCompleted) {
-            aborted.completeError(const SshTunnelAbortedException());
-          }
-        },
-        onError: (Object _) {},
-      ),
-    );
 
     try {
-      await Future.any([_ready.future, aborted.future]);
+      await Future.any([_ready.future, AbortSignal(abortTrigger).aborted]);
       return SharedConnection._(this);
     } catch (exception) {
       release();
@@ -449,28 +439,12 @@ final class _Connection {
         .transform(const Utf8Decoder(allowMalformed: true))
         .join();
 
-    final aborted = Completer<int>();
-    unawaited(
-      abortTrigger?.then(
-        (_) {
-          if (!aborted.isCompleted) {
-            aborted.completeError(const SshTunnelAbortedException());
-          }
-        },
-        onError: (Object _) {},
-      ),
-    );
-
     try {
       final code =
-          await Future.any([process.exitCode, aborted.future]).timeout(timeout);
+          await AbortSignal(abortTrigger).exitCodeOf(process, timeout: timeout);
       return (exitCode: code, stdout: await stdout, stderr: await stderr);
     } on TimeoutException {
-      process.kill();
       return null;
-    } on SshTunnelAbortedException {
-      process.kill();
-      rethrow;
     }
   }
 }
