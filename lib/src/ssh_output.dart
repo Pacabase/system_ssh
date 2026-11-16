@@ -86,7 +86,13 @@ final class RemoteForwardReadiness implements ForwardReadiness {
     this.requestedPort, {
     required String localHost,
     required int localPort,
-  }) : _destination = '$localHost:$localPort';
+  }) : _destination = '${_unbracketed(localHost)}:$localPort';
+
+  // ssh names the destination's host without the brackets it was given.
+  static String _unbracketed(String host) =>
+      host.startsWith('[') && host.endsWith(']')
+          ? host.substring(1, host.length - 1)
+          : host;
 
   final int requestedPort;
   final String _destination;

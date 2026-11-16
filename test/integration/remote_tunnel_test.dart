@@ -23,13 +23,14 @@ void main() {
 
     Future<SshRemoteTunnel> open({
       int? remotePort,
+      String? localHost,
       void Function(SshLog log)? onLog,
     }) async {
       final lines = <String>[];
       addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
       final tunnel = await openSystemRemoteForward(
         fixture.target,
-        localHost: fixture.echoHost,
+        localHost: localHost ?? fixture.echoHost,
         localPort: fixture.echoPort,
         remotePort: remotePort,
         onLog: (log) {
@@ -68,6 +69,12 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('opens to a bracketed IPv6 host on a port the server picks', () async {
+      final tunnel = await open(localHost: '[::1]');
+
+      expect(tunnel.remotePort, isNot(0));
     });
 
     test('says why when the server port is taken', () async {

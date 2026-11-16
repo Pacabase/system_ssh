@@ -1,3 +1,9 @@
+## Unreleased
+
+- `openRemoteTunnel` with a bracketed IPv6 `localHost`, such as `[::1]`, and
+  no `remotePort` now opens. It waited for a line ssh never writes, since
+  ssh names the host without brackets, so it never became ready.
+
 ## 0.9.2
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`

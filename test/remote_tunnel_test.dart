@@ -72,6 +72,19 @@ void main() {
       expect(picked.port, 41234);
     });
 
+    test('takes the picked port for a bracketed IPv6 destination', () {
+      final picked =
+          RemoteForwardReadiness(0, localHost: '[::1]', localPort: 3000)
+            ..isReadyAfter(session);
+
+      expect(
+        picked.isReadyAfter(
+            'Allocated port 41234 for remote forward to ::1:3000'),
+        isTrue,
+      );
+      expect(picked.port, 41234);
+    });
+
     test("counts the server's picked port as progress, not a failure", () {
       const allocated =
           'Allocated port 41234 for remote forward to localhost:3000';
