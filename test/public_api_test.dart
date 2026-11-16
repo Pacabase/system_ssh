@@ -225,6 +225,30 @@ void main() {
     await fixed.done;
   });
 
+  test('closes a tunnel and a remote tunnel as an SshForward', () async {
+    final SshClient fake = _FakeSshClient();
+    Future<void> stop(SshForward forward) async {
+      await forward.close();
+      await forward.done;
+    }
+
+    final forwards = <SshForward>[
+      await fake.openTunnel(
+        const SshTarget('ssh.example.com'),
+        remoteHost: 'db.example.com',
+        remotePort: 5432,
+      ),
+      await fake.openSocksProxy(const SshTarget('ssh.example.com')),
+      await fake.openRemoteTunnel(
+        const SshTarget('ssh.example.com'),
+        localPort: 3000,
+      ),
+    ];
+
+    await Future.wait(forwards.map(stop));
+    expect(forwards, everyElement(isA<SshForward>()));
+  });
+
   test('opens a tunnel to a Unix socket on the server', () async {
     final SshClient fake = _FakeSshClient();
     final tunnel = await fake.openSocketTunnel(

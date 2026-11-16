@@ -1,3 +1,19 @@
+## Unreleased
+
+- `SshTunnel` and `SshRemoteTunnel` share a supertype, `SshForward`, with
+  their `done` and `close()`, so code that waits on or closes whatever it
+  opened, local or remote, can take either one without a wrapper:
+
+  ```dart
+  final forwards = <SshForward>[
+    await client.openTunnel(server, remoteHost: 'db', remotePort: 5432),
+    await client.openRemoteTunnel(server, localPort: 3000),
+  ];
+  await Future.wait(forwards.map((forward) => forward.close()));
+  ```
+
+  Fakes that implement `SshTunnel` or `SshRemoteTunnel` need no change.
+
 ## 0.9.2
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`

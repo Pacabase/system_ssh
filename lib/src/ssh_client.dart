@@ -3,14 +3,15 @@ import 'ssh_host_key.dart';
 import 'ssh_log.dart';
 import 'ssh_target.dart';
 
-/// An open tunnel: connections to [localPort], on the address it was opened
-/// to listen on (`127.0.0.1` by default), reach the remote host and port it
-/// was opened to, or, for a SOCKS proxy, the ones they ask for.
-abstract interface class SshTunnel {
-  /// The port to connect to, on the address the tunnel was opened to listen
-  /// on.
-  int get localPort;
-
+/// A forward that is open: an [SshTunnel] (a local forward or a SOCKS proxy)
+/// or an [SshRemoteTunnel]. Code that only waits on or closes what it opened,
+/// whichever kind, can take an [SshForward]:
+///
+/// ```dart
+/// Future<void> closeAll(Iterable<SshForward> forwards) =>
+///     Future.wait(forwards.map((forward) => forward.close()));
+/// ```
+abstract interface class SshForward {
   /// Completes when [close] stops ssh. When ssh exits on its own, because the
   /// connection dropped, it fails with an [SshTunnelException] saying why.
   Future<void> get done;
@@ -19,17 +20,23 @@ abstract interface class SshTunnel {
   Future<void> close();
 }
 
+/// An open tunnel: connections to [localPort], on the address it was opened
+/// to listen on (`127.0.0.1` by default), reach the remote host and port it
+/// was opened to, or, for a SOCKS proxy, the ones they ask for.
+abstract interface class SshTunnel implements SshForward {
+  /// The port to connect to, on the address the tunnel was opened to listen
+  /// on.
+  int get localPort;
+}
+
 /// An open remote forward: connections to `127.0.0.1:`[remotePort] on the
 /// server reach the host and port on this side it was opened to.
-abstract interface class SshRemoteTunnel {
+abstract interface class SshRemoteTunnel implements SshForward {
   /// The port on the server's `127.0.0.1` that reaches back here.
   int get remotePort;
 
-  /// Completes when [close] stops ssh. When ssh exits on its own, because the
-  /// connection dropped, it fails with an [SshTunnelException] saying why.
-  Future<void> get done;
-
   /// Stops ssh, and with it the server's port. Closing again does nothing.
+  @override
   Future<void> close();
 }
 
