@@ -148,6 +148,10 @@ final cache = await client.openTunnel(server, remoteHost: 'cache', remotePort: 6
 - It starts with the first tunnel to a server and stops once the last one
   closes, or with your process, even by a crash.
 - When it drops, every tunnel on it fails `done` together.
+- Two remote tunnels with the same forward, the same local host and port on
+  the same server port or both on one the server picks, can't share it: the
+  second throws an `SshDuplicateForwardException` rather than log in again.
+  Pass another `remotePort`, or reuse the tunnel that's open.
 - Two tunnels can't share the same remote forward (the same `remotePort`, or
   a server-picked port to the same local one); the second throws.
 - Two tunnels on the same `localPort` but different `bindAddress`es each
@@ -264,6 +268,7 @@ try {
 | `SshNotFoundException` | no `ssh` could be started; on Windows the message says how to add OpenSSH Client |
 | `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`) |
 | `SshPortInUseException` | the `localPort` you asked for is taken; `port` and `address` say which |
+| `SshDuplicateForwardException` | with `shareConnections`, another open tunnel on the server already has the same remote forward; `forward` says which |
 | `SshLoginRefusedException` | the server refused every login: `Permission denied (publickey)`, too many keys tried |
 | `SshHostKeyRefusedException` | ssh refused a host key that isn't asked about: your config sets `StrictHostKeyChecking yes`, or a `ProxyJump` host's key is unknown or changed |
 | `SshUnknownHostKeyException` | the server's host key isn't in `known_hosts` yet, and your config leaves `StrictHostKeyChecking` at `ask`; see [Host keys](#host-keys) |

@@ -13,6 +13,10 @@ void main() {
       (SshNotFoundException(), 'SshNotFoundException'),
       (const SshConfigException('boom'), 'SshConfigException'),
       (const SshPortInUseException(5432), 'SshPortInUseException'),
+      (
+        const SshDuplicateForwardException('127.0.0.1:0:localhost:3000'),
+        'SshDuplicateForwardException',
+      ),
       (const SshLoginRefusedException('boom'), 'SshLoginRefusedException'),
       (const SshHostKeyRefusedException('boom'), 'SshHostKeyRefusedException'),
       (SshUnknownHostKeyException(hostKey), 'SshUnknownHostKeyException'),

@@ -153,6 +153,8 @@ abstract interface class SshClient {
   ///   [SshFailedException], as when [remotePort] is taken on the server or
   ///   its sshd doesn't allow forwarding:
   ///   `Error: remote port forwarding failed for listen port`.
+  /// - [SshDuplicateForwardException] with `shareConnections`, when another
+  ///   open tunnel on the server already has the same forward.
   /// - [SshUnknownHostKeyException] when the server's host key isn't in
   ///   `known_hosts` yet and the config leaves `StrictHostKeyChecking` at
   ///   `ask`; see [trustHostKey].
