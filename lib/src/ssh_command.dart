@@ -57,7 +57,7 @@ void checkSocketPath(String path, String name) {
 /// for this process alone; without one, it serves nothing but [forward].
 List<String> sshCommand(
   SshTarget server, {
-  Forward? forward,
+  required Forward? forward,
   Map<String, String> config = const {},
   String executable = 'ssh',
   String? masterSocket,

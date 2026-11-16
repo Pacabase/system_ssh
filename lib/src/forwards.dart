@@ -1,12 +1,8 @@
 import 'ssh_command.dart';
 
-/// One forward ssh serves: `-L` to a host and port or a socket, `-D`, or
-/// `-R`.
 sealed class Forward {
   const Forward();
 
-  /// The ssh arguments that ask for it, such as
-  /// `-L 127.0.0.1:50000:db.example.com:3306`.
   List<String> get arguments;
 
   /// What it forwards, for messages: `127.0.0.1:50000:db.example.com:3306`.
@@ -14,9 +10,18 @@ sealed class Forward {
 
   @override
   String toString() => arguments.join(' ');
+
+  // The arguments bracket an IPv6 host, so `::1` and `[::1]` are equal.
+  @override
+  bool operator ==(Object other) =>
+      other is Forward &&
+      other.runtimeType == runtimeType &&
+      other.toString() == toString();
+
+  @override
+  int get hashCode => Object.hash(runtimeType, toString());
 }
 
-/// A forward that listens on this computer: `-L` or `-D`.
 sealed class ListeningForward extends Forward {
   const ListeningForward(this.localPort, {required this.bindAddress});
 
@@ -40,23 +45,6 @@ final class LocalForward extends ListeningForward {
   @override
   List<String> get arguments =>
       ['-L', '$_listen:${bracketIPv6(remoteHost)}:$remotePort'];
-
-  @override
-  bool operator ==(Object other) =>
-      other is LocalForward &&
-      other.localPort == localPort &&
-      other.bindAddress == bindAddress &&
-      _unbracketed(other.remoteHost) == _unbracketed(remoteHost) &&
-      other.remotePort == remotePort;
-
-  @override
-  int get hashCode => Object.hash(
-        LocalForward,
-        localPort,
-        bindAddress,
-        _unbracketed(remoteHost),
-        remotePort,
-      );
 }
 
 final class SocketForward extends ListeningForward {
@@ -70,17 +58,6 @@ final class SocketForward extends ListeningForward {
 
   @override
   List<String> get arguments => ['-L', '$_listen:$remoteSocket'];
-
-  @override
-  bool operator ==(Object other) =>
-      other is SocketForward &&
-      other.localPort == localPort &&
-      other.bindAddress == bindAddress &&
-      other.remoteSocket == remoteSocket;
-
-  @override
-  int get hashCode =>
-      Object.hash(SocketForward, localPort, bindAddress, remoteSocket);
 }
 
 final class DynamicForward extends ListeningForward {
@@ -88,22 +65,11 @@ final class DynamicForward extends ListeningForward {
 
   @override
   List<String> get arguments => ['-D', _listen];
-
-  @override
-  bool operator ==(Object other) =>
-      other is DynamicForward &&
-      other.localPort == localPort &&
-      other.bindAddress == bindAddress;
-
-  @override
-  int get hashCode => Object.hash(DynamicForward, localPort, bindAddress);
 }
 
-/// A host and port on this computer that a remote forward connects to.
 typedef LocalDestination = ({String host, int port});
 
-/// A forward from the server's `127.0.0.1:`[remotePort] to [localHost] and
-/// [localPort] here. A [remotePort] of 0 has the server pick one.
+/// A [remotePort] of 0 has the server pick one.
 final class RemoteForward extends Forward {
   const RemoteForward(
     this.remotePort, {
@@ -125,15 +91,6 @@ final class RemoteForward extends Forward {
   /// around an IPv6 address.
   LocalDestination get destination =>
       (host: _unbracketed(localHost), port: localPort);
-
-  @override
-  bool operator ==(Object other) =>
-      other is RemoteForward &&
-      other.remotePort == remotePort &&
-      other.destination == destination;
-
-  @override
-  int get hashCode => Object.hash(RemoteForward, remotePort, destination);
 }
 
 /// ssh reads `::1` and `[::1]` as the same host.

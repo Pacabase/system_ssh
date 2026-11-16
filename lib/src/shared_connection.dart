@@ -159,6 +159,7 @@ final class _Connection {
     _directory = _masterDirectory();
     final command = sshCommand(
       _server,
+      forward: null,
       config: config,
       executable: executable,
       masterSocket: _socket,
