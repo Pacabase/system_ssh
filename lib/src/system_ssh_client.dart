@@ -290,7 +290,7 @@ Future<SshTunnel> openSystemForward(
       );
       if (abort.isAborted) {
         await handle.close();
-        throw const SshTunnelAbortedException();
+        abort.throwIfAborted();
       }
       return SystemSshTunnel(port, handle);
     }

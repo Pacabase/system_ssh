@@ -44,6 +44,30 @@ void main() {
       expect(process.kills, 0);
     });
 
+    test('leaves a process that exits before the abort', () async {
+      final trigger = Completer<void>();
+      final process = _FakeProcess()..exit(0);
+
+      expect(
+        await AbortSignal(trigger.future).exitCodeOf(process, timeout: _long),
+        0,
+      );
+      trigger.complete();
+      await pumpEventQueue();
+
+      expect(process.kills, 0);
+    });
+
+    test('kills a process at once for a trigger already completed', () async {
+      final process = _FakeProcess();
+
+      await expectLater(
+        AbortSignal(Future.value()).exitCodeOf(process, timeout: _long),
+        throwsA(isA<SshTunnelAbortedException>()),
+      );
+      expect(process.kills, 1);
+    });
+
     test('kills a process when aborted', () async {
       final trigger = Completer<void>();
       final process = _FakeProcess();

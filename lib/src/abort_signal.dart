@@ -3,17 +3,12 @@ import 'dart:io';
 
 import 'exceptions.dart';
 
-/// An app's `abortTrigger`, as each step of opening a tunnel checks it.
 final class AbortSignal {
   AbortSignal(Future<void>? trigger) {
     _aborted.future.ignore();
     unawaited(
       trigger?.then(
-        (_) {
-          if (!_aborted.isCompleted) {
-            _aborted.completeError(const SshTunnelAbortedException());
-          }
-        },
+        (_) => _aborted.completeError(const SshTunnelAbortedException()),
         onError: (Object _) {},
       ),
     );
