@@ -26,13 +26,13 @@ void main() {
     bool isPermanent = false,
   }) =>
       throwsA(
-        isA<SshTunnelException>()
+        isA<SshException>()
             .having((exception) => exception.message, 'message', message)
             .having((exception) => exception.log, 'log', log)
             .having((exception) => exception.exitCode, 'exitCode', exitCode)
             .having(
-              (exception) => exception.isPermanent,
-              'isPermanent',
+              (exception) => exception is SshPermanentException,
+              'is permanent',
               isPermanent,
             ),
       );
@@ -121,7 +121,7 @@ void main() {
 
       await expectLater(
         SystemSshTunnel.attach(process, localPort: localPort),
-        throwsA(isA<SshTunnelException>()),
+        throwsA(isA<SshException>()),
       );
     });
 
@@ -224,7 +224,7 @@ void main() {
 
       await expectLater(
         SystemSshTunnel.attach(process, localPort: localPort, onLog: logs.add),
-        throwsA(isA<SshTunnelException>()),
+        throwsA(isA<SshException>()),
       );
 
       expect(logs, const [SshProgress(connectingLine), SshMessage(denied)]);
@@ -430,6 +430,7 @@ void main() {
           log: ['debug1: channel 0: new [port listener]', closed],
         ),
       );
+      await expectLater(tunnel.done, throwsA(isA<SshDroppedException>()));
     });
 
     test('names the exit code when ssh drops without a reason', () async {
@@ -461,7 +462,7 @@ void main() {
       await expectLater(
         tunnel.done.timeout(const Duration(seconds: 10)),
         throwsA(
-          isA<SshTunnelException>().having(
+          isA<SshException>().having(
             (exception) => exception.log,
             'log',
             [for (var line = 11; line <= 30; line++) 'debug1: line $line'],

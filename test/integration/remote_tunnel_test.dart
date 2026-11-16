@@ -84,7 +84,7 @@ void main() {
       await expectLater(
         open(remotePort: taken.port),
         throwsA(
-          isA<SshTunnelException>().having(
+          isA<SshFailedException>().having(
             (exception) => exception.message,
             'message',
             contains('remote port forwarding failed'),

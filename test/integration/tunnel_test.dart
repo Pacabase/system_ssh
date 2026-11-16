@@ -24,20 +24,6 @@ void main() {
     setUp(fixture.setUp);
     tearDown(fixture.tearDown);
 
-    Matcher sshFailure(String reason, {bool isPermanent = true}) => throwsA(
-          isA<SshTunnelException>()
-              .having(
-                (exception) => exception.message,
-                'message',
-                contains(reason),
-              )
-              .having(
-                (exception) => exception.isPermanent,
-                'isPermanent',
-                isPermanent,
-              ),
-        );
-
     void Function(SshLog log) logged([void Function(SshLog log)? onLog]) {
       final lines = <String>[];
       addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
@@ -252,11 +238,10 @@ void main() {
       await expectLater(
         open(via: fixture.strictTarget),
         throwsA(
-          isA<SshTunnelException>()
-              .having((exception) => exception, 'type',
-                  isNot(isA<SshUnknownHostKeyException>()))
-              .having((exception) => exception.message, 'message',
-                  contains('Host key verification failed')),
+          isA<SshHostKeyRefusedException>().having(
+              (exception) => exception.message,
+              'message',
+              contains('Host key verification failed')),
         ),
       );
       expect(await fixture.isKnownHost(), isFalse);
@@ -272,10 +257,8 @@ void main() {
       );
       expect(
         changed,
-        isA<SshHostKeyChangedException>()
-            .having((exception) => exception.hostKey.host, 'host',
-                fixture.hostKeyName)
-            .having((exception) => exception.isPermanent, 'isPermanent', true),
+        isA<SshHostKeyChangedException>().having(
+            (exception) => exception.hostKey.host, 'host', fixture.hostKeyName),
       );
       await expectLater(
         SystemSshClient(executable: fixture.ssh).trustHostKey(
@@ -308,7 +291,13 @@ void main() {
 
       await expectLater(
         open(ports: ports),
-        sshFailure('cannot listen to port', isPermanent: false),
+        throwsA(
+          isA<SshFailedException>().having(
+            (exception) => exception.message,
+            'message',
+            contains('cannot listen to port'),
+          ),
+        ),
       );
       expect(ports.picks, 3);
     });
@@ -499,17 +488,11 @@ void main() {
         await expectLater(
           tunnel.done.timeout(const Duration(seconds: 20)),
           throwsA(
-            isA<SshTunnelException>()
-                .having(
-                  (exception) => exception.message,
-                  'message',
-                  allOf(isNotEmpty, isNot(startsWith('ssh exited with code'))),
-                )
-                .having(
-                  (exception) => exception.isPermanent,
-                  'isPermanent',
-                  isFalse,
-                ),
+            isA<SshTemporaryException>().having(
+              (exception) => exception.message,
+              'message',
+              allOf(isNotEmpty, isNot(startsWith('ssh exited with code'))),
+            ),
           ),
         );
       });

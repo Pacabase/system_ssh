@@ -52,7 +52,8 @@ Future<void> main() async {
   ```
 - `abortTrigger` gives up while it connects.
 - `tunnel.done` completes once you `close()` the tunnel, and fails with an
-  `SshTunnelException` saying why when the connection drops.
+  `SshException` saying why when the connection drops, usually an
+  `SshDroppedException`.
 - `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
 - `SystemSshClient(environment: ...)` adds variables to the environment ssh
   inherits; a bare `executable` is looked up on the `PATH` it sets.
@@ -120,7 +121,7 @@ print('On the server, curl http://127.0.0.1:${tunnel.remotePort}');
 - `localHost` defaults to `localhost`; another host forwards to that machine,
   as this one reaches it.
 - When the server port is taken, or its sshd doesn't allow forwarding, it
-  throws an `SshTunnelException` with ssh's
+  throws an `SshFailedException` with ssh's
   `Error: remote port forwarding failed for listen port 8080`.
 - It takes `onLog` and `abortTrigger` as `openTunnel` does, and
   `remoteTunnelCommand(...)` gives the terminal command:
@@ -196,7 +197,7 @@ try {
   the key the server offers now. Nothing is written; the user removes the old
   key (`ssh-keygen -R <host>`) once they know why it changed.
 - A config that sets `StrictHostKeyChecking` gets what it sets: `yes` fails
-  with ssh's own `SshTunnelException`, and `accept-new` or `no` connects as
+  with an `SshHostKeyRefusedException` in ssh's words, and `accept-new` or `no` connects as
   ssh does. Set `accept-new` for a host to trust its first key unseen.
 - A host behind a `ProxyCommand` is asked about like any other. A `ProxyJump`
   host's own key is checked by the ssh it starts, which gets none of these
@@ -242,23 +243,45 @@ signed with a Developer ID and notarized instead.
 
 ## Failures
 
+Every failure is an `SshException`, and each class is under one of two
+sealed parents. Catch `SshPermanentException` for a failure that needs the
+user to change something first, and `SshTemporaryException` for one worth
+retrying:
+
+```dart
+try {
+  return await client.openTunnel(server, remoteHost: 'db', remotePort: 5432);
+} on SshTemporaryException {
+  // Wait a little and try again.
+} on SshPermanentException catch (exception) {
+  // Stop, and say what to change.
+}
+```
+
 | Exception | When |
 |---|---|
+| **`SshPermanentException`** | |
 | `SshNotFoundException` | no `ssh` could be started; on Windows the message says how to add OpenSSH Client |
-| `SshTunnelAbortedException` | `abortTrigger` completed first |
-| `SshPortInUseException` | the `localPort` you asked for is taken |
-| `SshTunnelException` | ssh exited before the tunnel opened; `log` and `exitCode` say why |
+| `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error or the file's owner or permissions |
+| `SshPortInUseException` | the `localPort` you asked for is taken; `port` and `address` say which |
+| `SshLoginRefusedException` | the server refused every login: `Permission denied (publickey)`, too many keys tried |
+| `SshHostKeyRefusedException` | ssh refused the host key where your config sets `StrictHostKeyChecking yes` |
 | `SshUnknownHostKeyException` | the server's host key isn't in `known_hosts` yet, and your config leaves `StrictHostKeyChecking` at `ask`; see [Host keys](#host-keys) |
 | `SshHostKeyChangedException` | the server's host key doesn't match the one `known_hosts` holds for it |
-| `SshConfigException` | your ssh config for the host stops the tunnel from working, such as `ClearAllForwardings yes` |
-| `SshException` | anything else, such as a Windows job object that can't be set up |
+| **`SshTemporaryException`** | |
+| `SshHostNotFoundException` | the server's name didn't resolve, which offline it won't |
+| `SshUnreachableException` | the connection was refused, timed out or had no route |
+| `SshDroppedException` | the connection was up and went down: closed, reset or stopped answering |
+| `SshAddressUnavailableException` | the `bindAddress` isn't an address of this computer, at least not yet |
+| `SshFailedException` | anything else, in ssh's words when it said why |
+| **Neither** | |
+| `SshTunnelAbortedException` | `abortTrigger` completed first |
 | `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…`, or a `localPort` outside 1 to 65535 |
 
-`isPermanent` says whether trying again can't work until something changes:
-true for a missing ssh, a taken `localPort`, an `SshConfigException`, and an
-`SshTunnelException` for a host key, a refused login or a broken ssh config. A
-dropped connection, a timeout or a host that doesn't resolve while offline is
-worth retrying.
+Each has the `message`, and the `log` of everything ssh wrote and its
+`exitCode` when ssh said why. A `switch` over the classes puts each in your
+own words; a later version may add a class, so the CHANGELOG says when one
+comes.
 
 ## Options it sets
 
@@ -327,14 +350,14 @@ class FakeSshClient implements SshClient {
           int? localPort,
           void Function(SshLog log)? onLog,
           Future<void>? abortTrigger}) =>
-      throw const SshTunnelException('Permission denied (publickey).');
+      throw const SshLoginRefusedException('Permission denied (publickey).');
 
   @override
   Future<SshTunnel> openSocksProxy(SshTarget server,
           {int? localPort,
           void Function(SshLog log)? onLog,
           Future<void>? abortTrigger}) =>
-      throw const SshTunnelException('Permission denied (publickey).');
+      throw const SshLoginRefusedException('Permission denied (publickey).');
 
   @override
   Future<SshTunnel> openSocketTunnel(SshTarget server,

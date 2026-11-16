@@ -40,8 +40,8 @@ void main() {
     'Host key verification failed.',
   ];
 
-  SshTunnelException failure(List<String> log) =>
-      SshTunnelException(log.last, log: log, exitCode: 255, isPermanent: true);
+  SshException failure(List<String> log) =>
+      SshHostKeyRefusedException(log.last, log: log, exitCode: 255);
 
   group('knownHostsName', () {
     for (final (config, name) in [
@@ -73,8 +73,7 @@ void main() {
         isA<SshUnknownHostKeyException>()
             .having((exception) => exception.hostKey, 'hostKey', hostKey)
             .having((exception) => exception.log, 'log', unknownLog)
-            .having((exception) => exception.exitCode, 'exitCode', 255)
-            .having((exception) => exception.isPermanent, 'isPermanent', true),
+            .having((exception) => exception.exitCode, 'exitCode', 255),
       );
       expect(
         result!.message,
@@ -417,11 +416,7 @@ void main() {
       await expectLater(
         open(),
         throwsA(
-          isA<SshTunnelException>()
-              .having((exception) => exception, 'type',
-                  isNot(isA<SshUnknownHostKeyException>()))
-              .having(
-                  (exception) => exception.isPermanent, 'isPermanent', isTrue),
+          isA<SshHostKeyRefusedException>(),
         ),
       );
     });
@@ -465,11 +460,10 @@ void main() {
       await expectLater(
         open(),
         throwsA(
-          isA<SshTunnelException>()
-              .having((exception) => exception, 'type',
-                  isNot(isA<SshUnknownHostKeyException>()))
-              .having((exception) => exception.message, 'message',
-                  contains('Host key verification failed')),
+          isA<SshHostKeyRefusedException>().having(
+              (exception) => exception.message,
+              'message',
+              contains('Host key verification failed')),
         ),
       );
     });
@@ -553,7 +547,7 @@ void main() {
         await expectLater(
           client.trustHostKey(server, hostKey),
           throwsA(
-            isA<SshTunnelException>().having(
+            isA<SshException>().having(
               (exception) => exception.message,
               'message',
               contains('Connection closed'),
@@ -614,11 +608,10 @@ void main() {
         await expectLater(
           client.trustHostKey(server, hostKey),
           throwsA(
-            isA<SshTunnelException>()
-                .having((exception) => exception.message, 'message',
-                    contains('Connection refused'))
-                .having((exception) => exception.isPermanent, 'isPermanent',
-                    isFalse),
+            isA<SshUnreachableException>().having(
+                (exception) => exception.message,
+                'message',
+                contains('Connection refused')),
           ),
         );
         expect(fake.knownHosts.existsSync(), isFalse);
