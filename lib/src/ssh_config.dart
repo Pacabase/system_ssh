@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'exceptions.dart';
+import 'abort_signal.dart';
 import 'processes.dart';
 import 'ssh_command.dart';
 import 'ssh_target.dart';
@@ -15,8 +15,7 @@ Future<Map<String, String>> resolveConfig(
   Duration timeout = const Duration(seconds: 5),
   Future<void>? abortTrigger,
 }) async {
-  final aborted = Completer<void>();
-  unawaited(abortTrigger?.then((_) => aborted.complete(), onError: (_) {}));
+  final abort = AbortSignal(abortTrigger);
 
   final process = await startWatched(
     [executable, '-G', ...destinationArguments(server)],
@@ -29,19 +28,11 @@ Future<Map<String, String>> resolveConfig(
       .toList();
 
   try {
-    final code = await Future.any([
-      process.exitCode,
-      aborted.future.then((_) => throw const SshTunnelAbortedException()),
-    ]).timeout(timeout);
-
+    final code = await abort.exitCodeOf(process, timeout: timeout);
     return code == 0 ? parseConfig(await output) : const {};
   } on TimeoutException {
-    // A `Match exec` in ~/.ssh/config can hang; neither it nor ssh may outlive the connect.
-    process.kill();
+    // A `Match exec` in ~/.ssh/config can hang.
     return const {};
-  } on SshTunnelAbortedException {
-    process.kill();
-    rethrow;
   }
 }
 

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import 'abort_signal.dart';
 import 'exceptions.dart';
 import 'logger.dart';
 import 'processes.dart';
@@ -287,8 +288,7 @@ Future<(List<String>, int)> _run(
   Future<void>? abortTrigger,
   String? host,
 }) async {
-  final aborted = Completer<void>();
-  unawaited(abortTrigger?.then((_) => aborted.complete(), onError: (_) {}));
+  final abort = AbortSignal(abortTrigger);
 
   final process = await startWatched(command, environment: environment);
   unawaited(process.stdout.drain<void>());
@@ -312,21 +312,14 @@ Future<(List<String>, int)> _run(
   );
 
   try {
-    final code = await Future.any([
-      process.exitCode,
-      aborted.future.then((_) => throw const SshTunnelAbortedException()),
-    ]).timeout(timeout);
+    final code = await abort.exitCodeOf(process, timeout: timeout);
     // ssh's last lines can land after its exit code; a ProxyCommand that
     // outlives it can hold stderr open longer.
     await stderrDone.future
         .timeout(const Duration(seconds: 1), onTimeout: () {});
     return (List<String>.unmodifiable(lines), code);
   } on TimeoutException {
-    process.kill();
     throw const SshTunnelException("ssh didn't read the host key in time");
-  } on SshTunnelAbortedException {
-    process.kill();
-    rethrow;
   }
 }
 
