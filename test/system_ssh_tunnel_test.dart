@@ -321,6 +321,45 @@ void main() {
       expect(await exitCodeOf(process), terminated);
     });
 
+    test('passes onLog nothing ssh says once aborted', () async {
+      final process = _ScriptedProcess();
+      final abort = Completer<void>();
+      final logs = <SshLog>[];
+
+      final attaching = SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+        onLog: logs.add,
+        abortTrigger: abort.future,
+      );
+      process.say(connectingLine);
+      unawaited(abort.future.then((_) => process.say('Warning: late')));
+      abort.complete();
+
+      await expectLater(attaching, throwsA(isA<SshTunnelAbortedException>()));
+      expect(logs, const [SshProgress(connectingLine)]);
+    });
+
+    test('throws only that it was aborted when ssh exits as it is', () async {
+      final process = _ScriptedProcess();
+      final abort = Completer<void>();
+
+      final attaching = SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+        abortTrigger: abort.future,
+      );
+      process.say(connectingLine);
+      unawaited(abort.future.then((_) => process.exit(255)));
+      abort.complete();
+
+      await expectLater(
+        attaching.timeout(const Duration(seconds: 1)),
+        throwsA(isA<SshTunnelAbortedException>()),
+      );
+      expect(process.kills, 1);
+    });
+
     test('is ignored when it fails', () async {
       final process = await startFake([...ready, 'hang']);
 
@@ -647,6 +686,48 @@ final class _GoodbyeProcess implements Process {
     _stderr.add('Killed by signal 15.');
     unawaited(_stderr.close());
     _exitCode.complete(255);
+    return true;
+  }
+}
+
+/// A [Process] whose stderr lines and exit a test plays as they happen, and
+/// that, like ssh, says "Killed by signal 15." shortly after it is killed.
+final class _ScriptedProcess implements Process {
+  final _stderr = StreamController<List<int>>(sync: true);
+  final _exitCode = Completer<int>();
+  int kills = 0;
+
+  void say(String line) => _stderr.add('$line\n'.codeUnits);
+
+  void exit(int code) {
+    unawaited(_stderr.close());
+    _exitCode.complete(code);
+  }
+
+  @override
+  Stream<List<int>> get stderr => _stderr.stream;
+
+  @override
+  Stream<List<int>> get stdout => const Stream.empty();
+
+  @override
+  IOSink get stdin => throw UnimplementedError();
+
+  @override
+  int get pid => 0;
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    kills++;
+    if (_exitCode.isCompleted) return false;
+    Timer.run(() {
+      if (_exitCode.isCompleted) return;
+      say('Killed by signal 15.');
+      exit(255);
+    });
     return true;
   }
 }

@@ -1,3 +1,10 @@
+## Unreleased
+
+- Once a tunnel's `abortTrigger` completes, `onLog` gets nothing more from
+  that attempt. A line ssh wrote as it was stopped could reach `onLog` as a
+  warning, as if the tunnel had opened, so an app that shows warnings no
+  longer shows one for a tunnel it cancelled.
+
 ## 0.9.2
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`
