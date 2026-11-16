@@ -218,9 +218,11 @@ profile isn't used. Turn on
 const client = SystemSshClient(loginShell: true);
 ```
 
-It runs your shell once, on the first tunnel, gives up after 5 seconds, and
-does nothing on Windows, where apps already get your `PATH`. `environment`
-adds variables on top, and wins on a clash:
+It runs your shell on the first tunnel and keeps what it reads for the rest of
+the process. If the shell fails or takes longer than 5 seconds, that tunnel
+goes without and the next one runs the shell again. It does nothing on
+Windows, where apps already get your `PATH`. `environment` adds variables on
+top, and wins on a clash:
 
 ```dart
 const client = SystemSshClient(

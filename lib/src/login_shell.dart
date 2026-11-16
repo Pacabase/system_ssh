@@ -12,20 +12,25 @@ Future<Map<String, String>> cachedLoginShellEnvironment() => _loginShell.read();
 
 /// Keeps the first environment [_read] returns, sharing one read between
 /// concurrent callers. A failed read (null) gives them an empty environment
-/// and isn't kept, so one slow shell start doesn't cost every later tunnel the
-/// user's `PATH` and agent.
+/// and isn't kept, nor is one that throws, so one slow shell start doesn't cost
+/// every later tunnel the user's `PATH` and agent.
 final class CachedEnvironment {
   CachedEnvironment(this._read);
 
   final Future<Map<String, String>?> Function() _read;
   Future<Map<String, String>>? _environment;
 
-  Future<Map<String, String>> read() =>
-      _environment ??= _read().then((environment) {
-        if (environment != null) return environment;
-        _environment = null;
-        return const {};
-      });
+  Future<Map<String, String>> read() => _environment ??= _read().then(
+        (environment) {
+          if (environment != null) return environment;
+          _environment = null;
+          return const {};
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          _environment = null;
+          Error.throwWithStackTrace(error, stackTrace);
+        },
+      );
 }
 
 /// Null when the shell fails or outlasts [timeout]. Empty on Windows, where

@@ -174,29 +174,22 @@ wait
   });
 
   group('CachedEnvironment', () {
-    test('keeps a successful read', () async {
-      var reads = 0;
-      final cache = CachedEnvironment(() async {
-        reads++;
-        return {'PATH': '/usr/bin'};
+    for (final (name, result) in [
+      ('a read', {'PATH': '/usr/bin'}),
+      ('an empty read', <String, String>{}),
+    ]) {
+      test('keeps $name', () async {
+        var reads = 0;
+        final cache = CachedEnvironment(() async {
+          reads++;
+          return result;
+        });
+
+        expect(await cache.read(), result);
+        expect(await cache.read(), result);
+        expect(reads, 1);
       });
-
-      expect(await cache.read(), {'PATH': '/usr/bin'});
-      expect(await cache.read(), {'PATH': '/usr/bin'});
-      expect(reads, 1);
-    });
-
-    test('keeps an empty read', () async {
-      var reads = 0;
-      final cache = CachedEnvironment(() async {
-        reads++;
-        return const {};
-      });
-
-      expect(await cache.read(), isEmpty);
-      expect(await cache.read(), isEmpty);
-      expect(reads, 1);
-    });
+    }
 
     test('reads again after a failed read', () async {
       final results = [
@@ -208,6 +201,18 @@ wait
 
       expect(await cache.read(), isEmpty);
       expect(await cache.read(), {'PATH': '/usr/bin'});
+      expect(await cache.read(), {'PATH': '/usr/bin'});
+      expect(reads, 2);
+    });
+
+    test('reads again after a read that throws', () async {
+      var reads = 0;
+      final cache = CachedEnvironment(() async {
+        if (reads++ == 0) throw StateError('broken');
+        return {'PATH': '/usr/bin'};
+      });
+
+      await expectLater(cache.read(), throwsStateError);
       expect(await cache.read(), {'PATH': '/usr/bin'});
       expect(reads, 2);
     });
