@@ -4,10 +4,13 @@
   reads ssh's text, and `isPermanent` goes: each class sits under
   `SshPermanentException`, when trying again can't work until the user
   changes something, or `SshTemporaryException`, when it can. Each is
-  permanent or temporary as `isPermanent` was, but for two fixes: ssh's
-  `Unable to negotiate` (no algorithm in common with the server) is now
-  permanent, and its warning that a host key changed, where the config lets
-  ssh go on, no longer makes a later failure permanent. A failure without
+  permanent or temporary as `isPermanent` was, but for three fixes:
+  ssh's `Unable to negotiate` (no algorithm in common with the server) is
+  now permanent; ssh's warning that a host key changed, where the config
+  lets ssh go on, no longer makes a later failure permanent; and a second
+  remote tunnel with the same forward on a shared connection is refused as
+  permanent (`SshDuplicateForwardException`), since retrying can't help
+  while the first is open. A failure without
   ssh's exit code, such as a shared connection that doesn't answer, is no
   longer taken for a port in use at a taken `localPort`, nor retried on a
   new picked port.
@@ -29,7 +32,8 @@
   The new classes are `SshLoginRefusedException`,
   `SshHostKeyRefusedException`, `SshHostNotFoundException`,
   `SshUnreachableException`, `SshDroppedException`,
-  `SshAddressUnavailableException` and `SshFailedException`, with the
+  `SshAddressUnavailableException`, `SshDuplicateForwardException` and
+  `SshFailedException`, with the
   README's Failures table saying when each comes. Every class has the
   `log` and `exitCode` that only `SshTunnelException` had.
 

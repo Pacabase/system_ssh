@@ -219,10 +219,7 @@ final class _Connection {
     // cancel would then close it for both tunnels.
     if (_adding.contains(forward) ||
         _forwards.any((each) => each.forward == forward)) {
-      throw SshFailedException(
-        'another tunnel on this connection already forwards '
-        '${forward.description}',
-      );
+      throw SshDuplicateForwardException(forward.description);
     }
     if (_dropError case final error?) throw error;
 

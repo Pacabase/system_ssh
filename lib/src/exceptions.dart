@@ -42,6 +42,7 @@ sealed class SshException implements Exception {
         SshNotFoundException() => 'SshNotFoundException',
         SshConfigException() => 'SshConfigException',
         SshPortInUseException() => 'SshPortInUseException',
+        SshDuplicateForwardException() => 'SshDuplicateForwardException',
         SshLoginRefusedException() => 'SshLoginRefusedException',
         SshHostKeyRefusedException() => 'SshHostKeyRefusedException',
         SshUnknownHostKeyException() => 'SshUnknownHostKeyException',
@@ -109,6 +110,24 @@ final class SshPortInUseException extends SshPermanentException {
   /// The address it is taken on, `127.0.0.1` unless the tunnel asked for
   /// another.
   final String address;
+}
+
+/// With `shareConnections`, another open tunnel on this server already has
+/// the same remote forward: the same local host and port on the same server
+/// port, or both on a port the server picks.
+///
+/// The shared connection would give both tunnels that one forward, and
+/// closing either would close it for both, so the second is refused rather
+/// than given a login of its own. Use the tunnel that's open, close it first,
+/// or pass another `remotePort` to [SshClient.openRemoteTunnel].
+final class SshDuplicateForwardException extends SshPermanentException {
+  /// An error saying another tunnel already forwards [forward].
+  const SshDuplicateForwardException(this.forward)
+      : super('another tunnel on this connection already forwards $forward');
+
+  /// The forward, as ssh takes it after `-R`, such as
+  /// `127.0.0.1:8080:localhost:3000`.
+  final String forward;
 }
 
 /// The server refused every login ssh tried, such as a key it doesn't know or

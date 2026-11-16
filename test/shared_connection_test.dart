@@ -354,22 +354,28 @@ void main() {
     ]);
   });
 
-  test('refuses a second tunnel with the same remote forward', () async {
-    fake.attemptModes([AttemptMode.ready]);
-    await openRemote(remotePort: 8080);
+  for (final remotePort in [8080, null]) {
+    test(
+        'refuses a second tunnel with the same remote forward, '
+        'remotePort $remotePort', () async {
+      fake
+        ..attemptModes([AttemptMode.ready])
+        ..muxModes(['ok']);
+      await openRemote(remotePort: remotePort);
 
-    await expectLater(
-      openRemote(remotePort: 8080),
-      throwsA(
-        isA<SshFailedException>().having(
-          (exception) => exception.message,
-          'message',
-          contains('already forwards'),
+      await expectLater(
+        openRemote(remotePort: remotePort),
+        throwsA(
+          isA<SshDuplicateForwardException>().having(
+            (exception) => exception.forward,
+            'forward',
+            '127.0.0.1:${remotePort ?? 0}:localhost:3000',
+          ),
         ),
-      ),
-    );
-    expect(operations(), hasLength(1));
-  });
+      );
+      expect(operations(), hasLength(1));
+    });
+  }
 
   test('reopens a remote forward only once its cancel is done', () async {
     fake

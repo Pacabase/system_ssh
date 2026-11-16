@@ -304,6 +304,7 @@ void main() {
           SshNotFoundException() => 'no ssh',
           SshConfigException() => 'config',
           SshPortInUseException(:final port) => 'port $port in use',
+          SshDuplicateForwardException(:final forward) => 'already $forward',
           SshLoginRefusedException() => 'login refused',
           SshHostKeyRefusedException() => 'host key refused',
           SshUnknownHostKeyException(:final hostKey) =>
