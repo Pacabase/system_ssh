@@ -1,3 +1,23 @@
+## Unreleased
+
+- With `loginShell: true`, a login shell that fails, prints something
+  unexpected or takes longer than 5 seconds no longer leaves every later
+  tunnel without the user's `PATH` and `SSH_AUTH_SOCK` for the rest of the
+  process. That tunnel still runs without them, but the next one reads the
+  shell again, so a long-running app recovers on its own. The first read
+  that works is kept, as before, and tunnels opened while a read is running
+  wait for that one read rather than each starting a shell:
+
+  ```dart
+  final client = SystemSshClient(loginShell: true);
+  // Each tunnel retries the login shell until one read works.
+  final tunnel = await client.openTunnel(
+    const SshTarget('myserver'),
+    remoteHost: 'localhost',
+    remotePort: 5432,
+  );
+  ```
+
 ## 0.9.2
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`

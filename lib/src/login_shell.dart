@@ -6,14 +6,31 @@ import 'dart:math';
 import 'exceptions.dart';
 import 'processes.dart';
 
-Future<Map<String, String>>? _cached;
+final _loginShell = CachedEnvironment(loginShellEnvironment);
 
-Future<Map<String, String>> cachedLoginShellEnvironment() =>
-    _cached ??= loginShellEnvironment();
+Future<Map<String, String>> cachedLoginShellEnvironment() => _loginShell.read();
 
-/// Empty when the shell fails or outlasts [timeout], and on Windows, where apps
-/// get the user's `PATH` already.
-Future<Map<String, String>> loginShellEnvironment({
+/// Keeps the first environment [_read] returns, sharing one read between
+/// concurrent callers. A failed read (null) gives them an empty environment
+/// and isn't kept, so one slow shell start doesn't cost every later tunnel the
+/// user's `PATH` and agent.
+final class CachedEnvironment {
+  CachedEnvironment(this._read);
+
+  final Future<Map<String, String>?> Function() _read;
+  Future<Map<String, String>>? _environment;
+
+  Future<Map<String, String>> read() =>
+      _environment ??= _read().then((environment) {
+        if (environment != null) return environment;
+        _environment = null;
+        return const {};
+      });
+}
+
+/// Null when the shell fails or outlasts [timeout]. Empty on Windows, where
+/// apps get the user's `PATH` already.
+Future<Map<String, String>?> loginShellEnvironment({
   Duration timeout = const Duration(seconds: 5),
 }) async {
   if (Platform.isWindows) return const {};
@@ -22,7 +39,7 @@ Future<Map<String, String>> loginShellEnvironment({
   return shellEnvironment(shell.isEmpty ? '/bin/sh' : shell, timeout: timeout);
 }
 
-Future<Map<String, String>> shellEnvironment(
+Future<Map<String, String>?> shellEnvironment(
   String shell, {
   required Duration timeout,
 }) async {
@@ -41,7 +58,7 @@ Future<Map<String, String>> shellEnvironment(
       "printf '%s' $marker; env -0; printf '%s' $marker",
     ]);
   } on SshException {
-    return const {};
+    return null;
   }
   unawaited(process.stderr.drain<void>());
   final output =
@@ -50,23 +67,23 @@ Future<Map<String, String>> shellEnvironment(
   try {
     final (code, text) = await (process.exitCode, output).wait.timeout(timeout);
 
-    return code == 0 ? parseShellEnvironment(text, marker) : const {};
+    return code == 0 ? parseShellEnvironment(text, marker) : null;
   } on TimeoutException {
     process.kill();
-    return const {};
+    return null;
   }
 }
 
-Map<String, String> parseShellEnvironment(String output, String marker) {
+Map<String, String>? parseShellEnvironment(String output, String marker) {
   final start = output.indexOf(marker);
   final end = start < 0 ? -1 : output.indexOf(marker, start + marker.length);
-  if (end < 0) return const {};
+  if (end < 0) return null;
 
   final body = output.substring(start + marker.length, end);
-  if (!body.endsWith('\x00')) return const {};
+  if (!body.endsWith('\x00')) return null;
 
   final entries = body.substring(0, body.length - 1).split('\x00');
-  if (entries.any((entry) => entry.indexOf('=') < 1)) return const {};
+  if (entries.any((entry) => entry.indexOf('=') < 1)) return null;
 
   return {
     for (final entry in entries)
