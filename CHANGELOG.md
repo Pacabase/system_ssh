@@ -1,5 +1,9 @@
 ## Unreleased
 
+- `trustHostKey` writes nothing to `known_hosts` once its `abortTrigger`
+  completes, even when it completes after ssh has read the key, while
+  ssh's last lines are still coming.
+
 - **Breaking:** every failure now has its own class, so an app no longer
   reads ssh's text, and `isPermanent` goes: each class sits under
   `SshPermanentException`, when trying again can't work until the user

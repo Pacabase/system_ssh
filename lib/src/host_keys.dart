@@ -317,6 +317,7 @@ Future<(List<String>, int)> _run(
     // outlives it can hold stderr open longer.
     await stderrDone.future
         .timeout(const Duration(seconds: 1), onTimeout: () {});
+    abort.throwIfAborted();
     return (List<String>.unmodifiable(lines), code);
   } on TimeoutException {
     throw const SshUnreachableException(
