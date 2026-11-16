@@ -81,13 +81,12 @@ final _allocated = RegExp(r'^Allocated port (\d+) for remote forward to (.+)$');
 /// A remote forward is up once the server accepts it. ssh can enter the
 /// session before the server answers, so the two may come in either order.
 final class RemoteForwardReadiness implements ForwardReadiness {
-  /// For a forward of [requestedPort] on the server, or a port the server
-  /// picks when it is 0, to [localHost]:[localPort].
-  RemoteForwardReadiness(
-    this.requestedPort, {
-    required String localHost,
-    required int localPort,
-  }) : _destination = '$localHost:$localPort';
+  /// For [forward], on the port it asks the server for, or the one the
+  /// server picks when that is 0.
+  RemoteForwardReadiness(RemoteForward forward)
+      : requestedPort = forward.remotePort,
+        _destination =
+            '${forward.destination.host}:${forward.destination.port}';
 
   final int requestedPort;
   final String _destination;

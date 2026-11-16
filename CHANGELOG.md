@@ -45,6 +45,10 @@
   on the same port too, and every tunnel on the connection when the local
   host was an IPv6 address such as `::1`.
 
+- `openRemoteTunnel` with a bracketed IPv6 `localHost`, such as `[::1]`, and
+  no `remotePort` now opens. It waited for a line ssh never writes, since
+  ssh names the host without brackets, so it never became ready.
+
 ## 0.9.2
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`

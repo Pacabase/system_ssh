@@ -17,8 +17,9 @@ void main() {
       'listen 127.0.0.1:8080, connect localhost:3000';
 
   group('RemoteForwardReadiness', () {
-    RemoteForwardReadiness readiness(int port) =>
-        RemoteForwardReadiness(port, localHost: 'localhost', localPort: 3000);
+    RemoteForwardReadiness readiness(int port) => RemoteForwardReadiness(
+          RemoteForward(port, localHost: 'localhost', localPort: 3000),
+        );
 
     test('is ready once the server accepts and the session starts', () {
       final fixed = readiness(8080);
@@ -68,6 +69,19 @@ void main() {
         picked.isReadyAfter(
           'Allocated port 41234 for remote forward to localhost:3000',
         ),
+        isTrue,
+      );
+      expect(picked.port, 41234);
+    });
+
+    test('takes the picked port for a bracketed IPv6 destination', () {
+      final picked = RemoteForwardReadiness(
+        const RemoteForward(0, localHost: '[::1]', localPort: 3000),
+      )..isReadyAfter(session);
+
+      expect(
+        picked.isReadyAfter(
+            'Allocated port 41234 for remote forward to ::1:3000'),
         isTrue,
       );
       expect(picked.port, 41234);

@@ -438,11 +438,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
     () => notFoundOn127(
       () async => SystemSshRemoteTunnel.attach(
         await startWatched(command, environment: environment),
-        readiness: RemoteForwardReadiness(
-          remotePort ?? 0,
-          localHost: localHost,
-          localPort: localPort,
-        ),
+        readiness: RemoteForwardReadiness(forward),
         onLog: onLog,
         abortTrigger: abortTrigger,
       ),
