@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:logging/logging.dart';
+import 'package:system_ssh/src/forwards.dart';
 import 'package:system_ssh/src/ports.dart';
 import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/system_ssh_client.dart';
@@ -180,7 +181,7 @@ void main() {
       }) async =>
           openSystemForward(
             target,
-            forward: dynamicForward,
+            forward: DynamicForward.new,
             localPort: localPort,
             executable: '/nonexistent/ssh',
             portIsFree: (_) async => true,
@@ -281,7 +282,7 @@ void main() {
       final methods = <(
         String,
         Future<SshTunnel> Function(String address, int? localPort),
-        List<String> Function(String address, int port),
+        Forward Function(String address, int port),
       )>[
         (
           'openTunnel',
@@ -292,7 +293,7 @@ void main() {
                 bindAddress: address,
                 localPort: localPort,
               ),
-          (address, port) => localForward(
+          (address, port) => LocalForward(
                 port,
                 bindAddress: address,
                 remoteHost: 'db.example.com',
@@ -307,7 +308,7 @@ void main() {
                 bindAddress: address,
                 localPort: localPort,
               ),
-          (address, port) => localForwardToSocket(
+          (address, port) => SocketForward(
                 port,
                 bindAddress: address,
                 remoteSocket: '/run/d.sock',
@@ -320,7 +321,7 @@ void main() {
                 bindAddress: address,
                 localPort: localPort,
               ),
-          (address, port) => dynamicForward(port, bindAddress: address),
+          (address, port) => DynamicForward(port, bindAddress: address),
         ),
       ];
 
@@ -366,7 +367,7 @@ void main() {
         expect(fake.attempts, [
           sshCommand(
             server,
-            forward: dynamicForward(proxy.localPort, bindAddress: '::1'),
+            forward: DynamicForward(proxy.localPort, bindAddress: '::1'),
           ).sublist(1),
         ]);
       });
@@ -405,7 +406,7 @@ void main() {
       expect(fake.attempts, [
         sshCommand(
           target,
-          forward: localForward(port,
+          forward: LocalForward(port,
               remoteHost: 'db.example.com', remotePort: 3306),
         ).sublist(1),
       ]);
@@ -541,7 +542,7 @@ void main() {
       final command = sshCommand(
         server,
         forward:
-            localForward(port, remoteHost: 'db.example.com', remotePort: 3306),
+            LocalForward(port, remoteHost: 'db.example.com', remotePort: 3306),
         executable: fake.path,
       );
       expect(
@@ -663,7 +664,7 @@ void main() {
         expect(fake.attempts, [
           sshCommand(
             server,
-            forward: localForward(port,
+            forward: LocalForward(port,
                 remoteHost: 'db.example.com', remotePort: 3306),
           ).sublist(1),
         ]);
@@ -766,7 +767,7 @@ void main() {
       }) async {
         final tunnel = await openSystemForward(
           target,
-          forward: dynamicForward,
+          forward: DynamicForward.new,
           localPort: localPort,
           executable: fake.path,
           freePort: (ports ?? CountingPorts()).next,

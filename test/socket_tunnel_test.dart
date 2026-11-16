@@ -1,3 +1,4 @@
+import 'package:system_ssh/src/forwards.dart';
 import 'package:system_ssh/src/ports.dart';
 import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/system_ssh.dart';
@@ -39,7 +40,7 @@ void main() {
 
   test('forwards the local port to the socket path', () {
     expect(
-      localForwardToSocket(50000, remoteSocket: socket),
+      const SocketForward(50000, remoteSocket: socket).arguments,
       ['-L', '127.0.0.1:50000:/var/run/docker.sock'],
     );
   });
@@ -59,7 +60,7 @@ void main() {
       expect(fake.attempts, [
         sshCommand(
           server,
-          forward: localForwardToSocket(
+          forward: SocketForward(
             tunnel.localPort,
             remoteSocket: socket,
           ),

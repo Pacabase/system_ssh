@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:system_ssh/src/forwards.dart';
 import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/ssh_output.dart';
 import 'package:system_ssh/src/system_ssh_client.dart';
@@ -16,8 +17,9 @@ void main() {
       'listen 127.0.0.1:8080, connect localhost:3000';
 
   group('RemoteForwardReadiness', () {
-    RemoteForwardReadiness readiness(int port) =>
-        RemoteForwardReadiness(port, localHost: 'localhost', localPort: 3000);
+    RemoteForwardReadiness readiness(int port) => RemoteForwardReadiness(
+          RemoteForward(port, localHost: 'localhost', localPort: 3000),
+        );
 
     test('is ready once the server accepts and the session starts', () {
       final fixed = readiness(8080);
@@ -73,9 +75,9 @@ void main() {
     });
 
     test('takes the picked port for a bracketed IPv6 destination', () {
-      final picked =
-          RemoteForwardReadiness(0, localHost: '[::1]', localPort: 3000)
-            ..isReadyAfter(session);
+      final picked = RemoteForwardReadiness(
+        const RemoteForward(0, localHost: '[::1]', localPort: 3000),
+      )..isReadyAfter(session);
 
       expect(
         picked.isReadyAfter(
@@ -93,17 +95,18 @@ void main() {
     });
   });
 
-  group('remoteForward', () {
+  group('RemoteForward', () {
     test('binds the server side to 127.0.0.1', () {
       expect(
-        remoteForward(8080, localHost: 'localhost', localPort: 3000),
+        const RemoteForward(8080, localHost: 'localhost', localPort: 3000)
+            .arguments,
         ['-R', '127.0.0.1:8080:localhost:3000'],
       );
     });
 
     test('brackets an IPv6 local host', () {
       expect(
-        remoteForward(0, localHost: '::1', localPort: 3000),
+        const RemoteForward(0, localHost: '::1', localPort: 3000).arguments,
         ['-R', '127.0.0.1:0:[::1]:3000'],
       );
     });
@@ -182,7 +185,11 @@ void main() {
       expect(fake.attempts, [
         sshCommand(
           server,
-          forward: ['-R', '127.0.0.1:8080:localhost:3000'],
+          forward: const RemoteForward(
+            8080,
+            localHost: 'localhost',
+            localPort: 3000,
+          ),
         ).sublist(1),
       ]);
     });

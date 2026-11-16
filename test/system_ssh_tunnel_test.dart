@@ -265,7 +265,9 @@ void main() {
     });
 
     test('passes onLog nothing ssh says after close', () async {
-      final process = _GoodbyeProcess([listeningLine, sessionLine]);
+      final process = _ScriptedProcess()
+        ..say(listeningLine)
+        ..say(sessionLine);
       final logs = <SshLog>[];
       final tunnel = await SystemSshTunnel.attach(
         process,
@@ -319,6 +321,45 @@ void main() {
         throwsA(isA<SshTunnelAbortedException>()),
       );
       expect(await exitCodeOf(process), terminated);
+    });
+
+    test('passes onLog nothing ssh says once aborted', () async {
+      final process = _ScriptedProcess();
+      final abort = Completer<void>();
+      final logs = <SshLog>[];
+
+      final attaching = SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+        onLog: logs.add,
+        abortTrigger: abort.future,
+      );
+      process.say(connectingLine);
+      unawaited(abort.future.then((_) => process.say('Warning: late')));
+      abort.complete();
+
+      await expectLater(attaching, throwsA(isA<SshTunnelAbortedException>()));
+      expect(logs, const [SshProgress(connectingLine)]);
+    });
+
+    test('throws only that it was aborted when ssh exits as it is', () async {
+      final process = _ScriptedProcess();
+      final abort = Completer<void>();
+
+      final attaching = SystemSshTunnel.attach(
+        process,
+        localPort: localPort,
+        abortTrigger: abort.future,
+      );
+      process.say(connectingLine);
+      unawaited(abort.future.then((_) => process.exit(255)));
+      abort.complete();
+
+      await expectLater(
+        attaching.timeout(const Duration(seconds: 1)),
+        throwsA(isA<SshTunnelAbortedException>()),
+      );
+      expect(process.kills, 1);
     });
 
     test('is ignored when it fails', () async {
@@ -477,6 +518,16 @@ void main() {
       expect(hasExited, isTrue);
     });
 
+    test('waits for ssh to exit when called again while closing', () async {
+      var hasExited = false;
+      unawaited(process.exitCode.then((_) => hasExited = true));
+
+      unawaited(tunnel.close());
+      await tunnel.close();
+
+      expect(hasExited, isTrue);
+    });
+
     test('is idempotent', () async {
       await tunnel.close();
       await tunnel.close();
@@ -617,18 +668,22 @@ final class _KillCounting implements Process {
   }
 }
 
-// An ssh that, like the real one, says "Killed by signal 15." as it is killed.
-final class _GoodbyeProcess implements Process {
-  _GoodbyeProcess(List<String> lines) {
-    lines.forEach(_stderr.add);
+/// A [Process] whose stderr lines and exit a test plays as they happen, and
+/// that, like ssh, says "Killed by signal 15." shortly after it is killed.
+final class _ScriptedProcess implements Process {
+  final _stderr = StreamController<List<int>>(sync: true);
+  final _exitCode = Completer<int>();
+  int kills = 0;
+
+  void say(String line) => _stderr.add('$line\n'.codeUnits);
+
+  void exit(int code) {
+    unawaited(_stderr.close());
+    _exitCode.complete(code);
   }
 
-  final _stderr = StreamController<String>();
-  final _exitCode = Completer<int>();
-
   @override
-  Stream<List<int>> get stderr =>
-      _stderr.stream.map((line) => '$line\n'.codeUnits);
+  Stream<List<int>> get stderr => _stderr.stream;
 
   @override
   Stream<List<int>> get stdout => const Stream.empty();
@@ -644,9 +699,13 @@ final class _GoodbyeProcess implements Process {
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
-    _stderr.add('Killed by signal 15.');
-    unawaited(_stderr.close());
-    _exitCode.complete(255);
+    kills++;
+    if (_exitCode.isCompleted) return false;
+    Timer.run(() {
+      if (_exitCode.isCompleted) return;
+      say('Killed by signal 15.');
+      exit(255);
+    });
     return true;
   }
 }

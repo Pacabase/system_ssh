@@ -3,7 +3,7 @@ import 'ssh_client.dart';
 /// A line ssh wrote, by what it means; switch on the subclass to act on one.
 ///
 /// It's information: a tunnel that can't open throws, and one that drops
-/// fails [SshTunnel.done]. A major version may split new kinds out of
+/// fails [SshForward.done]. A major version may split new kinds out of
 /// [SshMessage], which an exhaustive `switch` then has to name.
 sealed class SshLog {
   const SshLog(this.line);

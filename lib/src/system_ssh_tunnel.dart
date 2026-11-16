@@ -90,6 +90,8 @@ final class SystemSshRemoteTunnel implements SshRemoteTunnel {
   Future<void> close() => _forward.close();
 }
 
+enum _Phase { connecting, open, closing, exited }
+
 /// ssh running one forward, local or remote, or a master serving several.
 final class ForwardProcess implements ForwardHandle {
   ForwardProcess._(this._process, this.done, this._describe) {
@@ -104,8 +106,12 @@ final class ForwardProcess implements ForwardHandle {
 
   final Process _process;
   final String Function() _describe;
-  bool _hasExited = false;
-  bool _isClosed = false;
+  var _phase = _Phase.connecting;
+  Future<void>? _stopping;
+
+  // Set as soon as ssh exits, before [_phase] is, which waits for its last
+  // lines: once exited, the pid may already belong to another process.
+  var _hasExited = false;
 
   /// Waits until [readiness] says ssh's forward is up. [onLog] gets ssh's
   /// lines until then, and its warnings and failed connections after, unless
@@ -128,21 +134,26 @@ final class ForwardProcess implements ForwardHandle {
 
     void onLine(String line) {
       logger.fine(line);
-      if (ready.isCompleted) {
-        tail.add(line);
-        if (tail.length > _tailLength) tail.removeAt(0);
-        // Once closed, what's left is ssh saying goodbye: "Killed by signal 15."
-        if (forward._isClosed || line.trim().isEmpty) return;
-        if (onLineAfterReady != null) return onLineAfterReady(line);
-        if (classify(line) case final entry when entry is! SshProgress) {
-          report(entry);
-        }
-        return;
+      switch (forward._phase) {
+        case _Phase.connecting:
+          lines.add(line);
+          if (line.trim().isNotEmpty) report(classify(line));
+          if (readiness.isReadyAfter(line)) {
+            forward._phase = _Phase.open;
+            ready.complete();
+          }
+        case _Phase.open:
+          tail.add(line);
+          if (tail.length > _tailLength) tail.removeAt(0);
+          if (line.trim().isEmpty) return;
+          if (onLineAfterReady != null) return onLineAfterReady(line);
+          if (classify(line) case final entry when entry is! SshProgress) {
+            report(entry);
+          }
+        // What's left is ssh saying goodbye: "Killed by signal 15."
+        case _Phase.closing || _Phase.exited:
+          return;
       }
-
-      lines.add(line);
-      if (line.trim().isNotEmpty) report(classify(line));
-      if (readiness.isReadyAfter(line)) ready.complete();
     }
 
     process.stderr
@@ -163,19 +174,24 @@ final class ForwardProcess implements ForwardHandle {
         onTimeout: () {},
       );
       logger.info('ssh exited with code $code');
-      if (ready.isCompleted) {
-        if (forward._isClosed) return;
-        throw tunnelFailure(tail, code);
+      final phase = forward._phase;
+      forward._phase = _Phase.exited;
+      switch (phase) {
+        case _Phase.connecting:
+          ready.completeError(tunnelFailure(lines, code));
+        case _Phase.open:
+          throw tunnelFailure(tail, code);
+        case _Phase.closing || _Phase.exited:
+          return;
       }
-      ready.completeError(tunnelFailure(lines, code));
     }
 
     forward = ForwardProcess._(process, waitForExit(), describe);
     unawaited(
       abortTrigger?.then((_) {
-        if (!ready.isCompleted) {
-          ready.completeError(const SshTunnelAbortedException());
-        }
+        if (forward._phase != _Phase.connecting) return;
+        unawaited(forward.close());
+        ready.completeError(const SshTunnelAbortedException());
       }, onError: (_) {}),
     );
 
@@ -190,19 +206,17 @@ final class ForwardProcess implements ForwardHandle {
     return forward;
   }
 
-  /// Stops ssh. Closing again does nothing.
+  /// Stops ssh. Closing again waits for the same stop.
   @override
   Future<void> close() async {
-    if (_isClosed) return;
-    _isClosed = true;
+    if (_phase case _Phase.connecting || _Phase.open) _stopping = _stop();
+    await _stopping;
+  }
 
+  Future<void> _stop() async {
+    _phase = _Phase.closing;
     logger.info('Closing tunnel on ${_describe()}');
-    // Once exited, the pid may already belong to another process.
     if (!_hasExited) _process.kill();
-    try {
-      await done.timeout(const Duration(seconds: 2), onTimeout: () {});
-    } on SshTunnelException {
-      // It had already dropped; done says why.
-    }
+    await done.timeout(const Duration(seconds: 2), onTimeout: () {});
   }
 }

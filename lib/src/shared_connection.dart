@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'exceptions.dart';
+import 'forwards.dart';
 import 'logger.dart';
 import 'processes.dart';
 import 'ssh_command.dart';
@@ -79,14 +80,12 @@ final class SharedConnection {
   /// warnings.
   /// Completing [abortTrigger] while `-O forward` runs stops it.
   Future<(ForwardHandle, String)> forward(
-    List<String> forward, {
-    int? localPort,
+    Forward forward, {
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) =>
       _connection.add(
         forward,
-        localPort: localPort,
         onLog: onLog,
         abortTrigger: abortTrigger,
       );
@@ -125,8 +124,8 @@ final class _Connection {
   /// The onLogs of the holds waiting for the master to start.
   final _waiting = <void Function(SshLog log)?>[];
   final _forwards = <_SharedForward>{};
-  final _adding = <String>{};
-  final _cancelling = <String, Future<void>>{};
+  final _adding = <Forward>{};
+  final _cancelling = <Forward, Future<void>>{};
   var _holds = 0;
 
   /// Failed connections, by channel, until ssh says which forward they were on.
@@ -160,7 +159,7 @@ final class _Connection {
     _directory = _masterDirectory();
     final command = sshCommand(
       _server,
-      forward: const [],
+      forward: null,
       config: config,
       executable: executable,
       masterSocket: _socket,
@@ -220,24 +219,24 @@ final class _Connection {
   }
 
   Future<(ForwardHandle, String)> add(
-    List<String> forward, {
-    int? localPort,
+    Forward forward, {
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
   }) async {
-    final spec = forward.join(' ');
     // Reopening a forward waits for its cancel, or the cancel closes it too.
-    await _cancelling[spec];
+    await _cancelling[forward];
     // The master answers a forward it already has with success, and one
     // cancel would then close it for both tunnels.
-    if (_adding.contains(spec) || _forwards.any((each) => each.spec == spec)) {
+    if (_adding.contains(forward) ||
+        _forwards.any((each) => each.forward == forward)) {
       throw SshTunnelException(
-        'another tunnel on this connection already forwards ${forward.last}',
+        'another tunnel on this connection already forwards '
+        '${forward.description}',
       );
     }
     if (_dropError case final error?) throw error;
 
-    _adding.add(spec);
+    _adding.add(forward);
     try {
       final ({int exitCode, String stdout, String stderr})? result;
       try {
@@ -265,18 +264,12 @@ final class _Connection {
         );
       }
 
-      final shared = _SharedForward(
-        this,
-        forward,
-        spec: spec,
-        localPort: localPort,
-        onLog: onLog,
-      );
+      final shared = _SharedForward(this, forward, onLog: onLog);
       _forwards.add(shared);
-      logger.info('Tunnel ready on the shared connection: $spec');
+      logger.info('Tunnel ready on the shared connection: $forward');
       return (shared, result.stdout.trim());
     } finally {
-      _adding.remove(spec);
+      _adding.remove(forward);
     }
   }
 
@@ -285,11 +278,11 @@ final class _Connection {
 
     if (_master != null && _dropError == null) {
       final cancel = _cancel(forward);
-      _cancelling[forward.spec] = cancel;
+      _cancelling[forward.forward] = cancel;
       try {
         await cancel;
       } finally {
-        unawaited(_cancelling.remove(forward.spec));
+        unawaited(_cancelling.remove(forward.forward));
       }
     }
     _stopIfUnused();
@@ -314,7 +307,7 @@ final class _Connection {
       failure = exception.message;
     }
 
-    logger.warning('Could not cancel ${forward.spec}: $failure');
+    logger.warning('Could not cancel ${forward.forward}: $failure');
     // Its port stays open until the master stops; no new tunnel may join it.
     isStopping = true;
     _forget();
@@ -322,7 +315,7 @@ final class _Connection {
 
   /// After a `-O forward` that never answered, which the master may still
   /// have added: no new tunnel may join, and the forward goes if it can.
-  void _retire(List<String> forward) {
+  void _retire(Forward forward) {
     isStopping = true;
     _forget();
     unawaited(
@@ -385,7 +378,14 @@ final class _Connection {
 
       final forwards = port == null
           ? const <_SharedForward>[]
-          : _forwards.where((forward) => forward.localPort == port).toList();
+          : _forwards
+              .where(
+                (shared) => switch (shared.forward) {
+                  ListeningForward(:final localPort) => localPort == port,
+                  RemoteForward() => false,
+                },
+              )
+              .toList();
       // An onLog may close its tunnel, so each loop runs over a copy.
       for (final forward in forwards.isEmpty ? [..._forwards] : forwards) {
         forward.report(failure);
@@ -399,7 +399,13 @@ final class _Connection {
     final forwards = destination == null
         ? const <_SharedForward>[]
         : _forwards
-            .where((forward) => forward.spec.endsWith(':$destination'))
+            .where(
+              (shared) => switch (shared.forward) {
+                RemoteForward(destination: final forwardsTo) =>
+                  forwardsTo == destination,
+                ListeningForward() => false,
+              },
+            )
             .toList();
     for (final forward in forwards.isEmpty ? [..._forwards] : forwards) {
       forward.report(classify(line));
@@ -411,7 +417,7 @@ final class _Connection {
   /// [SshTunnelAbortedException].
   Future<({int exitCode, String stdout, String stderr})?> _run(
     String operation,
-    List<String> forward, {
+    Forward forward, {
     required Duration timeout,
     Future<void>? abortTrigger,
   }) async {
@@ -493,8 +499,6 @@ final class _SharedForward implements ForwardHandle {
   _SharedForward(
     this._connection,
     this.forward, {
-    required this.spec,
-    required this.localPort,
     required void Function(SshLog log)? onLog,
   }) : _onLog = onLog {
     // A caller that never listens to done must not crash on a dropped master.
@@ -502,11 +506,7 @@ final class _SharedForward implements ForwardHandle {
   }
 
   final _Connection _connection;
-  final List<String> forward;
-  final String spec;
-
-  /// The local port it listens on, to route its failed connections to it.
-  final int? localPort;
+  final Forward forward;
   final void Function(SshLog log)? _onLog;
   final _done = Completer<void>();
   bool _isClosed = false;
@@ -527,7 +527,7 @@ final class _SharedForward implements ForwardHandle {
     if (_isClosed) return;
     _isClosed = true;
 
-    logger.info('Closing tunnel on the shared connection: $spec');
+    logger.info('Closing tunnel on the shared connection: $forward');
     await _connection.remove(this);
     if (!_done.isCompleted) _done.complete();
   }

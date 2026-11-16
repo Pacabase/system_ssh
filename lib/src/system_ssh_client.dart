@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'config_hosts.dart';
 import 'exceptions.dart';
+import 'forwards.dart';
 import 'host_keys.dart';
 import 'logger.dart';
 import 'login_shell.dart';
@@ -36,7 +37,8 @@ final class SystemSshClient implements SshClient {
 
   /// Whether ssh also gets the `PATH`, `HOME`, `DISPLAY` and `SSH_` variables
   /// the user's login shell sets, which a GUI app doesn't inherit. The shell
-  /// runs once per process, on the first tunnel.
+  /// runs on the first tunnel, and the first read that works is kept for the
+  /// process. A tunnel whose read fails goes without, and the next one retries.
   final bool loginShell;
 
   /// Variables ssh gets on top of the rest, such as an `AWS_PROFILE` for a
@@ -49,7 +51,7 @@ final class SystemSshClient implements SshClient {
   ///
   /// The connection is this process's own, never one the user's
   /// `ControlMaster` set up, and it stops once its last tunnel closes, or
-  /// with the app. When it drops, every tunnel on it fails [SshTunnel.done]
+  /// with the app. When it drops, every tunnel on it fails [SshForward.done]
   /// together. Windows' OpenSSH can't share a connection, so there each
   /// tunnel keeps its own ssh.
   final bool shareConnections;
@@ -191,7 +193,7 @@ final class SystemSshClient implements SshClient {
 // ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped.
 final _unsafeInUser = RegExp(r'''[\s'"`$;&|<>(){}/]|[\x00-\x1f]''');
 
-List<String> Function(int localPort) localForwardTo(
+LocalForward Function(int localPort) localForwardTo(
   String remoteHost,
   int remotePort, {
   String bindAddress = '127.0.0.1',
@@ -199,7 +201,7 @@ List<String> Function(int localPort) localForwardTo(
   checkHost(remoteHost, 'remoteHost');
   checkBindAddress(bindAddress);
 
-  return (port) => localForward(
+  return (port) => LocalForward(
         port,
         bindAddress: bindAddress,
         remoteHost: remoteHost,
@@ -207,29 +209,29 @@ List<String> Function(int localPort) localForwardTo(
       );
 }
 
-List<String> Function(int localPort) localForwardToSocketAt(
+SocketForward Function(int localPort) localForwardToSocketAt(
   String remoteSocket, {
   String bindAddress = '127.0.0.1',
 }) {
   checkSocketPath(remoteSocket, 'remoteSocket');
   checkBindAddress(bindAddress);
-  return (port) => localForwardToSocket(
+  return (port) => SocketForward(
         port,
         bindAddress: bindAddress,
         remoteSocket: remoteSocket,
       );
 }
 
-List<String> Function(int localPort) dynamicForwardOn(String bindAddress) {
+DynamicForward Function(int localPort) dynamicForwardOn(String bindAddress) {
   checkBindAddress(bindAddress);
-  return (port) => dynamicForward(port, bindAddress: bindAddress);
+  return (port) => DynamicForward(port, bindAddress: bindAddress);
 }
 
 /// [SystemSshClient.openTunnel] and [SystemSshClient.openSocksProxy], with
 /// the parts tests replace.
 Future<SshTunnel> openSystemForward(
   SshTarget server, {
-  required List<String> Function(int localPort) forward,
+  required ListeningForward Function(int localPort) forward,
   String bindAddress = '127.0.0.1',
   int? localPort,
   void Function(SshLog log)? onLog,
@@ -284,7 +286,6 @@ Future<SshTunnel> openSystemForward(
     if (shared != null) {
       final (handle, _) = await shared.forward(
         forward(port),
-        localPort: port,
         onLog: onLog,
         abortTrigger: abortTrigger,
       );
@@ -385,7 +386,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   );
   if (isAborted) throw const SshTunnelAbortedException();
 
-  final forward = remoteForward(
+  final forward = RemoteForward(
     remotePort ?? 0,
     localHost: localHost,
     localPort: localPort,
@@ -437,11 +438,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
     () => notFoundOn127(
       () async => SystemSshRemoteTunnel.attach(
         await startWatched(command, environment: environment),
-        readiness: RemoteForwardReadiness(
-          remotePort ?? 0,
-          localHost: localHost,
-          localPort: localPort,
-        ),
+        readiness: RemoteForwardReadiness(forward),
         onLog: onLog,
         abortTrigger: abortTrigger,
       ),

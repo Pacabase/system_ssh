@@ -1,5 +1,50 @@
 ## Unreleased
 
+- `SshTunnel` and `SshRemoteTunnel` share a supertype, `SshForward`, with
+  their `done` and `close()`, so code that waits on or closes whatever it
+  opened, local or remote, can take either one without a wrapper:
+
+  ```dart
+  final forwards = <SshForward>[
+    await client.openTunnel(server, remoteHost: 'db', remotePort: 5432),
+    await client.openRemoteTunnel(server, localPort: 3000),
+  ];
+  await Future.wait(forwards.map((forward) => forward.close()));
+  ```
+
+  Fakes that implement `SshTunnel` or `SshRemoteTunnel` need no change.
+
+- With `loginShell: true`, a login shell that fails, prints something
+  unexpected or takes longer than 5 seconds no longer leaves every later
+  tunnel without the user's `PATH` and `SSH_AUTH_SOCK` for the rest of the
+  process. That tunnel still runs without them, but the next one reads the
+  shell again, so a long-running app recovers on its own. The first read
+  that works is kept, as before, and tunnels opened while a read is running
+  wait for that one read rather than each starting a shell:
+
+  ```dart
+  final client = SystemSshClient(loginShell: true);
+  // Each tunnel retries the login shell until one read works.
+  final tunnel = await client.openTunnel(
+    const SshTarget('myserver'),
+    remoteHost: 'localhost',
+    remotePort: 5432,
+  );
+  ```
+- Once a tunnel's `abortTrigger` completes, `onLog` gets nothing more from
+  that attempt. A line ssh wrote as it was stopped could reach `onLog` as a
+  warning, as if the tunnel had opened, so an app that shows warnings no
+  longer shows one for a tunnel it cancelled.
+- A tunnel's `close()`, called again while an earlier `close()` is still
+  stopping ssh, waits for ssh to exit too, instead of returning at once.
+
+- With `shareConnections`, a remote tunnel's failed connection to its local
+  destination, such as `connect_to localhost port 3000: failed.`, now goes
+  only to the `onLog` of the remote tunnels forwarding there. It used to
+  reach a tunnel opened with `openTunnel` to the server's own `localhost`
+  on the same port too, and every tunnel on the connection when the local
+  host was an IPv6 address such as `::1`.
+
 - `openRemoteTunnel` with a bracketed IPv6 `localHost`, such as `[::1]`, and
   no `remotePort` now opens. It waited for a line ssh never writes, since
   ssh names the host without brackets, so it never became ready.
