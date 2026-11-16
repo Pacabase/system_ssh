@@ -55,8 +55,7 @@ final class SshTunnelAbortedException extends SshException {
 }
 
 /// ssh exited on its own: before the tunnel was open, when opening it, or
-/// after, when the connection dropped (from [SshTunnel.done] or
-/// [SshRemoteTunnel.done]).
+/// after, when the connection dropped (from [SshForward.done]).
 final class SshTunnelException extends SshException {
   /// An error that says [message], which is what a fake [SshClient] throws
   /// to act out a failure. [log] defaults to empty, [exitCode] to null and

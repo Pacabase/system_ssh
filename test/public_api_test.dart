@@ -225,6 +225,29 @@ void main() {
     await fixed.done;
   });
 
+  test('holds every kind of tunnel as an SshForward', () async {
+    final SshClient fake = _FakeSshClient();
+    final forwards = <SshForward>[
+      await fake.openTunnel(
+        const SshTarget('ssh.example.com'),
+        remoteHost: 'db.example.com',
+        remotePort: 5432,
+      ),
+      await fake.openSocketTunnel(
+        const SshTarget('ssh.example.com'),
+        remoteSocket: '/var/run/docker.sock',
+      ),
+      await fake.openSocksProxy(const SshTarget('ssh.example.com')),
+      await fake.openRemoteTunnel(
+        const SshTarget('ssh.example.com'),
+        localPort: 3000,
+      ),
+    ];
+
+    await Future.wait(forwards.map((forward) => forward.close()));
+    await Future.wait(forwards.map((forward) => forward.done));
+  });
+
   test('opens a tunnel to a Unix socket on the server', () async {
     final SshClient fake = _FakeSshClient();
     final tunnel = await fake.openSocketTunnel(
