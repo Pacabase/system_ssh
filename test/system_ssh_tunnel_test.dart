@@ -265,7 +265,9 @@ void main() {
     });
 
     test('passes onLog nothing ssh says after close', () async {
-      final process = _GoodbyeProcess([listeningLine, sessionLine]);
+      final process = _ScriptedProcess()
+        ..say(listeningLine)
+        ..say(sessionLine);
       final logs = <SshLog>[];
       final tunnel = await SystemSshTunnel.attach(
         process,
@@ -516,6 +518,16 @@ void main() {
       expect(hasExited, isTrue);
     });
 
+    test('waits for ssh to exit when called again while closing', () async {
+      var hasExited = false;
+      unawaited(process.exitCode.then((_) => hasExited = true));
+
+      unawaited(tunnel.close());
+      await tunnel.close();
+
+      expect(hasExited, isTrue);
+    });
+
     test('is idempotent', () async {
       await tunnel.close();
       await tunnel.close();
@@ -653,40 +665,6 @@ final class _KillCounting implements Process {
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     kills++;
     return _process.kill(signal);
-  }
-}
-
-// An ssh that, like the real one, says "Killed by signal 15." as it is killed.
-final class _GoodbyeProcess implements Process {
-  _GoodbyeProcess(List<String> lines) {
-    lines.forEach(_stderr.add);
-  }
-
-  final _stderr = StreamController<String>();
-  final _exitCode = Completer<int>();
-
-  @override
-  Stream<List<int>> get stderr =>
-      _stderr.stream.map((line) => '$line\n'.codeUnits);
-
-  @override
-  Stream<List<int>> get stdout => const Stream.empty();
-
-  @override
-  IOSink get stdin => throw UnimplementedError();
-
-  @override
-  int get pid => 0;
-
-  @override
-  Future<int> get exitCode => _exitCode.future;
-
-  @override
-  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
-    _stderr.add('Killed by signal 15.');
-    unawaited(_stderr.close());
-    _exitCode.complete(255);
-    return true;
   }
 }
 

@@ -107,6 +107,7 @@ final class ForwardProcess implements ForwardHandle {
   final Process _process;
   final String Function() _describe;
   var _phase = _Phase.connecting;
+  Future<void>? _stopping;
 
   // Set as soon as ssh exits, before [_phase] is, which waits for its last
   // lines: once exited, the pid may already belong to another process.
@@ -186,11 +187,10 @@ final class ForwardProcess implements ForwardHandle {
     }
 
     forward = ForwardProcess._(process, waitForExit(), describe);
-    Future<void>? aborting;
     unawaited(
       abortTrigger?.then((_) {
         if (forward._phase != _Phase.connecting) return;
-        aborting = forward._stop();
+        unawaited(forward.close());
         ready.completeError(const SshTunnelAbortedException());
       }, onError: (_) {}),
     );
@@ -198,7 +198,7 @@ final class ForwardProcess implements ForwardHandle {
     try {
       await ready.future;
     } catch (exception) {
-      await (aborting ?? forward.close());
+      await forward.close();
       rethrow;
     }
 
@@ -206,15 +206,11 @@ final class ForwardProcess implements ForwardHandle {
     return forward;
   }
 
-  /// Stops ssh. Closing again does nothing.
+  /// Stops ssh. Closing again waits for the same stop.
   @override
   Future<void> close() async {
-    switch (_phase) {
-      case _Phase.connecting || _Phase.open:
-        await _stop();
-      case _Phase.closing || _Phase.exited:
-        return;
-    }
+    if (_phase case _Phase.connecting || _Phase.open) _stopping = _stop();
+    await _stopping;
   }
 
   Future<void> _stop() async {
