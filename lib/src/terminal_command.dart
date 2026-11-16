@@ -1,3 +1,4 @@
+import 'forwards.dart';
 import 'ssh_command.dart';
 import 'ssh_target.dart';
 
@@ -24,7 +25,7 @@ String tunnelCommand(
   checkBindAddress(bindAddress);
   return _command(
     server,
-    localForward(
+    LocalForward(
       localPort,
       bindAddress: bindAddress,
       remoteHost: remoteHost,
@@ -51,7 +52,7 @@ String socketTunnelCommand(
   checkBindAddress(bindAddress);
   return _command(
     server,
-    localForwardToSocket(
+    SocketForward(
       localPort,
       bindAddress: bindAddress,
       remoteSocket: remoteSocket,
@@ -78,7 +79,7 @@ String remoteTunnelCommand(
   checkPort(remotePort, 'remotePort');
   return _command(
     server,
-    remoteForward(remotePort, localHost: localHost, localPort: localPort),
+    RemoteForward(remotePort, localHost: localHost, localPort: localPort),
   );
 }
 
@@ -97,11 +98,11 @@ String socksProxyCommand(
   checkBindAddress(bindAddress);
   return _command(
     server,
-    dynamicForward(localPort, bindAddress: bindAddress),
+    DynamicForward(localPort, bindAddress: bindAddress),
   );
 }
 
-String _command(SshTarget server, List<String> forward) {
+String _command(SshTarget server, Forward forward) {
   if (server.host.startsWith('-')) {
     throw ArgumentError.value(server.host, 'server', 'is not a valid host');
   }
@@ -109,7 +110,7 @@ String _command(SshTarget server, List<String> forward) {
   return [
     'ssh',
     '-N',
-    ...forward,
+    ...forward.arguments,
     if (server.port case final port?) ...['-p', '$port'],
     if (server.user case final user?) '$user@${server.host}' else server.host,
   ].map(_quoted).join(' ');

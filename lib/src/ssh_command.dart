@@ -1,3 +1,4 @@
+import 'forwards.dart';
 import 'ssh_target.dart';
 
 String bracketIPv6(String host) =>
@@ -35,24 +36,9 @@ void checkBindAddress(String address) {
   }
 }
 
-String _listen(String bindAddress, int port) =>
-    '${bracketIPv6(bindAddress)}:$port';
-
 void checkPort(int port, String name) {
   if (port < 1 || port > 65535) throw RangeError.range(port, 1, 65535, name);
 }
-
-List<String> localForward(
-  int localPort, {
-  String bindAddress = '127.0.0.1',
-  required String remoteHost,
-  required int remotePort,
-}) =>
-    [
-      '-L',
-      [_listen(bindAddress, localPort), bracketIPv6(remoteHost), remotePort]
-          .join(':'),
-    ];
 
 // ssh reads a forward without a `/` as a host, splits it at `:`, and newer
 // versions expand `%` tokens and `${VAR}` in socket paths.
@@ -64,27 +50,6 @@ void checkSocketPath(String path, String name) {
   }
 }
 
-List<String> localForwardToSocket(
-  int localPort, {
-  String bindAddress = '127.0.0.1',
-  required String remoteSocket,
-}) =>
-    ['-L', '${_listen(bindAddress, localPort)}:$remoteSocket'];
-
-/// A [remotePort] of 0 has the server pick one.
-List<String> remoteForward(
-  int remotePort, {
-  required String localHost,
-  required int localPort,
-}) =>
-    ['-R', '127.0.0.1:$remotePort:${bracketIPv6(localHost)}:$localPort'];
-
-List<String> dynamicForward(
-  int localPort, {
-  String bindAddress = '127.0.0.1',
-}) =>
-    ['-D', _listen(bindAddress, localPort)];
-
 /// A `-o` beats ~/.ssh/config, so options are set only where [config]
 /// leaves ssh's default, or where it couldn't be read at all.
 ///
@@ -92,7 +57,7 @@ List<String> dynamicForward(
 /// for this process alone; without one, it serves nothing but [forward].
 List<String> sshCommand(
   SshTarget server, {
-  required List<String> forward,
+  Forward? forward,
   Map<String, String> config = const {},
   String executable = 'ssh',
   String? masterSocket,
@@ -103,7 +68,7 @@ List<String> sshCommand(
   return [
     executable,
     '-nNTv',
-    ...forward,
+    ...?forward?.arguments,
     ...['-o', 'ExitOnForwardFailure=yes'],
     // This process owns ssh: it must not fork away or serve other sessions.
     if (config['forkafterauthentication'] == 'yes') ...[
@@ -141,7 +106,7 @@ List<String> sshCommand(
 List<String> muxCommand(
   SshTarget server, {
   required String operation,
-  required List<String> forward,
+  required Forward forward,
   required String masterSocket,
   String executable = 'ssh',
 }) =>
@@ -152,7 +117,7 @@ List<String> muxCommand(
       ...['-o', 'ControlPath=${controlPath(masterSocket)}'],
       ...['-o', 'BatchMode=yes'],
       ...['-O', operation],
-      ...forward,
+      ...forward.arguments,
       ...destinationArguments(server),
     ];
 

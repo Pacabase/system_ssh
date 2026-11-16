@@ -1,3 +1,4 @@
+import 'package:system_ssh/src/forwards.dart';
 import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/ssh_config.dart';
 import 'package:system_ssh/system_ssh.dart';
@@ -35,7 +36,7 @@ void main() {
   }) =>
       sshCommand(
         target,
-        forward: localForward(50000, remoteHost: remoteHost, remotePort: 3306),
+        forward: LocalForward(50000, remoteHost: remoteHost, remotePort: 3306),
         config: config,
       );
 
@@ -117,7 +118,7 @@ void main() {
       expect(
         sshCommand(
           server,
-          forward: localForward(50000,
+          forward: const LocalForward(50000,
               remoteHost: 'db.example.com', remotePort: 3306),
           executable: '/opt/openssh/bin/ssh',
         ).first,
@@ -175,7 +176,7 @@ void main() {
     });
 
     test('serves SOCKS on the local port for a dynamic forward', () {
-      expect(sshCommand(server, forward: dynamicForward(50000)), [
+      expect(sshCommand(server, forward: const DynamicForward(50000)), [
         'ssh',
         '-nNTv',
         ...['-D', '127.0.0.1:50000'],
@@ -311,18 +312,22 @@ void main() {
   group('the address a forward listens on', () {
     test('goes in front of the local port, bracketed for IPv6', () {
       expect(
-        localForward(5432,
-            bindAddress: '172.17.0.1', remoteHost: 'db', remotePort: 5432),
+        const LocalForward(5432,
+                bindAddress: '172.17.0.1', remoteHost: 'db', remotePort: 5432)
+            .arguments,
         ['-L', '172.17.0.1:5432:db:5432'],
       );
       expect(
-        localForwardToSocket(2375,
-            bindAddress: '::', remoteSocket: '/run/d.sock'),
+        const SocketForward(2375,
+                bindAddress: '::', remoteSocket: '/run/d.sock')
+            .arguments,
         ['-L', '[::]:2375:/run/d.sock'],
       );
       expect(
-          dynamicForward(1080, bindAddress: '0.0.0.0'), ['-D', '0.0.0.0:1080']);
-      expect(dynamicForward(1080), ['-D', '127.0.0.1:1080']);
+        const DynamicForward(1080, bindAddress: '0.0.0.0').arguments,
+        ['-D', '0.0.0.0:1080'],
+      );
+      expect(const DynamicForward(1080).arguments, ['-D', '127.0.0.1:1080']);
     });
 
     for (final address in ['127.0.0.1', '0.0.0.0', '172.17.0.1', '::1', '::']) {

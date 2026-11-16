@@ -1,3 +1,12 @@
+## Unreleased
+
+- With `shareConnections`, a remote tunnel's failed connection to its local
+  destination, such as `connect_to localhost port 3000: failed.`, now goes
+  only to the `onLog` of the remote tunnels forwarding there. It used to
+  reach a tunnel opened with `openTunnel` to the server's own `localhost`
+  on the same port too, and every tunnel on the connection when the local
+  host was an IPv6 address such as `::1`.
+
 ## 0.9.2
 
 - `openTunnel`, `openSocketTunnel` and `openSocksProxy` take a `bindAddress`

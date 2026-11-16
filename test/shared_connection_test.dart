@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:system_ssh/src/forwards.dart';
 import 'package:system_ssh/src/ports.dart';
 import 'package:system_ssh/src/shared_connection.dart';
 import 'package:system_ssh/src/ssh_output.dart';
@@ -399,7 +400,13 @@ void main() {
       );
 
       await expectLater(
-        shared.forward(['-L', '127.0.0.1:50001:db.example.com:3306']),
+        shared.forward(
+          const LocalForward(
+            50001,
+            remoteHost: 'db.example.com',
+            remotePort: 3306,
+          ),
+        ),
         throwsA(same(reason)),
       );
     });
@@ -472,6 +479,76 @@ void main() {
 
       expect(remoteLogs, [
         const SshMessage('connect_to localhost port 3000: failed.'),
+        const SshMessage('Warning: the server says hello'),
+      ]);
+      expect(localLogs, [const SshMessage('Warning: the server says hello')]);
+    });
+
+    test(
+        "a remote forward's failed destination not to a local tunnel to the "
+        'same host and port', () async {
+      fake.attemptModes([AttemptMode.ready]);
+      final localLogs = <SshLog>[];
+      final remoteLogs = <SshLog>[];
+      final local = await openSystemForward(
+        server,
+        forward: localForwardTo('localhost', 3000),
+        freePort: CountingPorts().next,
+        onLog: localLogs.add,
+        executable: fake.path,
+        pool: pool,
+      );
+      addTearDown(local.close);
+      await openSystemRemoteForward(
+        server,
+        localHost: 'localhost',
+        localPort: 3000,
+        remotePort: 8080,
+        onLog: remoteLogs.add,
+        executable: fake.path,
+        pool: pool,
+      ).then((tunnel) => addTearDown(tunnel.close));
+      localLogs.clear();
+      remoteLogs.clear();
+
+      fake
+        ..masterSays('connect_to localhost port 3000: failed.')
+        ..masterSays('Warning: the server says hello');
+      await eventually(() => localLogs.isEmpty ? null : true);
+
+      expect(remoteLogs, [
+        const SshMessage('connect_to localhost port 3000: failed.'),
+        const SshMessage('Warning: the server says hello'),
+      ]);
+      expect(localLogs, [const SshMessage('Warning: the server says hello')]);
+    });
+
+    test("an IPv6 remote forward's failed destination to that tunnel only",
+        () async {
+      fake.attemptModes([AttemptMode.ready]);
+      final localLogs = <SshLog>[];
+      final remoteLogs = <SshLog>[];
+      await open(onLog: localLogs.add);
+      await openSystemRemoteForward(
+        server,
+        localHost: '::1',
+        localPort: 3000,
+        remotePort: 8080,
+        onLog: remoteLogs.add,
+        executable: fake.path,
+        pool: pool,
+      ).then((tunnel) => addTearDown(tunnel.close));
+      localLogs.clear();
+      remoteLogs.clear();
+
+      fake
+        ..masterSays('connect_to ::1 port 3000: failed.')
+        ..masterSays('Warning: the server says hello');
+      await eventually(() => localLogs.isEmpty ? null : true);
+
+      expect(operations().last, 'forward 127.0.0.1:8080:[::1]:3000');
+      expect(remoteLogs, [
+        const SshMessage('connect_to ::1 port 3000: failed.'),
         const SshMessage('Warning: the server says hello'),
       ]);
       expect(localLogs, [const SshMessage('Warning: the server says hello')]);

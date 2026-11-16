@@ -6,8 +6,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:logging/logging.dart';
+import 'package:system_ssh/src/forwards.dart';
 import 'package:system_ssh/src/ports.dart';
-import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/system_ssh_client.dart';
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
@@ -404,7 +404,7 @@ void main() {
       Future<SshTunnel> openProxy({int? localPort}) async {
         final proxy = await openSystemForward(
           fixture.target,
-          forward: dynamicForward,
+          forward: DynamicForward.new,
           localPort: localPort,
           onLog: logged(),
           executable: fixture.ssh,
