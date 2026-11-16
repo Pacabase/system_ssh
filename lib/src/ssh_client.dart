@@ -33,12 +33,9 @@ abstract interface class SshTunnel implements SshForward {
 /// An open remote forward: connections to `127.0.0.1:`[remotePort] on the
 /// server reach the host and port on this side it was opened to.
 abstract interface class SshRemoteTunnel implements SshForward {
-  /// The port on the server's `127.0.0.1` that reaches back here.
+  /// The port on the server's `127.0.0.1` that reaches back here, until
+  /// [close] stops ssh and the server frees it.
   int get remotePort;
-
-  /// Stops ssh, and with it the server's port. Closing again does nothing.
-  @override
-  Future<void> close();
 }
 
 /// Opens SSH tunnels (local port forwards, to a host and port or a Unix
