@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'exceptions.dart';
+import 'forwards.dart';
 import 'ssh_log.dart';
 
 final _progress = RegExp(
@@ -152,9 +153,9 @@ final _localConnectFailed = RegExp(r'^connect_to (\S+) port (\d+): failed');
 
 /// The host and port of a remote forward's destination that couldn't be
 /// reached, or null for another line.
-String? failedDestination(String line) =>
+LocalDestination? failedDestination(String line) =>
     switch (_localConnectFailed.firstMatch(line)) {
-      final match? => '${match[1]}:${match[2]}',
+      final match? => (host: match[1]!, port: int.parse(match[2]!)),
       null => null,
     };
 

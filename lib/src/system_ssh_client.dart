@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'config_hosts.dart';
 import 'exceptions.dart';
+import 'forwards.dart';
 import 'host_keys.dart';
 import 'logger.dart';
 import 'login_shell.dart';
@@ -192,7 +193,7 @@ final class SystemSshClient implements SshClient {
 // ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped.
 final _unsafeInUser = RegExp(r'''[\s'"`$;&|<>(){}/]|[\x00-\x1f]''');
 
-List<String> Function(int localPort) localForwardTo(
+LocalForward Function(int localPort) localForwardTo(
   String remoteHost,
   int remotePort, {
   String bindAddress = '127.0.0.1',
@@ -200,7 +201,7 @@ List<String> Function(int localPort) localForwardTo(
   checkHost(remoteHost, 'remoteHost');
   checkBindAddress(bindAddress);
 
-  return (port) => localForward(
+  return (port) => LocalForward(
         port,
         bindAddress: bindAddress,
         remoteHost: remoteHost,
@@ -208,29 +209,29 @@ List<String> Function(int localPort) localForwardTo(
       );
 }
 
-List<String> Function(int localPort) localForwardToSocketAt(
+SocketForward Function(int localPort) localForwardToSocketAt(
   String remoteSocket, {
   String bindAddress = '127.0.0.1',
 }) {
   checkSocketPath(remoteSocket, 'remoteSocket');
   checkBindAddress(bindAddress);
-  return (port) => localForwardToSocket(
+  return (port) => SocketForward(
         port,
         bindAddress: bindAddress,
         remoteSocket: remoteSocket,
       );
 }
 
-List<String> Function(int localPort) dynamicForwardOn(String bindAddress) {
+DynamicForward Function(int localPort) dynamicForwardOn(String bindAddress) {
   checkBindAddress(bindAddress);
-  return (port) => dynamicForward(port, bindAddress: bindAddress);
+  return (port) => DynamicForward(port, bindAddress: bindAddress);
 }
 
 /// [SystemSshClient.openTunnel] and [SystemSshClient.openSocksProxy], with
 /// the parts tests replace.
 Future<SshTunnel> openSystemForward(
   SshTarget server, {
-  required List<String> Function(int localPort) forward,
+  required ListeningForward Function(int localPort) forward,
   String bindAddress = '127.0.0.1',
   int? localPort,
   void Function(SshLog log)? onLog,
@@ -285,7 +286,6 @@ Future<SshTunnel> openSystemForward(
     if (shared != null) {
       final (handle, _) = await shared.forward(
         forward(port),
-        localPort: port,
         onLog: onLog,
         abortTrigger: abortTrigger,
       );
@@ -386,7 +386,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   );
   if (isAborted) throw const SshTunnelAbortedException();
 
-  final forward = remoteForward(
+  final forward = RemoteForward(
     remotePort ?? 0,
     localHost: localHost,
     localPort: localPort,
