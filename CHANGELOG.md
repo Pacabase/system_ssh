@@ -31,6 +31,12 @@
     remotePort: 5432,
   );
   ```
+- Once a tunnel's `abortTrigger` completes, `onLog` gets nothing more from
+  that attempt. A line ssh wrote as it was stopped could reach `onLog` as a
+  warning, as if the tunnel had opened, so an app that shows warnings no
+  longer shows one for a tunnel it cancelled.
+- A tunnel's `close()`, called again while an earlier `close()` is still
+  stopping ssh, waits for ssh to exit too, instead of returning at once.
 
 ## 0.9.2
 
