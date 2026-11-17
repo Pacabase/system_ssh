@@ -256,8 +256,8 @@ void main() {
       expect(logs, const [
         SshProgress(listeningLine),
         SshProgress(sessionLine),
-        SshForwardFailed(refused, reason: 'Connection refused'),
-        SshForwardFailed(prohibited, reason: 'administratively prohibited'),
+        SshForwardUnreachable(refused, reason: 'Connection refused'),
+        SshForwardProhibited(prohibited),
         SshMessage(warning),
       ]);
     });

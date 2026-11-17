@@ -255,22 +255,17 @@ void main() {
 
       expect(
         classify(line),
-        isA<SshForwardFailed>()
-            .having((log) => log.reason, 'reason', 'Connection refused')
-            .having((log) => log.isProhibited, 'isProhibited', isFalse),
+        const SshForwardUnreachable(line, reason: 'Connection refused'),
       );
     });
 
-    test('says one the server refused failed', () {
+    test('says one the server forbids is prohibited', () {
       const line =
           'channel 3: open failed: administratively prohibited: open failed';
 
       expect(
         classify(line),
-        isA<SshForwardFailed>()
-            .having(
-                (log) => log.reason, 'reason', 'administratively prohibited')
-            .having((log) => log.isProhibited, 'isProhibited', isTrue),
+        const SshForwardProhibited(line),
       );
     });
 

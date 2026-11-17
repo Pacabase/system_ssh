@@ -1,17 +1,22 @@
 ## Unreleased
 
-- `SshForwardFailed` has `isProhibited`, for a connection the server's
-  config forbids, such as a `PermitOpen` that doesn't list it, so an app can
-  tell that from nothing answering at the destination without reading
-  ssh's `reason`:
+- **Breaking:** `SshForwardFailed` is split by why: `SshForwardProhibited`
+  when the server's config forbids the connection, such as a `PermitOpen`
+  that doesn't list it, and `SshForwardUnreachable` when nothing at the
+  destination took it. An app tells the two apart without reading ssh's
+  `reason`, which both still have:
 
   ```dart
-  onLog: (log) {
-    if (log case SshForwardFailed(isProhibited: true)) {
-      print("The server doesn't allow this tunnel.");
-    }
+  onLog: (log) => switch (log) {
+    SshForwardProhibited() => print("The server doesn't allow this."),
+    SshForwardUnreachable(:final reason) => print("Couldn't forward: $reason"),
+    SshProgress() || SshMessage() => print(log.line),
   },
   ```
+
+  A `case SshForwardFailed()` keeps matching both. A fake that builds
+  `SshForwardFailed(line, reason: ...)` builds
+  `SshForwardUnreachable(line, reason: ...)`, or `SshForwardProhibited(line)`.
 
 - `trustHostKey` writes nothing to `known_hosts` once its `abortTrigger`
   completes, even when it completes after ssh has read the key, while

@@ -40,35 +40,51 @@ final class SshMessage extends SshLog {
 }
 
 /// A connection through the open tunnel that couldn't be forwarded, while the
-/// tunnel itself stays open: nothing listened at the destination, or the
-/// server doesn't allow forwarding there.
-final class SshForwardFailed extends SshLog {
-  /// An entry for [line], failed for [reason], as a fake [SshClient] would
-  /// report it.
+/// tunnel itself stays open; switch on the subclass for why.
+sealed class SshForwardFailed extends SshLog {
   const SshForwardFailed(super.line, {required this.reason});
 
-  /// Why, such as `Connection refused` or `administratively prohibited`.
+  /// ssh's reason, such as `Connection refused` or
+  /// `administratively prohibited`.
   final String reason;
-
-  /// Whether the server's config forbids this forward, such as a `PermitOpen`
-  /// that doesn't list the destination, rather than nothing answering there.
-  ///
-  /// ```dart
-  /// onLog: (log) {
-  ///   if (log case SshForwardFailed(isProhibited: true)) {
-  ///     print("The server doesn't allow this tunnel.");
-  ///   }
-  /// },
-  /// ```
-  bool get isProhibited => reason == 'administratively prohibited';
 
   @override
   bool operator ==(Object other) =>
-      other is SshForwardFailed && other.line == line && other.reason == reason;
+      other.runtimeType == runtimeType &&
+      other is SshForwardFailed &&
+      other.line == line &&
+      other.reason == reason;
 
   @override
-  int get hashCode => Object.hash(line, reason);
+  int get hashCode => Object.hash(runtimeType, line, reason);
+}
+
+/// Nothing at the destination took the connection: it refused, timed out or
+/// had no route from the server.
+final class SshForwardUnreachable extends SshForwardFailed {
+  /// An entry for [line], failed for [reason], as a fake [SshClient] would
+  /// report it.
+  const SshForwardUnreachable(super.line, {required super.reason});
 
   @override
-  String toString() => 'SshForwardFailed($line)';
+  String toString() => 'SshForwardUnreachable($line)';
+}
+
+/// The server's config forbids the connection, such as a `PermitOpen` that
+/// doesn't list the destination.
+///
+/// ```dart
+/// onLog: (log) {
+///   if (log is SshForwardProhibited) {
+///     print("The server doesn't allow this tunnel.");
+///   }
+/// },
+/// ```
+final class SshForwardProhibited extends SshForwardFailed {
+  /// An entry for [line], as a fake [SshClient] would report it.
+  const SshForwardProhibited(super.line)
+      : super(reason: 'administratively prohibited');
+
+  @override
+  String toString() => 'SshForwardProhibited($line)';
 }

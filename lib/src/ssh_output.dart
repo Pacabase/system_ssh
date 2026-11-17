@@ -162,7 +162,9 @@ final _refused = RegExp(
 SshLog classify(String line) {
   if (isProgress(line)) return SshProgress(line);
   if (_refused.firstMatch(line)?[1] case final reason?) {
-    return SshForwardFailed(line, reason: reason);
+    return reason == 'administratively prohibited'
+        ? SshForwardProhibited(line)
+        : SshForwardUnreachable(line, reason: reason);
   }
   return SshMessage(line);
 }
