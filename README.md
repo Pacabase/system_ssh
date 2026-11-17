@@ -39,14 +39,17 @@ Future<void> main() async {
   With Docker Desktop on macOS or Windows, containers reach the default
   through `host.docker.internal` instead.
 - `onLog` gets what ssh says as an `SshLog` with its `line`: `SshProgress`
-  while it connects, `SshForwardFailed` with a `reason` for a connection
-  through the open tunnel that couldn't be made (Windows' sshd doesn't say),
-  and `SshMessage` for anything else. They're information: the tunnel's own
+  while it connects, `SshForwardFailed` with ssh's `reason` for a
+  connection through the open tunnel that couldn't be made (Windows' sshd
+  doesn't say), and `SshMessage` for anything else. A failed forward is
+  `SshForwardProhibited` when the server's config forbids it, else
+  `SshForwardUnreachable`. They're information: the tunnel's own
   failures are thrown, or fail `done`.
 
   ```dart
   onLog: (log) => switch (log) {
-    SshForwardFailed(:final reason) => print("Couldn't forward: $reason"),
+    SshForwardProhibited() => print("The server doesn't allow this."),
+    SshForwardUnreachable(:final reason) => print("Couldn't forward: $reason"),
     SshProgress() || SshMessage() => print(log.line),
   },
   ```
@@ -269,6 +272,7 @@ try {
 | `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`) |
 | `SshPortInUseException` | the `localPort` you asked for is taken; `port` and `address` say which |
 | `SshDuplicateForwardException` | with `shareConnections`, another open tunnel on the server already has the same remote forward; `forward` says which |
+| `SshRemotePortRefusedException` | the server wouldn't listen on a remote forward's port, a remote tunnel's `remotePort` or one your config adds: it's taken there, or its sshd doesn't allow remote forwarding; `port` says which |
 | `SshLoginRefusedException` | the server refused every login: `Permission denied (publickey)`, too many keys tried |
 | `SshHostKeyRefusedException` | ssh refused a host key that isn't asked about: your config sets `StrictHostKeyChecking yes`, or a `ProxyJump` host's key is unknown or changed |
 | `SshUnknownHostKeyException` | the server's host key isn't in `known_hosts` yet, and your config leaves `StrictHostKeyChecking` at `ask`; see [Host keys](#host-keys) |
@@ -278,7 +282,6 @@ try {
 | `SshUnreachableException` | the connection was refused, timed out or had no route |
 | `SshDroppedException` | the server closed or reset the connection, before the login or after, or stopped answering |
 | `SshAddressUnavailableException` | the `bindAddress` isn't an address of this computer, at least not yet, such as a VPN's or Docker's before it comes up |
-| `SshRemotePortRefusedException` | the server wouldn't listen on a remote forward's port, a remote tunnel's `remotePort` or one your config adds: it's taken there, or its sshd doesn't allow remote forwarding; `port` says which |
 | `SshFailedException` | anything else, in ssh's words when it said why |
 | **Neither** | |
 | `SshTunnelAbortedException` | `abortTrigger` completed first |

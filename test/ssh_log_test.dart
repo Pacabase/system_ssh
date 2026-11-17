@@ -9,18 +9,22 @@ void main() {
     expect(const SshMessage('x'), isNot(const SshMessage('y')));
   });
 
-  test('a failed forward is equal only with the same reason too', () {
-    const failed = SshForwardFailed('x', reason: 'Connection refused');
+  test('a failed forward is equal only with the same kind and reason too', () {
+    const failed = SshForwardUnreachable('x', reason: 'Connection refused');
 
-    expect(failed, const SshForwardFailed('x', reason: 'Connection refused'));
+    expect(
+      failed,
+      const SshForwardUnreachable('x', reason: 'Connection refused'),
+    );
     expect(
       failed.hashCode,
-      const SshForwardFailed('x', reason: 'Connection refused').hashCode,
+      const SshForwardUnreachable('x', reason: 'Connection refused').hashCode,
     );
     expect(
       failed,
-      isNot(const SshForwardFailed('x', reason: 'administratively prohibited')),
+      isNot(const SshForwardUnreachable('x', reason: 'No route to host')),
     );
+    expect(failed, isNot(const SshForwardProhibited('x')));
     expect(failed, isNot(const SshMessage('x')));
   });
 
@@ -28,8 +32,9 @@ void main() {
     expect('${const SshProgress('a')}', 'SshProgress(a)');
     expect('${const SshMessage('b')}', 'SshMessage(b)');
     expect(
-      '${const SshForwardFailed('c', reason: 'r')}',
-      'SshForwardFailed(c)',
+      '${const SshForwardUnreachable('c', reason: 'r')}',
+      'SshForwardUnreachable(c)',
     );
+    expect('${const SshForwardProhibited('d')}', 'SshForwardProhibited(d)');
   });
 }

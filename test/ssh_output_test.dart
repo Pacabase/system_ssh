@@ -281,17 +281,48 @@ void main() {
 
       expect(
         classify(line),
-        const SshForwardFailed(line, reason: 'Connection refused'),
+        const SshForwardUnreachable(line, reason: 'Connection refused'),
       );
     });
 
-    test('says one the server refused failed', () {
+    test('says one the server forbids is prohibited', () {
       const line =
           'channel 3: open failed: administratively prohibited: open failed';
 
       expect(
         classify(line),
-        const SshForwardFailed(line, reason: 'administratively prohibited'),
+        const SshForwardProhibited(line),
+      );
+    });
+
+    for (final line in [
+      'channel 3: open failed: administratively prohibited: ',
+      'channel 3: open failed: administratively prohibited: not on my watch',
+    ]) {
+      test('says "$line" is prohibited, whatever the server added', () {
+        expect(classify(line), SshForwardProhibited(line));
+      });
+    }
+
+    test("keeps the server's own words after ssh's reason", () {
+      const line =
+          'channel 4: open failed: resource shortage: too many channels';
+
+      expect(
+        classify(line),
+        const SshForwardUnreachable(
+          line,
+          reason: 'resource shortage: too many channels',
+        ),
+      );
+    });
+
+    test('gives ssh\'s reason when the server only says open failed', () {
+      const line = 'channel 4: open failed: resource shortage: open failed';
+
+      expect(
+        classify(line),
+        const SshForwardUnreachable(line, reason: 'resource shortage'),
       );
     });
 

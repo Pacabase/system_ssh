@@ -1,5 +1,25 @@
 ## Unreleased
 
+- **Breaking:** `SshForwardFailed` is split by why: `SshForwardProhibited`
+  when the server's config forbids the connection, such as a `PermitOpen`
+  that doesn't list it, and `SshForwardUnreachable` for any other reason,
+  usually that nothing at the destination took it. A prohibition is
+  recognised whatever the server adds to ssh's line. An app tells the two apart without reading ssh's
+  `reason`, which both still have:
+
+  ```dart
+  onLog: (log) => switch (log) {
+    SshForwardProhibited() => print("The server doesn't allow this."),
+    SshForwardUnreachable(:final reason) => print("Couldn't forward: $reason"),
+    SshProgress() || SshMessage() => print(log.line),
+  },
+  ```
+
+  A `case SshForwardFailed()` keeps matching both, but `SshForwardFailed`
+  can't be built any more: a fake that builds
+  `SshForwardFailed(line, reason: ...)` builds
+  `SshForwardUnreachable(line, reason: ...)`, or `SshForwardProhibited(line)`.
+
 - `trustHostKey` writes nothing to `known_hosts` once its `abortTrigger`
   completes, even when it completes after ssh has read the key, while
   ssh's last lines are still coming.
@@ -8,10 +28,12 @@
   reads ssh's text, and `isPermanent` goes: each class sits under
   `SshPermanentException`, when trying again can't work until the user
   changes something, or `SshTemporaryException`, when it can. Each is
-  permanent or temporary as `isPermanent` was, but for three fixes:
+  permanent or temporary as `isPermanent` was, but for four fixes:
   ssh's `Unable to negotiate` (no algorithm in common with the server) is
   now permanent; ssh's warning that a host key changed, where the config
-  lets ssh go on, no longer makes a later failure permanent; and a second
+  lets ssh go on, no longer makes a later failure permanent; a server port
+  a remote tunnel is refused (`SshRemotePortRefusedException`), taken there
+  or with remote forwarding not allowed, is now permanent; and a second
   remote tunnel with the same forward on a shared connection is refused as
   permanent (`SshDuplicateForwardException`), since retrying can't help
   while the first is open. A failure without

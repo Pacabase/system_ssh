@@ -135,22 +135,27 @@ void main() {
     String describe(SshLog log) => switch (log) {
           SshProgress(:final line) => 'progress: $line',
           SshMessage(:final line) => 'message: $line',
-          SshForwardFailed(:final line, :final reason) => '$reason: $line',
+          SshForwardUnreachable(:final line, :final reason) => '$reason: $line',
+          SshForwardProhibited(:final line) => 'forbidden: $line',
         };
 
     expect(
       [
         const SshProgress('debug1: Connecting to ssh.example.com port 22.'),
         const SshMessage('Warning: Permanently added ssh.example.com.'),
-        const SshForwardFailed(
+        const SshForwardUnreachable(
           'channel 2: open failed: connect failed: Connection refused',
           reason: 'Connection refused',
+        ),
+        const SshForwardProhibited(
+          'channel 3: open failed: administratively prohibited: open failed',
         ),
       ].map(describe),
       [
         startsWith('progress: '),
         startsWith('message: '),
         startsWith('Connection refused: '),
+        startsWith('forbidden: '),
       ],
     );
   });

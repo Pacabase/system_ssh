@@ -131,6 +131,30 @@ final class SshDuplicateForwardException extends SshPermanentException {
   final String forward;
 }
 
+/// The server wouldn't listen on a remote forward's port, the one a remote
+/// tunnel asked for or one the user's config adds: it's taken there, or its
+/// sshd doesn't allow remote forwarding. Trying again can't work until the
+/// port is freed there or the server's config changes.
+///
+/// ```dart
+/// throw const SshRemotePortRefusedException(
+///   'Error: remote port forwarding failed for listen port 8080',
+///   port: 8080,
+/// );
+/// ```
+final class SshRemotePortRefusedException extends SshPermanentException {
+  /// An error saying, in [message], that the server refused [port].
+  const SshRemotePortRefusedException(
+    super.message, {
+    required this.port,
+    super.log,
+    super.exitCode,
+  });
+
+  /// The server's port that was refused, or 0 for one the server would pick.
+  final int port;
+}
+
 /// The server refused every login ssh tried, such as a key it doesn't know or
 /// too many keys offered.
 ///
@@ -238,30 +262,6 @@ final class SshAddressUnavailableException extends SshTemporaryException {
 
   /// The address the tunnel was asked to listen on.
   final String address;
-}
-
-/// The server wouldn't listen on a remote forward's port, the one a remote
-/// tunnel asked for or one the user's config adds: it's taken there, or its
-/// sshd doesn't allow remote forwarding. Trying again works once the port is
-/// free.
-///
-/// ```dart
-/// throw const SshRemotePortRefusedException(
-///   'Error: remote port forwarding failed for listen port 8080',
-///   port: 8080,
-/// );
-/// ```
-final class SshRemotePortRefusedException extends SshTemporaryException {
-  /// An error saying, in [message], that the server refused [port].
-  const SshRemotePortRefusedException(
-    super.message, {
-    required this.port,
-    super.log,
-    super.exitCode,
-  });
-
-  /// The server's port that was refused, or 0 for one the server would pick.
-  final int port;
 }
 
 /// Any other failure, with ssh's words in [message] when it said why. Trying

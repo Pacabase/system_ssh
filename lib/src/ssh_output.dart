@@ -170,16 +170,27 @@ final class RemoteForwardReadiness implements ForwardReadiness {
   }
 }
 
-// "channel 2: open failed: connect failed: Connection refused", or
-// "channel 3: open failed: administratively prohibited: open failed".
-final _refused = RegExp(
-  r'^channel \d+: open failed: (?:connect failed: )?(.+?)(?:: open failed)?$',
-);
+// ssh's code for why, then the server's own words: "channel 2: open failed:
+// connect failed: Connection refused". OpenSSH's sshd says only "open failed"
+// for the rest, but another server may say anything.
+final _refused = RegExp(r'^channel \d+: open failed: (.+?)(?:: (.*))?$');
 
 SshLog classify(String line) {
   if (isProgress(line)) return SshProgress(line);
-  if (_refused.firstMatch(line)?[1] case final reason?) {
-    return SshForwardFailed(line, reason: reason);
+  if (_refused.firstMatch(line) case final match?) {
+    final code = match[1]!;
+    final message = match[2] ?? '';
+    if (code == 'administratively prohibited') {
+      return SshForwardProhibited(line);
+    }
+    return SshForwardUnreachable(
+      line,
+      reason: switch (message) {
+        '' || 'open failed' => code,
+        _ when code == 'connect failed' => message,
+        _ => '$code: $message',
+      },
+    );
   }
   return SshMessage(line);
 }

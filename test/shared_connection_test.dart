@@ -106,7 +106,7 @@ void main() {
               'port 50123 to 127.0.0.1 port $port, nchannels 4',
     );
 
-  const refused = SshForwardFailed(
+  const refused = SshForwardUnreachable(
     'channel 3: open failed: connect failed: Connection refused',
     reason: 'Connection refused',
   );
