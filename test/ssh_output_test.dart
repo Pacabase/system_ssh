@@ -269,6 +269,37 @@ void main() {
       );
     });
 
+    for (final line in [
+      'channel 3: open failed: administratively prohibited: ',
+      'channel 3: open failed: administratively prohibited: not on my watch',
+    ]) {
+      test('says "$line" is prohibited, whatever the server added', () {
+        expect(classify(line), SshForwardProhibited(line));
+      });
+    }
+
+    test("keeps the server's own words after ssh's reason", () {
+      const line =
+          'channel 4: open failed: resource shortage: too many channels';
+
+      expect(
+        classify(line),
+        const SshForwardUnreachable(
+          line,
+          reason: 'resource shortage: too many channels',
+        ),
+      );
+    });
+
+    test('gives ssh\'s reason when the server only says open failed', () {
+      const line = 'channel 4: open failed: resource shortage: open failed';
+
+      expect(
+        classify(line),
+        const SshForwardUnreachable(line, reason: 'resource shortage'),
+      );
+    });
+
     test('keeps -v progress about a channel as progress', () {
       const line = 'debug1: channel 3: open failed: connect failed: x';
 

@@ -147,11 +147,15 @@ void main() {
           'channel 2: open failed: connect failed: Connection refused',
           reason: 'Connection refused',
         ),
+        const SshForwardProhibited(
+          'channel 3: open failed: administratively prohibited: open failed',
+        ),
       ].map(describe),
       [
         startsWith('progress: '),
         startsWith('message: '),
         startsWith('Connection refused: '),
+        startsWith('forbidden: '),
       ],
     );
   });

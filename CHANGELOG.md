@@ -2,8 +2,9 @@
 
 - **Breaking:** `SshForwardFailed` is split by why: `SshForwardProhibited`
   when the server's config forbids the connection, such as a `PermitOpen`
-  that doesn't list it, and `SshForwardUnreachable` when nothing at the
-  destination took it. An app tells the two apart without reading ssh's
+  that doesn't list it, and `SshForwardUnreachable` for any other reason,
+  usually that nothing at the destination took it. A prohibition is
+  recognised whatever the server adds to ssh's line. An app tells the two apart without reading ssh's
   `reason`, which both still have:
 
   ```dart
@@ -14,7 +15,8 @@
   },
   ```
 
-  A `case SshForwardFailed()` keeps matching both. A fake that builds
+  A `case SshForwardFailed()` keeps matching both, but `SshForwardFailed`
+  can't be built any more: a fake that builds
   `SshForwardFailed(line, reason: ...)` builds
   `SshForwardUnreachable(line, reason: ...)`, or `SshForwardProhibited(line)`.
 

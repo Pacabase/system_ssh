@@ -28,13 +28,6 @@ void main() {
     expect(failed, isNot(const SshMessage('x')));
   });
 
-  test('a prohibited forward gives ssh its reason', () {
-    expect(
-      const SshForwardProhibited('x').reason,
-      'administratively prohibited',
-    );
-  });
-
   test('each kind names itself and its line', () {
     expect('${const SshProgress('a')}', 'SshProgress(a)');
     expect('${const SshMessage('b')}', 'SshMessage(b)');

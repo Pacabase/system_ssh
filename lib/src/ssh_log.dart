@@ -50,17 +50,15 @@ sealed class SshForwardFailed extends SshLog {
 
   @override
   bool operator ==(Object other) =>
-      other.runtimeType == runtimeType &&
-      other is SshForwardFailed &&
-      other.line == line &&
-      other.reason == reason;
+      super == other && other is SshForwardFailed && other.reason == reason;
 
   @override
   int get hashCode => Object.hash(runtimeType, line, reason);
 }
 
-/// Nothing at the destination took the connection: it refused, timed out or
-/// had no route from the server.
+/// Any failure but a prohibited one: usually nothing at the destination took
+/// the connection, which refused, timed out or had no route from the server,
+/// and sometimes the server was short of resources.
 final class SshForwardUnreachable extends SshForwardFailed {
   /// An entry for [line], failed for [reason], as a fake [SshClient] would
   /// report it.
