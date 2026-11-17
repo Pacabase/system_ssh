@@ -281,6 +281,7 @@ try {
 | `SshUnreachableException` | the connection was refused, timed out or had no route |
 | `SshDroppedException` | the server closed or reset the connection, before the login or after, or stopped answering |
 | `SshAddressUnavailableException` | the `bindAddress` isn't an address of this computer, at least not yet, such as a VPN's or Docker's before it comes up |
+| `SshRemotePortRefusedException` | the server wouldn't listen on a remote forward's port, a remote tunnel's `remotePort` or one your config adds: it's taken there, or its sshd doesn't allow remote forwarding; `port` says which |
 | `SshFailedException` | anything else, in ssh's words when it said why |
 | **Neither** | |
 | `SshTunnelAbortedException` | `abortTrigger` completed first |

@@ -319,11 +319,16 @@ void main() {
           SshUnreachableException() => 'unreachable',
           SshDroppedException() => 'dropped',
           SshAddressUnavailableException(:final address) => 'no $address',
+          SshRemotePortRefusedException(:final port) => 'server port $port',
           SshFailedException() => 'failed',
           SshTunnelAbortedException() => 'aborted',
         };
 
     expect(reason(const SshPortInUseException(5432)), 'port 5432 in use');
+    expect(
+      reason(const SshRemotePortRefusedException('refused', port: 8080)),
+      'server port 8080',
+    );
   });
 
   test('acts out an unknown host key and trusts it', () async {

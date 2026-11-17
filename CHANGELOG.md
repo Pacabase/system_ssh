@@ -56,8 +56,9 @@
   The new classes are `SshLoginRefusedException`,
   `SshHostKeyRefusedException`, `SshHostNotFoundException`,
   `SshUnreachableException`, `SshDroppedException`,
-  `SshAddressUnavailableException`, `SshDuplicateForwardException` and
-  `SshFailedException`, with the
+  `SshAddressUnavailableException`, `SshDuplicateForwardException`,
+  `SshRemotePortRefusedException`, with the server port it wouldn't listen
+  on, and `SshFailedException`, with the
   README's Failures table saying when each comes. Every class has the
   `log` and `exitCode` that only `SshTunnelException` had.
 

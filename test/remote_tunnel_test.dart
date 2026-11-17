@@ -222,7 +222,8 @@ void main() {
       await expectLater(
         open(remotePort: 8080),
         throwsA(
-          isA<SshFailedException>()
+          isA<SshRemotePortRefusedException>()
+              .having((exception) => exception.port, 'port', 8080)
               .having(
                 (exception) => exception.message,
                 'message',
@@ -236,6 +237,18 @@ void main() {
         ),
       );
       expect(fake.attempts, hasLength(1));
+    });
+
+    test('says port 0 when the server refused to pick one', () async {
+      fake.attemptModes([AttemptMode.bindFailure]);
+
+      await expectLater(
+        open(),
+        throwsA(
+          isA<SshRemotePortRefusedException>()
+              .having((exception) => exception.port, 'port', 0),
+        ),
+      );
     });
 
     test('throws SshNotFoundException when sh cannot find ssh', () async {

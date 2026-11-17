@@ -450,6 +450,11 @@ Future<void> _mux(String directory, List<String> arguments) async {
         'err:muxclient: master forward request failed',
         'exit:255',
       ],
+    'refused' => [
+        'err:mux_client_forward: forwarding request failed: remote port forwarding failed for listen port ${spec.split(':')[1]}',
+        'err:muxclient: master forward request failed',
+        'exit:255',
+      ],
     'silent-fail' => [
         'err:mux_client_forward: forwarding request failed: port not forwarded',
         'err:muxclient: master cancel forward request failed',

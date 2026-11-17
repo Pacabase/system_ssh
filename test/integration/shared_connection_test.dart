@@ -3,6 +3,8 @@
 @Tags(['integration'])
 library;
 
+import 'dart:io';
+
 import 'package:system_ssh/src/ports.dart';
 import 'package:system_ssh/src/shared_connection.dart';
 import 'package:system_ssh/src/system_ssh_client.dart';
@@ -106,6 +108,28 @@ void main() {
         if (DateTime.now().isAfter(deadline)) fail('the port stayed bound');
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
+    });
+
+    test('says which server port the server refused', () async {
+      await open();
+      final taken = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(taken.close);
+
+      await expectLater(
+        openSystemRemoteForward(
+          fixture.target,
+          localHost: fixture.echoHost,
+          localPort: fixture.echoPort,
+          remotePort: taken.port,
+          onLog: logged([]),
+          executable: fixture.ssh,
+          pool: pool,
+        ),
+        throwsA(
+          isA<SshRemotePortRefusedException>()
+              .having((exception) => exception.port, 'port', taken.port),
+        ),
+      );
     });
 
     test('tells only the tunnel used that its destination refused', () async {
