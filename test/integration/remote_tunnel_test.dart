@@ -26,17 +26,12 @@ void main() {
       String? localHost,
       void Function(SshLog log)? onLog,
     }) async {
-      final lines = <String>[];
-      addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
       final tunnel = await openSystemRemoteForward(
         fixture.target,
         localHost: localHost ?? fixture.echoHost,
         localPort: fixture.echoPort,
         remotePort: remotePort,
-        onLog: (log) {
-          lines.add(log.line);
-          onLog?.call(log);
-        },
+        onLog: fixture.logged(onLog),
         executable: fixture.ssh,
       );
       addTearDown(tunnel.close);

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:system_ssh/src/ssh_output.dart';
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
@@ -20,6 +21,23 @@ final class SshFixture {
 
   final int? _port;
   final bool _isCi;
+  final _unknownLines = <String>[];
+
+  /// An `onLog` that passes each line on to [onLog], prints them all if the
+  /// test fails, and fails the test, in [tearDown], on a line that
+  /// [isKnownLine] doesn't know.
+  void Function(SshLog log) logged([void Function(SshLog log)? onLog]) {
+    final lines = <String>[];
+    addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
+    return (log) {
+      lines.add(log.line);
+      if (log is SshMessage && !isKnownLine(log.line)) {
+        _unknownLines.add(log.line);
+      }
+      onLog?.call(log);
+    };
+  }
+
   Directory? _directory;
   ServerSocket? _echo;
   final _accepted = <Socket>[];
@@ -45,6 +63,13 @@ final class SshFixture {
         port: _port,
         user: Platform.environment[Platform.isWindows ? 'USERNAME' : 'USER'],
       );
+
+  /// Same server, with `ClearAllForwardings yes` in the config.
+  SshTarget get clearForwardingsTarget => const SshTarget('clear-forwardings');
+
+  /// Same server, logged in with a key the sshd lets forward only to
+  /// 127.0.0.1:9, which `.github/actions/sshd` sets up.
+  SshTarget get noForwardingTarget => const SshTarget('no-forwarding');
 
   /// Same server, but `StrictHostKeyChecking yes` in the config.
   SshTarget get strictTarget => const SshTarget('strict-host-keys');
@@ -100,6 +125,10 @@ final class SshFixture {
     final directory = Directory.systemTemp.createTempSync('system_ssh_test');
     _directory = directory;
     final knownHosts = _knownHosts.path.replaceAll(r'\', '/');
+    final home =
+        Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
+    final restrictedKey =
+        '$home/.ssh/id_ed25519_no_forwarding'.replaceAll(r'\', '/');
     String agentHost(String name, String? agent) => '''
 Host $name
   HostName 127.0.0.1
@@ -124,6 +153,20 @@ Host jump
   Port $_port
   BatchMode yes
   StrictHostKeyChecking accept-new
+  UserKnownHostsFile $knownHosts
+
+Host clear-forwardings
+  HostName 127.0.0.1
+  Port $_port
+  ClearAllForwardings yes
+  UserKnownHostsFile $knownHosts
+
+Host no-forwarding
+  HostName 127.0.0.1
+  Port $_port
+  IdentityFile $restrictedKey
+  IdentitiesOnly yes
+  IdentityAgent none
   UserKnownHostsFile $knownHosts
 
 Host strict-host-keys
@@ -268,6 +311,17 @@ exec ssh -F '${directory.path}/config' "\$@"
     _accepted.clear();
     await _echo?.close();
     _echo = null;
+
+    final unknown = [..._unknownLines];
+    _unknownLines.clear();
+    if (unknown.isNotEmpty) {
+      fail(
+        "ssh wrote lines system_ssh doesn't know. Teach lib/src/ssh_output.dart "
+        'the ones that say why ssh failed, and add the rest to '
+        '_harmlessLines in test/integration/ssh_fixture.dart:\n'
+        '${unknown.join('\n')}',
+      );
+    }
   }
 
   /// Whether the fixture's known_hosts has the sshd's key.
@@ -326,3 +380,49 @@ exec ssh -F '${directory.path}/config' "\$@"
   static T _require<T extends Object>(T? value, String step) =>
       value ?? (throw StateError('SshFixture.$step did not run'));
 }
+
+/// Whether system_ssh classifies [line] as a failure, or it's one ssh writes
+/// that means nothing on its own.
+bool isKnownLine(String line) =>
+    line.trim().isEmpty ||
+    tunnelFailure([line], 255) is! SshFailedException ||
+    _harmlessLines.any((pattern) => pattern.hasMatch(line));
+
+// ssh's lines that say nothing about why a tunnel failed, matched as tightly
+// as the line allows, so a new one fails the integration tests.
+final _harmlessLines = [
+  // A taken local port, which the package finds by checking the port.
+  RegExp(r'^bind \[[^\]]+\]:\d+: (Address already in use|Permission denied)$'),
+  RegExp(r'^channel_setup_fwd_listener_tcpip: cannot listen to port: \d+$'),
+  RegExp(r'^Could not request local forwarding\.$'),
+  // ssh's warning around a changed host key, which the package reads from
+  // the key ssh shows.
+  RegExp(r'^@+$'),
+  RegExp(r'^@ +WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! +@$'),
+  RegExp(r'^IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!$'),
+  RegExp(
+    r'^Someone could be eavesdropping on you right now '
+    r'\(man-in-the-middle attack\)!$',
+  ),
+  RegExp(r'^It is also possible that a host key has just been changed\.$'),
+  RegExp(r'^The fingerprint for the \S+ key sent by the remote host is$'),
+  RegExp(r'^SHA256:[A-Za-z0-9+/]+\.$'),
+  RegExp(r'^Please contact your system administrator\.$'),
+  RegExp(r'^Add correct host key in .+ to get rid of this message\.$'),
+  RegExp(r'^Offending \S+ key in .+:\d+$'),
+  RegExp(r'^  remove with:$'),
+  RegExp(r'^  ssh-keygen -f .+ -R .+$'),
+  RegExp(
+    r'^Host key for \S+ has changed and you have requested strict checking\.$',
+  ),
+  // Before "Host key verification failed.", which says why.
+  RegExp(
+    r'^No \S+ host key is known for \S+ and you have requested strict '
+    r'checking\.$',
+  ),
+  // An IdentityFile that doesn't exist, which ssh skips.
+  RegExp(r'^no such identity: .+: No such file or directory$'),
+  // Windows' ssh, as UpdateHostKeys learns the server's other keys.
+  RegExp(r'^Learned new hostkey: \S+ SHA256:\S+$'),
+  RegExp(r'^Adding new key for \S+ to .+: \S+ SHA256:\S+$'),
+];

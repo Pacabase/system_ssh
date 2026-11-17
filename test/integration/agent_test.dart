@@ -31,12 +31,10 @@ void main() {
         SshTarget via, {
         Map<String, String> environment = const {},
       }) async {
-        final log = <String>[];
-        addTearDown(() => printOnFailure('ssh log:\n${log.join('\n')}'));
         final tunnel = await openSystemForward(
           via,
           forward: localForwardTo(fixture.echoHost, fixture.echoPort),
-          onLog: (entry) => log.add(entry.line),
+          onLog: fixture.logged(),
           executable: fixture.ssh,
           environment: environment,
         );

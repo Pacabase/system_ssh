@@ -116,6 +116,8 @@ void main() {
         SshDroppedException,
       ),
       ('client_loop: send disconnect: Broken pipe', SshDroppedException),
+      // Windows' ssh, once its ProxyCommand dies.
+      ('client_loop: send disconnect: Unknown error', SshDroppedException),
       ('Connection reset by 10.0.0.1 port 22', SshDroppedException),
       (
         'ssh: connect to host ssh.example.com port 22: Connection refused',
@@ -131,6 +133,11 @@ void main() {
       ),
       (
         'kex_exchange_identification: read: Connection reset by peer',
+        SshUnreachableException,
+      ),
+      // Windows' ssh, for a port nothing listens on.
+      (
+        'banner exchange: Connection to UNKNOWN port -1: Connection refused',
         SshUnreachableException,
       ),
       (

@@ -1,3 +1,15 @@
+## Unreleased
+
+- On Windows, a tunnel whose connection went down under it, such as when
+  its `ProxyCommand` died, now fails `done` with an `SshDroppedException`
+  instead of an `SshFailedException`, as it already did elsewhere. Windows'
+  ssh says `client_loop: send disconnect: Unknown error` where others say
+  `Broken pipe`.
+- On Windows, a server port nothing listens on now throws an
+  `SshUnreachableException` instead of an `SshFailedException`, as it
+  already did elsewhere. Windows' ssh says `banner exchange: Connection to
+  UNKNOWN port -1: Connection refused`.
+
 ## 0.10.0
 
 - **Breaking:** `SshForwardFailed` is split by why: `SshForwardProhibited`

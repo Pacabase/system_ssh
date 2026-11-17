@@ -52,7 +52,9 @@ final _failures = <(RegExp, _Failure)>[
     RegExp(
       r'^(ssh: )?connect to host .* port \d+: |'
       '^(kex|ssh)_exchange_identification: |'
-      '^Connection timed out during banner exchange',
+      '^Connection timed out during banner exchange|'
+      // Windows' words for a connection refused before the server answered.
+      r'^banner exchange: Connection to .* port -?\d+: Connection refused$',
     ),
     SshUnreachableException.new,
   ),
@@ -61,7 +63,9 @@ final _failures = <(RegExp, _Failure)>[
       r'^([a-z_]+: )*(send disconnect: )?Connection (reset|closed) by |'
       '^Connection to .* closed by remote host|'
       r'^(\w+: )?Connection to .* port \d+: |'
-      r'^Timeout, server .* not responding|: Broken pipe$',
+      r'^Timeout, server .* not responding|: Broken pipe$|'
+      // Windows' words for a connection that went down under it.
+      '^client_loop: send disconnect: Unknown error',
     ),
     SshDroppedException.new,
   ),
