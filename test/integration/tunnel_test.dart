@@ -483,13 +483,7 @@ void main() {
 
         await expectLater(
           tunnel.done.timeout(const Duration(seconds: 20)),
-          throwsA(
-            isA<SshTemporaryException>().having(
-              (exception) => exception.message,
-              'message',
-              allOf(isNotEmpty, isNot(startsWith('ssh exited with code'))),
-            ),
-          ),
+          throwsA(isA<SshDroppedException>()),
         );
       });
     });

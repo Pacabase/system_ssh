@@ -365,4 +365,39 @@ bool isKnownLine(String line) =>
 
 // ssh's lines that say nothing about why a tunnel failed, matched as tightly
 // as the line allows, so a new one fails the integration tests.
-final _harmlessLines = <RegExp>[];
+final _harmlessLines = [
+  // A taken local port, which the package finds by checking the port.
+  RegExp(r'^bind \[[^\]]+\]:\d+: (Address already in use|Permission denied)$'),
+  RegExp(r'^channel_setup_fwd_listener_tcpip: cannot listen to port: \d+$'),
+  RegExp(r'^Could not request local forwarding\.$'),
+  // ssh's warning around a changed host key, which the package reads from
+  // the key ssh shows.
+  RegExp(r'^@+$'),
+  RegExp(r'^@ +WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! +@$'),
+  RegExp(r'^IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!$'),
+  RegExp(
+    r'^Someone could be eavesdropping on you right now '
+    r'\(man-in-the-middle attack\)!$',
+  ),
+  RegExp(r'^It is also possible that a host key has just been changed\.$'),
+  RegExp(r'^The fingerprint for the \S+ key sent by the remote host is$'),
+  RegExp(r'^SHA256:[A-Za-z0-9+/]+\.$'),
+  RegExp(r'^Please contact your system administrator\.$'),
+  RegExp(r'^Add correct host key in .+ to get rid of this message\.$'),
+  RegExp(r'^Offending \S+ key in .+:\d+$'),
+  RegExp(r'^  remove with:$'),
+  RegExp(r'^  ssh-keygen -f .+ -R .+$'),
+  RegExp(
+    r'^Host key for \S+ has changed and you have requested strict checking\.$',
+  ),
+  // Before "Host key verification failed.", which says why.
+  RegExp(
+    r'^No \S+ host key is known for \S+ and you have requested strict '
+    r'checking\.$',
+  ),
+  // An IdentityFile that doesn't exist, which ssh skips.
+  RegExp(r'^no such identity: .+: No such file or directory$'),
+  // Windows' ssh, as UpdateHostKeys learns the server's other keys.
+  RegExp(r'^Learned new hostkey: \S+ SHA256:\S+$'),
+  RegExp(r'^Adding new key for \S+ to .+: \S+ SHA256:\S+$'),
+];
