@@ -65,7 +65,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
 
-      expect(logs, contains(isA<SshForwardFailed>()));
+      expect(logs, contains(isA<SshForwardUnreachable>()));
       expect(isDone, isFalse);
     });
   });

@@ -64,6 +64,13 @@ final class SshFixture {
         user: Platform.environment[Platform.isWindows ? 'USERNAME' : 'USER'],
       );
 
+  /// Same server, with `ClearAllForwardings yes` in the config.
+  SshTarget get clearForwardingsTarget => const SshTarget('clear-forwardings');
+
+  /// Same server, logged in with a key the sshd lets forward only to
+  /// 127.0.0.1:9, which `.github/actions/sshd` sets up.
+  SshTarget get noForwardingTarget => const SshTarget('no-forwarding');
+
   /// Same server, but `StrictHostKeyChecking yes` in the config.
   SshTarget get strictTarget => const SshTarget('strict-host-keys');
 
@@ -118,6 +125,10 @@ final class SshFixture {
     final directory = Directory.systemTemp.createTempSync('system_ssh_test');
     _directory = directory;
     final knownHosts = _knownHosts.path.replaceAll(r'\', '/');
+    final home =
+        Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
+    final restrictedKey =
+        '$home/.ssh/id_ed25519_no_forwarding'.replaceAll(r'\', '/');
     String agentHost(String name, String? agent) => '''
 Host $name
   HostName 127.0.0.1
@@ -142,6 +153,20 @@ Host jump
   Port $_port
   BatchMode yes
   StrictHostKeyChecking accept-new
+  UserKnownHostsFile $knownHosts
+
+Host clear-forwardings
+  HostName 127.0.0.1
+  Port $_port
+  ClearAllForwardings yes
+  UserKnownHostsFile $knownHosts
+
+Host no-forwarding
+  HostName 127.0.0.1
+  Port $_port
+  IdentityFile $restrictedKey
+  IdentitiesOnly yes
+  IdentityAgent none
   UserKnownHostsFile $knownHosts
 
 Host strict-host-keys
