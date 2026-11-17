@@ -1,4 +1,4 @@
-## Unreleased
+## 0.10.0
 
 - **Breaking:** `SshForwardFailed` is split by why: `SshForwardProhibited`
   when the server's config forbids the connection, such as a `PermitOpen`
