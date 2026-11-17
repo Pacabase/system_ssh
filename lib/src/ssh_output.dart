@@ -52,7 +52,9 @@ final _failures = <(RegExp, _Failure)>[
     RegExp(
       r'^(ssh: )?connect to host .* port \d+: |'
       '^(kex|ssh)_exchange_identification: |'
-      '^Connection timed out during banner exchange',
+      '^Connection timed out during banner exchange|'
+      // Windows' words for a connection refused before the server answered.
+      r'^banner exchange: Connection to .* port -?\d+: Connection refused$',
     ),
     SshUnreachableException.new,
   ),

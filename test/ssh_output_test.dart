@@ -135,6 +135,11 @@ void main() {
         'kex_exchange_identification: read: Connection reset by peer',
         SshUnreachableException,
       ),
+      // Windows' ssh, for a port nothing listens on.
+      (
+        'banner exchange: Connection to UNKNOWN port -1: Connection refused',
+        SshUnreachableException,
+      ),
       (
         'Connection timed out during banner exchange',
         SshUnreachableException,
