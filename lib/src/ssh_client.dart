@@ -61,7 +61,8 @@ abstract interface class SshClient {
   /// it use the tunnel, with no login of its own.
   ///
   /// [onLog] gets an [SshLog] for each non-blank line ssh writes while it
-  /// connects, then, until [SshTunnel.close], everything but [SshProgress]:
+  /// connects, then, until [SshTunnel.close], everything but [SshProgress] and
+  /// [SshLoginStarted]:
   /// its warnings, and an [SshForwardFailed] for each connection through the
   /// open tunnel that couldn't be forwarded, such as one the destination
   /// refused. Windows' sshd closes such a connection without saying, so there

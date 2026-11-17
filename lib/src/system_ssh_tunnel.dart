@@ -147,7 +147,8 @@ final class ForwardProcess implements ForwardHandle {
           if (tail.length > _tailLength) tail.removeAt(0);
           if (line.trim().isEmpty) return;
           if (onLineAfterReady != null) return onLineAfterReady(line);
-          if (classify(line) case final entry when entry is! SshProgress) {
+          if (classify(line) case final entry
+              when entry is SshMessage || entry is SshForwardFailed) {
             report(entry);
           }
         // What's left is ssh saying goodbye: "Killed by signal 15."
