@@ -51,6 +51,7 @@ sealed class SshException implements Exception {
         SshUnreachableException() => 'SshUnreachableException',
         SshDroppedException() => 'SshDroppedException',
         SshAddressUnavailableException() => 'SshAddressUnavailableException',
+        SshRemotePortRefusedException() => 'SshRemotePortRefusedException',
         SshFailedException() => 'SshFailedException',
         SshTunnelAbortedException() => 'SshTunnelAbortedException',
       }}: $message';
@@ -237,6 +238,29 @@ final class SshAddressUnavailableException extends SshTemporaryException {
 
   /// The address the tunnel was asked to listen on.
   final String address;
+}
+
+/// The server wouldn't listen on the port a remote tunnel asked for: it's
+/// taken there, or its sshd doesn't allow remote forwarding. Trying again
+/// works once the port is free.
+///
+/// ```dart
+/// throw const SshRemotePortRefusedException(
+///   'Error: remote port forwarding failed for listen port 8080',
+///   port: 8080,
+/// );
+/// ```
+final class SshRemotePortRefusedException extends SshTemporaryException {
+  /// An error saying, in [message], that the server refused [port].
+  const SshRemotePortRefusedException(
+    super.message, {
+    required this.port,
+    super.log,
+    super.exitCode,
+  });
+
+  /// The server's port that was asked for, or 0 for one the server picks.
+  final int port;
 }
 
 /// Any other failure, with ssh's words in [message] when it said why. Trying
