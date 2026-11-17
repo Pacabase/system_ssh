@@ -75,15 +75,32 @@ RegExp _anyOf(List<String> phrases) =>
 SshException tunnelFailure(List<String> log, int code) {
   final reason = failureMessage(log);
   final errors = log.where((line) => classify(line) is SshMessage).toList();
-  final failure =
-      _failures.where((each) => errors.any(each.$1.hasMatch)).firstOrNull?.$2 ??
-          SshFailedException.new;
-  return failure(
-    reason.isEmpty ? 'ssh exited with code $code' : reason,
-    log: List.unmodifiable(log),
-    exitCode: code,
-  );
+  final message = reason.isEmpty ? 'ssh exited with code $code' : reason;
+  final kept = List<String>.unmodifiable(log);
+  for (final (pattern, failure) in _failures) {
+    if (errors.any(pattern.hasMatch)) {
+      return failure(message, log: kept, exitCode: code);
+    }
+  }
+  for (final line in errors) {
+    if (_remotePortRefused.firstMatch(line) case final match?) {
+      return SshRemotePortRefusedException(
+        message,
+        port: int.parse(match[1]!),
+        log: kept,
+        exitCode: code,
+      );
+    }
+  }
+  return SshFailedException(message, log: kept, exitCode: code);
 }
+
+// After the key, login and config checks, which win over it. ssh writes it
+// after "Error: ", and `-O forward` after its own words.
+final _remotePortRefused = RegExp(
+  r'^(?:Error|mux_client_forward: forwarding request failed): '
+  r'remote port forwarding failed for listen port (\d+)$',
+);
 
 /// Whether [line] is ssh saying it set up the forward on [localPort]; ssh logs
 /// this before it binds, so only a started session after it means ready.

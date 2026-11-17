@@ -181,7 +181,7 @@ void main() {
           'Password authentication is disabled to avoid man-in-the-middle attacks.',
           'Error: remote port forwarding failed for listen port 8080',
         ], 255),
-        isA<SshFailedException>(),
+        isA<SshRemotePortRefusedException>(),
       );
     });
 
@@ -191,7 +191,7 @@ void main() {
           'Welcome! Permission denied (unless you are an admin).',
           'Error: remote port forwarding failed for listen port 8080',
         ], 255),
-        isA<SshFailedException>(),
+        isA<SshRemotePortRefusedException>(),
       );
     });
 
@@ -201,7 +201,7 @@ void main() {
           'Idle sessions are timed out and disconnected after 15 minutes.',
           'Error: remote port forwarding failed for listen port 8080',
         ], 255),
-        isA<SshFailedException>(),
+        isA<SshRemotePortRefusedException>(),
       );
     });
 
@@ -215,10 +215,36 @@ void main() {
             banner,
             'Error: remote port forwarding failed for listen port 8080',
           ], 255),
-          isA<SshFailedException>(),
+          isA<SshRemotePortRefusedException>(),
         );
       });
     }
+
+    for (final line in [
+      'Error: remote port forwarding failed for listen port 8080',
+      // Shared through a ControlMaster, from `ssh -O forward`.
+      'mux_client_forward: forwarding request failed: remote port forwarding failed for listen port 8080',
+    ]) {
+      test('names the server port refused in "$line"', () {
+        expect(
+          tunnelFailure(['debug1: Entering interactive session.', line], 255),
+          isA<SshRemotePortRefusedException>()
+              .having((exception) => exception.port, 'port', 8080)
+              .having((exception) => exception.message, 'message', line)
+              .having((exception) => exception.exitCode, 'exitCode', 255),
+        );
+      });
+    }
+
+    test('lets a refused login win over a refused server port', () {
+      expect(
+        tunnelFailure([
+          'user@ssh.example.com: Permission denied (publickey).',
+          'Error: remote port forwarding failed for listen port 8080',
+        ], 255),
+        isA<SshLoginRefusedException>(),
+      );
+    });
 
     test("ignores a forwarded connection's failure", () {
       expect(
