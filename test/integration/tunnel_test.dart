@@ -19,7 +19,10 @@ void main() {
   final fixture = SshFixture();
 
   group('SystemSshClient', skip: fixture.skip, () {
-    setUpAll(fixture.setUpAll);
+    setUpAll(() async {
+      await fixture.setUpAll();
+      await fixture.rememberHostKeyForBareTarget();
+    });
     tearDownAll(fixture.tearDownAll);
     setUp(fixture.setUp);
     tearDown(fixture.tearDown);
