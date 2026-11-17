@@ -269,6 +269,7 @@ try {
 | `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`) |
 | `SshPortInUseException` | the `localPort` you asked for is taken; `port` and `address` say which |
 | `SshDuplicateForwardException` | with `shareConnections`, another open tunnel on the server already has the same remote forward; `forward` says which |
+| `SshRemotePortRefusedException` | the server wouldn't listen on a remote forward's port, a remote tunnel's `remotePort` or one your config adds: it's taken there, or its sshd doesn't allow remote forwarding; `port` says which |
 | `SshLoginRefusedException` | the server refused every login: `Permission denied (publickey)`, too many keys tried |
 | `SshHostKeyRefusedException` | ssh refused a host key that isn't asked about: your config sets `StrictHostKeyChecking yes`, or a `ProxyJump` host's key is unknown or changed |
 | `SshUnknownHostKeyException` | the server's host key isn't in `known_hosts` yet, and your config leaves `StrictHostKeyChecking` at `ask`; see [Host keys](#host-keys) |
@@ -278,7 +279,6 @@ try {
 | `SshUnreachableException` | the connection was refused, timed out or had no route |
 | `SshDroppedException` | the server closed or reset the connection, before the login or after, or stopped answering |
 | `SshAddressUnavailableException` | the `bindAddress` isn't an address of this computer, at least not yet, such as a VPN's or Docker's before it comes up |
-| `SshRemotePortRefusedException` | the server wouldn't listen on a remote forward's port, a remote tunnel's `remotePort` or one your config adds: it's taken there, or its sshd doesn't allow remote forwarding; `port` says which |
 | `SshFailedException` | anything else, in ssh's words when it said why |
 | **Neither** | |
 | `SshTunnelAbortedException` | `abortTrigger` completed first |
