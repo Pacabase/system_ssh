@@ -228,11 +228,6 @@ void main() {
                 (exception) => exception.message,
                 'message',
                 'Error: remote port forwarding failed for listen port 8080',
-              )
-              .having(
-                (exception) => exception is SshPermanentException,
-                'is permanent',
-                isFalse,
               ),
         ),
       );

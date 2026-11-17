@@ -28,10 +28,12 @@
   reads ssh's text, and `isPermanent` goes: each class sits under
   `SshPermanentException`, when trying again can't work until the user
   changes something, or `SshTemporaryException`, when it can. Each is
-  permanent or temporary as `isPermanent` was, but for three fixes:
+  permanent or temporary as `isPermanent` was, but for four fixes:
   ssh's `Unable to negotiate` (no algorithm in common with the server) is
   now permanent; ssh's warning that a host key changed, where the config
-  lets ssh go on, no longer makes a later failure permanent; and a second
+  lets ssh go on, no longer makes a later failure permanent; a server port
+  a remote tunnel is refused (`SshRemotePortRefusedException`), taken there
+  or with remote forwarding not allowed, is now permanent; and a second
   remote tunnel with the same forward on a shared connection is refused as
   permanent (`SshDuplicateForwardException`), since retrying can't help
   while the first is open. A failure without
