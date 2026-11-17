@@ -27,14 +27,7 @@ void main() {
     setUp(fixture.setUp);
     tearDown(fixture.tearDown);
 
-    void Function(SshLog log) logged([void Function(SshLog log)? onLog]) {
-      final lines = <String>[];
-      addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
-      return (log) {
-        lines.add(log.line);
-        onLog?.call(log);
-      };
-    }
+    final logged = fixture.logged;
 
     Future<SshTunnel> open({
       SshTarget? via,

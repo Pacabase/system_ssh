@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:system_ssh/src/ssh_output.dart';
 import 'package:system_ssh/system_ssh.dart';
 import 'package:test/test.dart';
 
@@ -20,6 +21,23 @@ final class SshFixture {
 
   final int? _port;
   final bool _isCi;
+  final _unknownLines = <String>[];
+
+  /// An `onLog` that passes each line on to [onLog], prints them all if the
+  /// test fails, and fails the test, in [tearDown], on a line that
+  /// [isKnownLine] doesn't know.
+  void Function(SshLog log) logged([void Function(SshLog log)? onLog]) {
+    final lines = <String>[];
+    addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
+    return (log) {
+      lines.add(log.line);
+      if (log is SshMessage && !isKnownLine(log.line)) {
+        _unknownLines.add(log.line);
+      }
+      onLog?.call(log);
+    };
+  }
+
   Directory? _directory;
   ServerSocket? _echo;
   final _accepted = <Socket>[];
@@ -268,6 +286,17 @@ exec ssh -F '${directory.path}/config' "\$@"
     _accepted.clear();
     await _echo?.close();
     _echo = null;
+
+    final unknown = [..._unknownLines];
+    _unknownLines.clear();
+    if (unknown.isNotEmpty) {
+      fail(
+        "ssh wrote lines system_ssh doesn't know. Teach lib/src/ssh_output.dart "
+        'the ones that say why ssh failed, and add the rest to '
+        '_harmlessLines in test/integration/ssh_fixture.dart:\n'
+        '${unknown.join('\n')}',
+      );
+    }
   }
 
   /// Whether the fixture's known_hosts has the sshd's key.
@@ -326,3 +355,14 @@ exec ssh -F '${directory.path}/config' "\$@"
   static T _require<T extends Object>(T? value, String step) =>
       value ?? (throw StateError('SshFixture.$step did not run'));
 }
+
+/// Whether system_ssh classifies [line] as a failure, or it's one ssh writes
+/// that means nothing on its own.
+bool isKnownLine(String line) =>
+    line.trim().isEmpty ||
+    tunnelFailure([line], 255) is! SshFailedException ||
+    _harmlessLines.any((pattern) => pattern.hasMatch(line));
+
+// ssh's lines that say nothing about why a tunnel failed, matched as tightly
+// as the line allows, so a new one fails the integration tests.
+final _harmlessLines = <RegExp>[];

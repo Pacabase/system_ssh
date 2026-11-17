@@ -28,14 +28,8 @@ void main() {
     });
     tearDown(fixture.tearDown);
 
-    void Function(SshLog log) logged(List<SshLog> logs) {
-      addTearDown(
-        () => printOnFailure(
-          'ssh log:\n${logs.map((log) => log.line).join('\n')}',
-        ),
-      );
-      return logs.add;
-    }
+    void Function(SshLog log) logged(List<SshLog> logs) =>
+        fixture.logged(logs.add);
 
     Future<SshTunnel> open({SshTarget? via, List<SshLog>? logs}) async {
       final tunnel = await openSystemForward(
