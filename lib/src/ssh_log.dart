@@ -29,6 +29,27 @@ final class SshProgress extends SshLog {
   String toString() => 'SshProgress($line)';
 }
 
+/// ssh's `-v` progress as it starts a step of a login that may need someone
+/// at the screen: connecting to a server, a `ProxyJump` hop included,
+/// running a `ProxyCommand`, or authenticating.
+///
+/// An app that comes to the front so an agent's or a `ProxyCommand`'s prompt
+/// can show, such as a password manager's approval or a browser sign-in, can
+/// do it here, without reading ssh's words:
+///
+/// ```dart
+/// onLog: (log) {
+///   if (log is SshLoginStarted) comeForward();
+/// },
+/// ```
+final class SshLoginStarted extends SshLog {
+  /// An entry for [line], as a fake [SshClient] would report it.
+  const SshLoginStarted(super.line);
+
+  @override
+  String toString() => 'SshLoginStarted($line)';
+}
+
 /// Anything else ssh says: an error while it connects, or a warning once the
 /// tunnel is open.
 final class SshMessage extends SshLog {

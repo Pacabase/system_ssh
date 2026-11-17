@@ -175,8 +175,16 @@ final class RemoteForwardReadiness implements ForwardReadiness {
 // for the rest, but another server may say anything.
 final _refused = RegExp(r'^channel \d+: open failed: (.+?)(?:: (.*))?$');
 
+final _loginStarted = RegExp(
+  '^debug1: (Connecting to |Executing proxy command|Authenticating to )',
+);
+
 SshLog classify(String line) {
-  if (isProgress(line)) return SshProgress(line);
+  if (isProgress(line)) {
+    return _loginStarted.hasMatch(line)
+        ? SshLoginStarted(line)
+        : SshProgress(line);
+  }
   if (_refused.firstMatch(line) case final match?) {
     final code = match[1]!;
     final message = match[2] ?? '';

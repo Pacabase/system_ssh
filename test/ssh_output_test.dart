@@ -332,6 +332,22 @@ void main() {
       expect(classify(line), const SshProgress(line));
     });
 
+    for (final line in [
+      'debug1: Connecting to ssh.example.com [10.0.0.1] port 22.',
+      'debug1: Executing proxy command: exec my-proxy ssh.example.com',
+      "debug1: Authenticating to ssh.example.com:22 as 'deploy'",
+    ]) {
+      test('says a login starts at "$line"', () {
+        expect(classify(line), SshLoginStarted(line));
+      });
+    }
+
+    test('keeps the rest of a login as progress', () {
+      const line = 'debug1: Authentications that can continue: publickey';
+
+      expect(classify(line), const SshProgress(line));
+    });
+
     test('tells -v progress from anything else', () {
       expect(
         classify('debug1: channel 3: new [direct-tcpip]'),
