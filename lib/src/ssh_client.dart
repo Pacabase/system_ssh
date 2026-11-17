@@ -149,7 +149,8 @@ abstract interface class SshClient {
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
   /// - [SshRemotePortRefusedException] when the server won't listen on
-  ///   [remotePort]: it's taken there, or its sshd doesn't allow forwarding.
+  ///   [remotePort], or on a remote forward the user's config adds: it's
+  ///   taken there, or its sshd doesn't allow forwarding.
   /// - Another [SshException] when ssh exits before the forward is up: the
   ///   class its reason calls for, else an [SshFailedException].
   /// - [SshDuplicateForwardException] with `shareConnections`, when another

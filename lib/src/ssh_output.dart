@@ -76,34 +76,29 @@ SshException tunnelFailure(List<String> log, int code) {
   final reason = failureMessage(log);
   final errors = log.where((line) => classify(line) is SshMessage).toList();
   final message = reason.isEmpty ? 'ssh exited with code $code' : reason;
-  final failure =
-      _failures.where((each) => errors.any(each.$1.hasMatch)).firstOrNull?.$2;
-  if (failure != null) {
-    return failure(message, log: List.unmodifiable(log), exitCode: code);
+  final kept = List<String>.unmodifiable(log);
+  for (final (pattern, failure) in _failures) {
+    if (errors.any(pattern.hasMatch)) {
+      return failure(message, log: kept, exitCode: code);
+    }
   }
-  final refusedPort = errors
-      .map((line) => _remotePortRefused.firstMatch(line)?[2])
-      .nonNulls
-      .firstOrNull;
-  if (refusedPort != null) {
-    return SshRemotePortRefusedException(
-      message,
-      port: int.parse(refusedPort),
-      log: List.unmodifiable(log),
-      exitCode: code,
-    );
+  for (final line in errors) {
+    if (_remotePortRefused.firstMatch(line) case final match?) {
+      return SshRemotePortRefusedException(
+        message,
+        port: int.parse(match[1]!),
+        log: kept,
+        exitCode: code,
+      );
+    }
   }
-  return SshFailedException(
-    message,
-    log: List.unmodifiable(log),
-    exitCode: code,
-  );
+  return SshFailedException(message, log: kept, exitCode: code);
 }
 
-// Checked last, so a key, login or config at fault still wins. ssh writes it
+// After the key, login and config checks, which win over it. ssh writes it
 // after "Error: ", and `-O forward` after its own words.
 final _remotePortRefused = RegExp(
-  r'^(Error|mux_client_forward: forwarding request failed): '
+  r'^(?:Error|mux_client_forward: forwarding request failed): '
   r'remote port forwarding failed for listen port (\d+)$',
 );
 

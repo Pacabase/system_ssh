@@ -240,9 +240,10 @@ final class SshAddressUnavailableException extends SshTemporaryException {
   final String address;
 }
 
-/// The server wouldn't listen on the port a remote tunnel asked for: it's
-/// taken there, or its sshd doesn't allow remote forwarding. Trying again
-/// works once the port is free.
+/// The server wouldn't listen on a remote forward's port, the one a remote
+/// tunnel asked for or one the user's config adds: it's taken there, or its
+/// sshd doesn't allow remote forwarding. Trying again works once the port is
+/// free.
 ///
 /// ```dart
 /// throw const SshRemotePortRefusedException(
@@ -259,7 +260,7 @@ final class SshRemotePortRefusedException extends SshTemporaryException {
     super.exitCode,
   });
 
-  /// The server's port that was asked for, or 0 for one the server picks.
+  /// The server's port that was refused, or 0 for one the server would pick.
   final int port;
 }
 

@@ -332,6 +332,20 @@ void main() {
     expect(await stops(fake.attemptPid(1)!), isTrue);
   });
 
+  test('says which server port the master was refused', () async {
+    fake
+      ..attemptModes([AttemptMode.ready])
+      ..muxModes(['refused']);
+
+    await expectLater(
+      openRemote(remotePort: 8080),
+      throwsA(
+        isA<SshRemotePortRefusedException>()
+            .having((exception) => exception.port, 'port', 8080),
+      ),
+    );
+  });
+
   test('a remote tunnel gets the port the server picked', () async {
     fake.attemptModes([AttemptMode.ready]);
 
