@@ -27,14 +27,7 @@ void main() {
     setUp(fixture.setUp);
     tearDown(fixture.tearDown);
 
-    void Function(SshLog log) logged([void Function(SshLog log)? onLog]) {
-      final lines = <String>[];
-      addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
-      return (log) {
-        lines.add(log.line);
-        onLog?.call(log);
-      };
-    }
+    final logged = fixture.logged;
 
     Future<SshTunnel> open({
       SshTarget? via,
@@ -373,11 +366,117 @@ void main() {
         expect(
           logs,
           contains(
-            isA<SshForwardFailed>()
+            isA<SshForwardUnreachable>()
                 .having((log) => log.reason, 'reason', 'Connection refused'),
           ),
         );
       }
+    });
+
+    group('says why it failed', () {
+      Future<void> expectFailure(
+        Future<SshTunnel> Function(void Function(SshLog log) onLog) open,
+        Matcher failure,
+      ) async {
+        await expectLater(
+          open(logged()).then((tunnel) => tunnel.close()),
+          throwsA(failure),
+        );
+      }
+
+      test('with SshNotFoundException for an ssh that is not there', () {
+        final missing = '${Directory.systemTemp.path}'
+            '${Platform.pathSeparator}no_such_ssh_$pid';
+
+        return expectFailure(
+          (onLog) => SystemSshClient(executable: missing).openTunnel(
+            fixture.target,
+            remoteHost: fixture.echoHost,
+            remotePort: fixture.echoPort,
+            onLog: onLog,
+          ),
+          isA<SshNotFoundException>(),
+        );
+      });
+
+      test('with SshHostNotFoundException for a name that does not resolve',
+          () {
+        return expectFailure(
+          (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
+            const SshTarget('no-such-host.invalid'),
+            remoteHost: fixture.echoHost,
+            remotePort: fixture.echoPort,
+            onLog: onLog,
+          ),
+          isA<SshHostNotFoundException>(),
+        );
+      });
+
+      test('with SshUnreachableException for a port nothing listens on',
+          () async {
+        final closed = await pickFreePort();
+
+        await expectFailure(
+          (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
+            SshTarget('127.0.0.1', port: closed),
+            remoteHost: fixture.echoHost,
+            remotePort: fixture.echoPort,
+            onLog: onLog,
+          ),
+          isA<SshUnreachableException>(),
+        );
+      });
+
+      test('with SshConfigException for a config that clears every forward',
+          () {
+        return expectFailure(
+          (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
+            fixture.clearForwardingsTarget,
+            remoteHost: fixture.echoHost,
+            remotePort: fixture.echoPort,
+            onLog: onLog,
+          ),
+          isA<SshConfigException>(),
+        );
+      });
+
+      test('with SshAddressUnavailableException for an address not here', () {
+        // TEST-NET-1, which no computer has.
+        return expectFailure(
+          (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
+            fixture.target,
+            remoteHost: fixture.echoHost,
+            remotePort: fixture.echoPort,
+            bindAddress: '192.0.2.1',
+            onLog: onLog,
+          ),
+          isA<SshAddressUnavailableException>().having(
+            (exception) => exception.address,
+            'address',
+            '192.0.2.1',
+          ),
+        );
+      });
+
+      test('with SshForwardProhibited when the server forbids the forward',
+          () async {
+        final logs = <SshLog>[];
+        final tunnel =
+            await SystemSshClient(executable: fixture.ssh).openTunnel(
+          fixture.noForwardingTarget,
+          remoteHost: fixture.echoHost,
+          remotePort: fixture.echoPort,
+          onLog: logged(logs.add),
+        );
+        addTearDown(tunnel.close);
+
+        expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
+        for (var waited = 0; waited < 50; waited++) {
+          if (logs.any((log) => log is SshForwardFailed)) break;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        expect(logs, contains(isA<SshForwardProhibited>()));
+      });
     });
 
     test('aborts through abortTrigger while ssh connects', () async {
@@ -521,13 +620,7 @@ void main() {
 
         await expectLater(
           tunnel.done.timeout(const Duration(seconds: 20)),
-          throwsA(
-            isA<SshTemporaryException>().having(
-              (exception) => exception.message,
-              'message',
-              allOf(isNotEmpty, isNot(startsWith('ssh exited with code'))),
-            ),
-          ),
+          throwsA(isA<SshDroppedException>()),
         );
       });
     });

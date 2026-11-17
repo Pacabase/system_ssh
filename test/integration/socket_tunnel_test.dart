@@ -30,16 +30,11 @@ void main() {
     tearDown(fixture.tearDown);
 
     Future<SshTunnel> open({void Function(SshLog log)? onLog}) async {
-      final lines = <String>[];
-      addTearDown(() => printOnFailure('ssh log:\n${lines.join('\n')}'));
       final tunnel =
           await SystemSshClient(executable: fixture.ssh).openSocketTunnel(
         fixture.target,
         remoteSocket: socketPath,
-        onLog: (log) {
-          lines.add(log.line);
-          onLog?.call(log);
-        },
+        onLog: fixture.logged(onLog),
       );
       addTearDown(tunnel.close);
       return tunnel;
@@ -70,7 +65,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
 
-      expect(logs, contains(isA<SshForwardFailed>()));
+      expect(logs, contains(isA<SshForwardUnreachable>()));
       expect(isDone, isFalse);
     });
   });

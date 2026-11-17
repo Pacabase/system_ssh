@@ -28,14 +28,8 @@ void main() {
     });
     tearDown(fixture.tearDown);
 
-    void Function(SshLog log) logged(List<SshLog> logs) {
-      addTearDown(
-        () => printOnFailure(
-          'ssh log:\n${logs.map((log) => log.line).join('\n')}',
-        ),
-      );
-      return logs.add;
-    }
+    void Function(SshLog log) logged(List<SshLog> logs) =>
+        fixture.logged(logs.add);
 
     Future<SshTunnel> open({SshTarget? via, List<SshLog>? logs}) async {
       final tunnel = await openSystemForward(
@@ -132,6 +126,26 @@ void main() {
       );
     });
 
+    test('refuses the same remote forward twice', () async {
+      final port = await pickFreePort();
+      Future<SshRemoteTunnel> forward() => openSystemRemoteForward(
+            fixture.target,
+            localHost: fixture.echoHost,
+            localPort: fixture.echoPort,
+            remotePort: port,
+            onLog: logged([]),
+            executable: fixture.ssh,
+            pool: pool,
+          );
+      final first = await forward();
+      addTearDown(first.close);
+
+      await expectLater(
+        forward(),
+        throwsA(isA<SshDuplicateForwardException>()),
+      );
+    });
+
     test('tells only the tunnel used that its destination refused', () async {
       final closed = await pickFreePort();
       final refusedLogs = <SshLog>[];
@@ -157,7 +171,7 @@ void main() {
       expect(
         refusedLogs,
         contains(
-          isA<SshForwardFailed>()
+          isA<SshForwardUnreachable>()
               .having((log) => log.reason, 'reason', 'Connection refused'),
         ),
       );
