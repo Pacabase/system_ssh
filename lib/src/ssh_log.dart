@@ -50,6 +50,18 @@ final class SshForwardFailed extends SshLog {
   /// Why, such as `Connection refused` or `administratively prohibited`.
   final String reason;
 
+  /// Whether the server's config forbids this forward, such as a `PermitOpen`
+  /// that doesn't list the destination, rather than nothing answering there.
+  ///
+  /// ```dart
+  /// onLog: (log) {
+  ///   if (log case SshForwardFailed(isProhibited: true)) {
+  ///     print("The server doesn't allow this tunnel.");
+  ///   }
+  /// },
+  /// ```
+  bool get isProhibited => reason == 'administratively prohibited';
+
   @override
   bool operator ==(Object other) =>
       other is SshForwardFailed && other.line == line && other.reason == reason;

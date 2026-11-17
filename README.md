@@ -39,9 +39,10 @@ Future<void> main() async {
   With Docker Desktop on macOS or Windows, containers reach the default
   through `host.docker.internal` instead.
 - `onLog` gets what ssh says as an `SshLog` with its `line`: `SshProgress`
-  while it connects, `SshForwardFailed` with a `reason` for a connection
-  through the open tunnel that couldn't be made (Windows' sshd doesn't say),
-  and `SshMessage` for anything else. They're information: the tunnel's own
+  while it connects, `SshForwardFailed` for a connection through the open
+  tunnel that couldn't be made, with ssh's `reason` and `isProhibited` when
+  the server's config forbids it (Windows' sshd doesn't say), and
+  `SshMessage` for anything else. They're information: the tunnel's own
   failures are thrown, or fail `done`.
 
   ```dart

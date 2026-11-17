@@ -255,7 +255,9 @@ void main() {
 
       expect(
         classify(line),
-        const SshForwardFailed(line, reason: 'Connection refused'),
+        isA<SshForwardFailed>()
+            .having((log) => log.reason, 'reason', 'Connection refused')
+            .having((log) => log.isProhibited, 'isProhibited', isFalse),
       );
     });
 
@@ -265,7 +267,10 @@ void main() {
 
       expect(
         classify(line),
-        const SshForwardFailed(line, reason: 'administratively prohibited'),
+        isA<SshForwardFailed>()
+            .having(
+                (log) => log.reason, 'reason', 'administratively prohibited')
+            .having((log) => log.isProhibited, 'isProhibited', isTrue),
       );
     });
 

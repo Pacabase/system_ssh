@@ -1,5 +1,18 @@
 ## Unreleased
 
+- `SshForwardFailed` has `isProhibited`, for a connection the server's
+  config forbids, such as a `PermitOpen` that doesn't list it, so an app can
+  tell that from nothing answering at the destination without reading
+  ssh's `reason`:
+
+  ```dart
+  onLog: (log) {
+    if (log case SshForwardFailed(isProhibited: true)) {
+      print("The server doesn't allow this tunnel.");
+    }
+  },
+  ```
+
 - `trustHostKey` writes nothing to `known_hosts` once its `abortTrigger`
   completes, even when it completes after ssh has read the key, while
   ssh's last lines are still coming.
