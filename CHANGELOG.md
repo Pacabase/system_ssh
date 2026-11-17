@@ -1,5 +1,21 @@
 ## Unreleased
 
+- **Breaking:** `onLog` gets an `SshLoginStarted`, a new kind of `SshLog`,
+  for ssh's `-v` lines as it connects to a server, a `ProxyJump` hop
+  included, runs a `ProxyCommand` or authenticates. Those are the moments
+  an agent's or a `ProxyCommand`'s prompt may need the app in front, such
+  as a password manager's approval or a browser sign-in, and an app no
+  longer has to match ssh's debug wording to find them. They used to come
+  as `SshProgress`.
+
+  ```dart
+  onLog: (log) {
+    if (log is SshLoginStarted) comeToTheFront();
+  },
+  ```
+
+  A `switch` that names every `SshLog` needs an `SshLoginStarted` case.
+
 - On Windows, a tunnel whose connection went down under it, such as when
   its `ProxyCommand` died, now fails `done` with an `SshDroppedException`
   instead of an `SshFailedException`, as it already did elsewhere. Windows'

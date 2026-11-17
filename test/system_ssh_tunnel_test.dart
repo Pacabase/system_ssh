@@ -225,7 +225,7 @@ void main() {
         throwsA(isA<SshLoginRefusedException>()),
       );
 
-      expect(logs, const [SshProgress(connectingLine), SshMessage(denied)]);
+      expect(logs, const [SshLoginStarted(connectingLine), SshMessage(denied)]);
     });
 
     test('passes onLog warnings and failed connections once open', () async {
@@ -337,7 +337,7 @@ void main() {
       abort.complete();
 
       await expectLater(attaching, throwsA(isA<SshTunnelAbortedException>()));
-      expect(logs, const [SshProgress(connectingLine)]);
+      expect(logs, const [SshLoginStarted(connectingLine)]);
     });
 
     test('throws only that it was aborted when ssh exits as it is', () async {

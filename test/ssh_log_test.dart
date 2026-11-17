@@ -6,6 +6,7 @@ void main() {
     expect(const SshProgress('x'), const SshProgress('x'));
     expect(const SshProgress('x').hashCode, const SshProgress('x').hashCode);
     expect(const SshProgress('x'), isNot(const SshMessage('x')));
+    expect(const SshLoginStarted('x'), isNot(const SshProgress('x')));
     expect(const SshMessage('x'), isNot(const SshMessage('y')));
   });
 
@@ -30,6 +31,7 @@ void main() {
 
   test('each kind names itself and its line', () {
     expect('${const SshProgress('a')}', 'SshProgress(a)');
+    expect('${const SshLoginStarted('e')}', 'SshLoginStarted(e)');
     expect('${const SshMessage('b')}', 'SshMessage(b)');
     expect(
       '${const SshForwardUnreachable('c', reason: 'r')}',

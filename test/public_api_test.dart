@@ -134,6 +134,7 @@ void main() {
   test('switches over every kind of log line', () {
     String describe(SshLog log) => switch (log) {
           SshProgress(:final line) => 'progress: $line',
+          SshLoginStarted(:final line) => 'login: $line',
           SshMessage(:final line) => 'message: $line',
           SshForwardUnreachable(:final line, :final reason) => '$reason: $line',
           SshForwardProhibited(:final line) => 'forbidden: $line',
@@ -141,7 +142,8 @@ void main() {
 
     expect(
       [
-        const SshProgress('debug1: Connecting to ssh.example.com port 22.'),
+        const SshProgress('debug1: Server host key: ssh-ed25519 SHA256:x'),
+        const SshLoginStarted('debug1: Connecting to ssh.example.com port 22.'),
         const SshMessage('Warning: Permanently added ssh.example.com.'),
         const SshForwardUnreachable(
           'channel 2: open failed: connect failed: Connection refused',
@@ -153,6 +155,7 @@ void main() {
       ].map(describe),
       [
         startsWith('progress: '),
+        startsWith('login: '),
         startsWith('message: '),
         startsWith('Connection refused: '),
         startsWith('forbidden: '),

@@ -51,6 +51,20 @@ void main() {
       return tunnel;
     }
 
+    test('says a login starts as it connects and authenticates', () async {
+      final logs = <SshLog>[];
+
+      await open(onLog: logs.add);
+
+      expect(
+        logs.whereType<SshLoginStarted>().map((log) => log.line),
+        containsAllInOrder([
+          contains('Connecting to'),
+          contains('Authenticating to'),
+        ]),
+      );
+    });
+
     test('forwards through the system ssh with no config', () async {
       final tunnel = await const SystemSshClient().openTunnel(
         fixture.bareTarget,
@@ -569,6 +583,23 @@ void main() {
     });
 
     group('through a ProxyCommand', () {
+      test('says a login starts as it runs the ProxyCommand', () async {
+        final logs = <SshLog>[];
+
+        await open(via: fixture.proxyCommandTarget, onLog: logs.add);
+
+        expect(
+          logs,
+          contains(
+            isA<SshLoginStarted>().having(
+              (log) => log.line,
+              'line',
+              contains('Executing proxy command'),
+            ),
+          ),
+        );
+      });
+
       test('close stops the ProxyCommand too', () async {
         final tunnel = await open(via: fixture.proxyCommandTarget);
         expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
