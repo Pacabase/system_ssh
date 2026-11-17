@@ -166,7 +166,6 @@ exec ssh -F '${directory.path}/config' "\$@"
     final keys = '${scan.stdout}';
     if (keys.trim().isEmpty) throw StateError('ssh-keyscan: ${scan.stderr}');
     _scannedHostKeys = keys;
-    await rememberHostKeyForBareTarget();
   }
 
   /// The sshd's keys, as ssh-keyscan read them once.
@@ -178,7 +177,9 @@ exec ssh -F '${directory.path}/config' "\$@"
         '/.ssh/known_hosts',
       );
 
-  /// Adds the sshd's keys to [runnerKnownHosts] unless it has them.
+  /// Adds the sshd's keys to [runnerKnownHosts] unless it has them. Only
+  /// one test file may call it: files run at once, and one re-adding the keys
+  /// while another has removed them breaks that other's test.
   Future<void> rememberHostKeyForBareTarget() async {
     final found = await Process.run(
       'ssh-keygen',
