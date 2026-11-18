@@ -81,6 +81,9 @@ void main() {
         ...command.arguments,
       ]);
       addTearDown(() => helper.kill(ProcessSignal.sigkill));
+      final said = StringBuffer();
+      helper.stderr.transform(utf8.decoder).listen(said.write);
+      addTearDown(() => printOnFailure('helper and command said:\n$said'));
       final helperPid = int.parse(
         (await helper.stdout
                 .transform(utf8.decoder)
@@ -91,7 +94,11 @@ void main() {
       final pid = await command.pid;
       final childPid = await command.childPid;
 
-      expect(isRunning(pid), isTrue);
+      expect(
+        isRunning(pid),
+        isTrue,
+        reason: 'the child ${isRunning(childPid) ? 'is' : 'is not'} running',
+      );
 
       Process.killPid(helperPid, ProcessSignal.sigkill);
 
