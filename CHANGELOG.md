@@ -1,4 +1,4 @@
-## Unreleased
+## 0.11.0
 
 - **Breaking:** `onLog` gets an `SshLoginStarted`, a new kind of `SshLog`,
   for ssh's `-v` lines as it connects to a server, a `ProxyJump` hop
