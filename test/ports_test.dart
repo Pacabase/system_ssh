@@ -4,17 +4,34 @@ import 'package:system_ssh/src/exceptions.dart';
 import 'package:system_ssh/src/ports.dart';
 import 'package:test/test.dart';
 
+// Other test files run at once and bind ports too, so one may take a picked
+// port before the test does: these tests try a few, and a real fault fails
+// every try.
+const _tries = 5;
+
+bool _isInUse(SocketException exception) =>
+    const {48, 98, 10048}.contains(exception.osError?.errorCode);
+
 void main() {
   test('pickFreePort returns a loopback port that can be bound', () async {
-    final port = await pickFreePort();
-    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
-    await socket.close();
-
-    expect(port, inInclusiveRange(1024, 65535));
+    for (var attempt = 1;; attempt++) {
+      final port = await pickFreePort();
+      expect(port, inInclusiveRange(1024, 65535));
+      try {
+        await (await ServerSocket.bind(InternetAddress.loopbackIPv4, port))
+            .close();
+        return;
+      } on SocketException catch (exception) {
+        if (!_isInUse(exception) || attempt == _tries) rethrow;
+      }
+    }
   });
 
   test('isPortFree is true for a port nothing holds', () async {
-    expect(await isPortFree(await pickFreePort()), isTrue);
+    for (var attempt = 1; attempt <= _tries; attempt++) {
+      if (await isPortFree(await pickFreePort())) return;
+    }
+    fail('every picked port was in use');
   });
 
   test('isPortFree is false for a bound port', () async {
