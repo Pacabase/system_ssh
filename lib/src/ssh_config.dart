@@ -36,10 +36,24 @@ Future<Map<String, String>> resolveConfig(
   }
 }
 
-/// `ssh -G` output as option name to value.
-Map<String, String> parseConfig(List<String> lines) => {
-      for (final line in lines.map((line) => line.trim()))
-        if (line.indexOf(' ') case final space when space > 0)
-          line.substring(0, space).toLowerCase():
-              line.substring(space + 1).trim(),
-    };
+/// `ssh -G` output as option name to value. An option ssh lists more than
+/// once, such as `identityfile`, keeps its last value, except for the files
+/// [repeatedFiles] names, whose values are joined with newlines.
+Map<String, String> parseConfig(List<String> lines) {
+  final config = <String, String>{};
+  for (final line in lines.map((line) => line.trim())) {
+    final space = line.indexOf(' ');
+    if (space <= 0) continue;
+
+    final name = line.substring(0, space).toLowerCase();
+    final value = line.substring(space + 1).trim();
+    config[name] = repeatedFiles.contains(name) && config[name] != null
+        ? '${config[name]}\n$value'
+        : value;
+  }
+  return config;
+}
+
+/// The options ssh may list several times, each a file whose path can appear
+/// in a prompt.
+const repeatedFiles = {'identityfile', 'certificatefile'};

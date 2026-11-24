@@ -186,5 +186,20 @@ void main() {
     test('is empty for no lines', () {
       expect(parseConfig([]), isEmpty);
     });
+
+    test('keeps every key file, and the last of anything else', () {
+      expect(
+        parseConfig([
+          'identityfile ~/.ssh/id_ed25519',
+          'identityfile ~/.ssh/id_rsa',
+          'port 22',
+          'port 2222',
+        ]),
+        {
+          'identityfile': '~/.ssh/id_ed25519\n~/.ssh/id_rsa',
+          'port': '2222',
+        },
+      );
+    });
   });
 }

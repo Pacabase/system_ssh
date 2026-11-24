@@ -292,10 +292,8 @@ Future<SshTunnel> openSystemForward(
       abortTrigger: abortTrigger,
     ),
   );
-  // Each attempt of this tunnel's own ssh asks the same onPrompt.
-  var prompts = SshPrompts.none(environment);
 
-  Future<SshTunnel> start(int port) async {
+  Future<SshTunnel> start(int port, SshPrompts prompts) async {
     if (shared != null) {
       final (handle, _) = await shared.forward(
         forward(port),
@@ -330,7 +328,7 @@ Future<SshTunnel> openSystemForward(
     );
   }
 
-  Future<SshTunnel> open() async {
+  Future<SshTunnel> open(SshPrompts prompts) async {
     if (localPort != null) {
       abort.throwIfAborted();
       if (!await isFree(localPort)) {
@@ -339,7 +337,7 @@ Future<SshTunnel> openSystemForward(
       abort.throwIfAborted();
 
       try {
-        return await start(localPort);
+        return await start(localPort, prompts);
       } on SshTemporaryException catch (exception) {
         // A host key or a login that failed isn't about the port, nor is a
         // failure without ssh's exit.
@@ -355,7 +353,7 @@ Future<SshTunnel> openSystemForward(
       abort.throwIfAborted();
 
       try {
-        return await start(port);
+        return await start(port, prompts);
       } on SshTemporaryException catch (exception) {
         // Another process can take the port before ssh binds it.
         if (exception.exitCode == null || attempt == 3 || await isFree(port)) {
@@ -366,16 +364,18 @@ Future<SshTunnel> openSystemForward(
   }
 
   try {
-    if (shared != null) return await checkingHostKeys(config, open);
+    if (shared != null) {
+      return await checkingHostKeys(
+        config,
+        () => open(SshPrompts.none(environment)),
+      );
+    }
     return await withPrompts(
       onPrompt,
       executable: ssh,
       config: config,
       environment: environment,
-      open: (forThisSsh) {
-        prompts = forThisSsh;
-        return checkingHostKeys(config, open);
-      },
+      open: (prompts) => checkingHostKeys(config, () => open(prompts)),
     );
   } finally {
     shared?.release();

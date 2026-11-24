@@ -236,7 +236,7 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       .toList();
   final mode = attempt <= modes.length ? modes[attempt - 1] : modes.last;
 
-  if (!await _ask(directory)) {
+  if (!await _ask(directory, arguments)) {
     return _run([
       'err:user@ssh.example.com: Permission denied (publickey,password).',
       'exit:255',
@@ -359,28 +359,40 @@ Future<void> _ssh(String directory, List<String> arguments) async {
 /// and records what came back in `answers`, one line per prompt: the answer,
 /// or `<cancelled>` for a non-zero exit. Each line of `prompts` is the answer
 /// to expect, a tab, then the prompt; an empty expectation takes any answer.
-/// Whether every answer was the expected one.
-Future<bool> _ask(String directory) async {
+/// Like ssh, it asks nothing under `BatchMode=yes`, or without
+/// `SSH_ASKPASS_REQUIRE=force` and a `DISPLAY`, and goes on to the next
+/// prompt after a cancelled or wrong one, as ssh goes on to its next key or
+/// method. Whether every answer was the expected one.
+Future<bool> _ask(String directory, List<String> arguments) async {
   final prompts = File('$directory/prompts');
   if (!prompts.existsSync()) return true;
 
-  final helper = Platform.environment['SSH_ASKPASS'];
+  final environment = Platform.environment;
+  final helper = environment['SSH_ASKPASS'];
+  final mayAsk = helper != null &&
+      !arguments.contains('BatchMode=yes') &&
+      (environment['SSH_ASKPASS_REQUIRE'] == 'force' ||
+          environment['DISPLAY'] != null);
+  if (!mayAsk) return false;
+
+  var allAnswered = true;
   for (final line in prompts.readAsLinesSync()) {
     final tab = line.indexOf('\t');
     final expected = line.substring(0, tab);
     final prompt = line.substring(tab + 1);
-    if (helper == null) return false;
 
     final result = await Process.run(helper, [prompt]);
-    final answered = '${result.stdout}'.replaceFirst(RegExp(r'\r?\n$'), '');
+    // ssh takes the answer up to its first line break.
+    final answered = '${result.stdout}'.split(RegExp('[\r\n]')).first;
     File('$directory/answers').writeAsStringSync(
       '${result.exitCode == 0 ? answered : '<cancelled>'}\n',
       mode: FileMode.append,
     );
-    if (result.exitCode != 0) return false;
-    if (expected.isNotEmpty && answered != expected) return false;
+    if (result.exitCode != 0 || (expected.isNotEmpty && answered != expected)) {
+      allAnswered = false;
+    }
   }
-  return true;
+  return allAnswered;
 }
 
 /// The ssh that reads a host key to trust it: records its arguments as

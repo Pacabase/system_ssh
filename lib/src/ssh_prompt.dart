@@ -59,15 +59,17 @@ final class SshPasswordPrompt extends SshPrompt {
   const SshPasswordPrompt(super.text);
 }
 
-/// The server asks something in its own words (keyboard-interactive), such as
-/// `Verification code: ` for 2FA, or `(alice@ssh.example.com) Password: ` for
-/// a password it checks itself.
+/// Anything else: mostly the server asking in its own words
+/// (keyboard-interactive), such as `Verification code: ` for 2FA, or
+/// `(alice@ssh.example.com) Password: ` for a password it checks itself, but
+/// also ssh's own `Enter PIN for ED25519-SK key …: ` for a hardware key.
 final class SshCodePrompt extends SshPrompt {
   /// The server's [text].
   const SshCodePrompt(super.text);
 }
 
-/// Answers an [SshPrompt]: the text to send, or null to cancel the login.
+/// Answers an [SshPrompt]: the text to send, or null to cancel the login. An
+/// answer can't hold a line break; one that does cancels too.
 typedef SshPromptHandler = Future<String?> Function(SshPrompt prompt);
 
 final _passphrase = RegExp(r"^Enter passphrase for key '(.*)': ?$");

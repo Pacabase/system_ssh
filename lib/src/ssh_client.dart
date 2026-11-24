@@ -73,11 +73,13 @@ abstract interface class SshClient {
   /// [onPrompt] answers what ssh asks while it logs in: a key's passphrase,
   /// a password, or a server's own question such as a 2FA code. Without it,
   /// ssh asks nothing, and a login that needs an answer fails with an
-  /// [SshLoginRefusedException]. Answering null cancels the login. Prompts
-  /// come one at a time, and none comes once the tunnel is open; with
-  /// `shareConnections`, only the tunnel that starts the shared login is
-  /// asked. The package waits as long as [onPrompt] does: the server ends a
-  /// login nobody answers, usually after two minutes.
+  /// [SshLoginRefusedException]. Answering null cancels the login: nothing
+  /// more is asked, and once ssh has run out of ways to log in, it throws an
+  /// [SshLoginCancelledException]. Prompts come one at a time, and none comes
+  /// once the tunnel is open; with `shareConnections`, only the tunnel that
+  /// starts the shared login is asked, even if it is aborted while another
+  /// waits on that login. The package waits as long as [onPrompt] does: the
+  /// server ends a login nobody answers, usually after two minutes.
   ///
   /// ```dart
   /// onPrompt: (prompt) => switch (prompt) {
@@ -88,7 +90,7 @@ abstract interface class SshClient {
   ///
   /// It needs OpenSSH 8.4 or newer. On Windows, only ssh's own prompts come,
   /// a passphrase or a password, never a server's question, and none when a
-  /// `ProxyJump` or `ProxyCommand` runs another ssh.
+  /// `ProxyJump` or `ProxyCommand` runs another ssh; see the README.
   ///
   /// Completing [abortTrigger] before the tunnel is open stops ssh; after,
   /// it is ignored, and [SshTunnel.close] stops it instead.
@@ -105,8 +107,8 @@ abstract interface class SshClient {
   /// - [SshHostKeyChangedException] when the server's host key isn't the one
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
-  /// - [SshLoginCancelledException] when [onPrompt] answers null, or what
-  ///   [onPrompt] throws.
+  /// - [SshLoginCancelledException] when the login fails after [onPrompt]
+  ///   answered null, or what [onPrompt] threw.
   /// - [SshConfigException] with an [onPrompt], when ssh is older than
   ///   OpenSSH 8.4.
   /// - [SshPortInUseException] when [localPort] is taken.
@@ -172,9 +174,8 @@ abstract interface class SshClient {
   ///
   /// The server's port is on its loopback only, unless its sshd sets
   /// `GatewayPorts yes`. [onLog], [onPrompt] and [abortTrigger] work as in
-  /// [openTunnel],
-  /// except that a connection that can't reach [localHost] comes as an
-  /// [SshMessage].
+  /// [openTunnel], except that a connection that can't reach [localHost]
+  /// comes as an [SshMessage].
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
@@ -191,8 +192,10 @@ abstract interface class SshClient {
   /// - [SshHostKeyChangedException] when the server's host key isn't the one
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
-  /// - [SshLoginCancelledException] when [onPrompt] answers null, or what
-  ///   [onPrompt] throws.
+  /// - [SshLoginCancelledException] when the login fails after [onPrompt]
+  ///   answered null, or what [onPrompt] threw.
+  /// - [SshConfigException] with an [onPrompt], when ssh is older than
+  ///   OpenSSH 8.4.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
   ///   starting with `-` or holding spaces or shell characters, or a
   ///   [localPort] or [remotePort] outside 1 to 65535.
@@ -229,8 +232,8 @@ abstract interface class SshClient {
   /// - [SshHostKeyChangedException] when the server's host key isn't the one
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
-  /// - [SshLoginCancelledException] when [onPrompt] answers null, or what
-  ///   [onPrompt] throws.
+  /// - [SshLoginCancelledException] when the login fails after [onPrompt]
+  ///   answered null, or what [onPrompt] threw.
   /// - [SshConfigException] with an [onPrompt], when ssh is older than
   ///   OpenSSH 8.4.
   /// - [SshPortInUseException] when [localPort] is taken.

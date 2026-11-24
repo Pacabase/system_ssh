@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:system_ssh/src/askpass.dart';
 import 'package:system_ssh/src/shared_connection.dart';
@@ -90,6 +91,24 @@ void main() {
     test('keeps an unread config from asking on Windows', () {
       expect(canPrompt(const {}, onWindows: true), isFalse);
     });
+
+    for (final (option, value) in [
+      ('user', 'a%OS%b'),
+      ('hostname', 'host!PATH!'),
+      ('identityfile', 'C:/keys/ok\nC:/keys/a"b'),
+      ('certificatefile', 'C:/keys/a&b-cert.pub'),
+    ]) {
+      test('keeps a $option cmd.exe would read from asking on Windows', () {
+        expect(
+          canPrompt({'batchmode': 'no', option: value}, onWindows: true),
+          isFalse,
+        );
+        expect(
+          canPrompt({'batchmode': 'no', option: value}, onWindows: false),
+          isTrue,
+        );
+      });
+    }
   });
 
   group('sshCommand', () {
@@ -181,7 +200,7 @@ void main() {
       final prompt = Platform.isWindows
           ? r"Enter passphrase for key 'C:\a b&echo x^|<>(c)!\key': "
           : r"""Code '"$(touch x)`id`\n; & | < > \: """;
-      const answer = r"""pa ss'"$(x)`y`\n;&|<>\ %PATH% ^ !""";
+      const answer = r"""pa ss'"$(x)`y`\n;&|<>\ %PATH% ^ ! hörse €""";
       fake.asks({prompt: answer});
       final texts = <String>[];
 
@@ -271,11 +290,65 @@ void main() {
       expect(fake.attempts.single.join(' '), contains('-o BatchMode=yes'));
     });
 
-    test('removes the helper once the tunnel is open', () async {
-      await open(onPrompt: (_) async => 'secret');
+    for (final (name, SshPromptHandler handler) in [
+      ('the tunnel is open', (_) async => 'correct horse'),
+      ('a cancel', (_) async => null),
+      ('a wrong answer', (_) async => 'wrong'),
+      ('onPrompt throws', (_) => Future.error(StateError('no dialog'))),
+    ]) {
+      test('removes the helper once $name', () async {
+        fake.asks({passphrase: 'correct horse'});
 
+        await open(onPrompt: handler).then((_) {}, onError: (Object _) {});
+
+        final helper = fake.attemptEnvironments.single['SSH_ASKPASS']!;
+        expect(fake.answers, hasLength(1));
+        expect(File(helper).parent.existsSync(), isFalse);
+      });
+    }
+
+    test('asks nothing more once a prompt is cancelled', () async {
+      fake.asks({passphrase: null, password: null});
+      var asked = 0;
+
+      await expectLater(
+        open(
+          onPrompt: (_) async {
+            asked++;
+            return null;
+          },
+        ),
+        throwsA(isA<SshLoginCancelledException>()),
+      );
+      expect(asked, 1);
+      expect(fake.answers, ['<cancelled>', '<cancelled>']);
+    });
+
+    test('throws SshTunnelAbortedException when aborted during a prompt',
+        () async {
+      fake.asks({passphrase: null});
+      final abort = Completer<void>();
+      final asked = Completer<void>();
+      final answer = Completer<String?>();
+      addTearDown(() {
+        if (!answer.isCompleted) answer.complete(null);
+      });
+
+      final opening = openSystemForward(
+        server,
+        forward: localForwardTo('db.example.com', 3306),
+        executable: fake.path,
+        abortTrigger: abort.future,
+        onPrompt: (_) {
+          asked.complete();
+          return answer.future;
+        },
+      );
+      await asked.future.timeout(const Duration(seconds: 20));
+      abort.complete();
+
+      await expectLater(opening, throwsA(isA<SshTunnelAbortedException>()));
       final helper = fake.attemptEnvironments.single['SSH_ASKPASS']!;
-      expect(File(helper).existsSync(), isFalse);
       expect(File(helper).parent.existsSync(), isFalse);
     });
 
@@ -328,6 +401,38 @@ void main() {
       },
       testOn: 'windows',
     );
+
+    test(
+      'asks through a ProxyJump, and lets the server ask, outside Windows',
+      () async {
+        fake
+          ..answerConfig(['host ssh.example.com', 'proxyjump jump'])
+          ..asks({passphrase: 'secret'});
+
+        await open(onPrompt: (_) async => 'secret');
+
+        expect(fake.answers, ['secret']);
+        expect(
+          fake.attempts.single.join(' '),
+          isNot(contains('KbdInteractiveAuthentication')),
+        );
+      },
+      testOn: '!windows',
+    );
+
+    test('asks through a SOCKS proxy', () async {
+      fake.asks({passphrase: 'secret'});
+
+      final proxy = await openSystemForward(
+        server,
+        forward: dynamicForwardOn('127.0.0.1'),
+        executable: fake.path,
+        onPrompt: (_) async => 'secret',
+      );
+      addTearDown(proxy.close);
+
+      expect(fake.answers, ['secret']);
+    });
 
     test('asks through a remote forward', () async {
       fake.asks({passphrase: 'secret'});
@@ -397,7 +502,7 @@ void main() {
         Process.run(
           askPass.environment['SSH_ASKPASS']!,
           [prompt],
-          environment: environment,
+          environment: {...askPass.environment, ...environment},
         ).timeout(const Duration(seconds: 20));
 
     test('answers on stdout', () async {
@@ -429,15 +534,23 @@ void main() {
     });
 
     test('has a waiting helper give up once closed', () async {
+      final asked = Completer<void>();
       final waiting = Completer<String?>();
-      final slow = await AskPass.start((_) => waiting.future);
+      final slow = await AskPass.start((_) {
+        asked.complete();
+        return waiting.future;
+      });
       addTearDown(slow.close);
       addTearDown(() {
         if (!waiting.isCompleted) waiting.complete(null);
       });
 
-      final result = Process.run(slow.environment['SSH_ASKPASS']!, [password]);
-      await Future<void>.delayed(const Duration(milliseconds: 500));
+      final result = Process.run(
+        slow.environment['SSH_ASKPASS']!,
+        [password],
+        environment: slow.environment,
+      );
+      await asked.future.timeout(const Duration(seconds: 20));
       await slow.close();
 
       expect(
@@ -445,6 +558,63 @@ void main() {
         isNot(0),
       );
     });
+
+    test('asks one prompt at a time', () async {
+      var inFlight = 0;
+      var most = 0;
+      final queued = await AskPass.start((_) async {
+        most = max(most, ++inFlight);
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        inFlight--;
+        return 'secret';
+      });
+      addTearDown(queued.close);
+
+      final results = await Future.wait([
+        for (var i = 0; i < 2; i++)
+          Process.run(
+            queued.environment['SSH_ASKPASS']!,
+            [password],
+            environment: queued.environment,
+          ),
+      ]).timeout(const Duration(seconds: 30));
+
+      expect(results.map((result) => result.exitCode), [0, 0]);
+      expect(most, 1);
+    });
+
+    test('keeps a failure that is not a refused login after a cancel',
+        () async {
+      final cancelling = await AskPass.start((_) async => null);
+      addTearDown(cancelling.close);
+      await Process.run(
+        cancelling.environment['SSH_ASKPASS']!,
+        [passphrase],
+        environment: cancelling.environment,
+      ).timeout(const Duration(seconds: 20));
+
+      const unreachable = SshUnreachableException('connection refused');
+      expect(cancelling.failure(unreachable), same(unreachable));
+      expect(
+        cancelling.failure(const SshLoginRefusedException('denied')),
+        isA<SshLoginCancelledException>(),
+      );
+    });
+
+    test(
+      "answers a prompt that isn't UTF-8",
+      () async {
+        final result = await Process.run('/bin/sh', [
+          '-c',
+          r'exec "$0" "$(printf "Code \377: ")"',
+          askPass.environment['SSH_ASKPASS']!,
+        ]).timeout(const Duration(seconds: 20));
+
+        expect(result.exitCode, 0);
+        expect(asked.single.text, 'Code \uFFFD: ');
+      },
+      testOn: '!windows',
+    );
 
     test(
       'keeps the helper where only this user can open it',

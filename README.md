@@ -140,7 +140,7 @@ print('On the server, curl http://127.0.0.1:${tunnel.remotePort}');
 Without `onPrompt`, ssh asks nothing: a key with a passphrase works through
 your agent, and a login that needs an answer fails with an
 `SshLoginRefusedException`. With it, ssh asks your app through
-`SSH_ASKPASS`, and the answer goes back to ssh without touching an
+`SSH_ASKPASS`, and your answer reaches ssh through a pipe, never an
 argument, the environment or a file:
 
 ```dart
@@ -157,25 +157,35 @@ final tunnel = await client.openTunnel(
 ```
 
 - `SshPassphrasePrompt` is a key file's passphrase, `SshPasswordPrompt` a
-  password, and `SshCodePrompt` anything the server asks in its own words
-  (keyboard-interactive), such as a 2FA code. Show `text` as plain text: for
-  an `SshCodePrompt`, the server wrote it.
-- Answer null to cancel: it throws an `SshLoginCancelledException`. A wrong
-  answer gets as many tries as ssh's `NumberOfPasswordPrompts` (3 by
-  default), then an `SshLoginRefusedException`. If `onPrompt` throws, the
-  login is cancelled and that error is thrown.
+  password, and `SshCodePrompt` anything else, mostly what the server asks in
+  its own words (keyboard-interactive), such as a 2FA code. Show `text` as
+  plain text: the server may have written it.
+- Answer null to cancel: nothing more is asked, and once ssh has no other
+  way to log in, such as another key or your agent, it throws an
+  `SshLoginCancelledException`. If `onPrompt` throws, the login is cancelled
+  the same way and that error is thrown. An answer can't hold a line break;
+  one that does cancels.
+- A wrong passphrase or password is asked again up to
+  `NumberOfPasswordPrompts` times (3 by default); the server decides how
+  often it asks its own questions. Then it throws an
+  `SshLoginRefusedException`.
 - Prompts come one at a time, and only while ssh logs in, a `ProxyJump` host
   included. The package doesn't time them out; the server ends a login
   nobody answers, usually after two minutes.
 - With `shareConnections`, only the tunnel that starts the shared login is
-  asked, so a server asks once, not once per tunnel.
-- It needs OpenSSH 8.4 or newer; an older ssh throws an
-  `SshConfigException`.
-- On Windows, only ssh's own prompts come, a passphrase or a password:
-  Windows' ssh runs the helper through `cmd.exe`, so a server's own words
-  can't safely reach it. Keyboard-interactive logins are off there, and
-  nothing asks when your config sets a `ProxyJump` or `ProxyCommand`, which
-  runs another ssh.
+  asked, so a server asks once, not once per tunnel. A tunnel with
+  `onPrompt` and one without never share a connection.
+- A config that sets `BatchMode yes` still keeps ssh from asking.
+- It needs OpenSSH 8.4 or newer; an older ssh, such as Windows 10's built-in
+  8.1, throws an `SshConfigException`.
+- On Windows, only ssh's own prompts come, a passphrase or a password.
+  Windows' ssh runs the helper through `cmd.exe`, which would read a
+  server's words, or a `%` or `"` in a name, as commands. So there
+  keyboard-interactive logins are off, and a server that takes passwords
+  only that way, as many PAM setups do, refuses the login. Nothing asks
+  when your config sets a `ProxyJump` or `ProxyCommand`, which runs another
+  ssh, when `ssh -G` can't read your config, or when the user, host or a
+  key file's path holds one of `" % ! ^ & | < >`.
 
 ## Sharing a connection
 
@@ -332,7 +342,7 @@ try {
 | `SshFailedException` | anything else, in ssh's words when it said why |
 | **Neither** | |
 | `SshTunnelAbortedException` | `abortTrigger` completed first |
-| `SshLoginCancelledException` | `onPrompt` answered null |
+| `SshLoginCancelledException` | the login failed after `onPrompt` answered null |
 | `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…`, or a `localPort` outside 1 to 65535 |
 
 Each has the `message`, and the `log` of everything ssh wrote and its
@@ -352,7 +362,7 @@ unattended tunnel needs:
 | `ExitOnForwardFailure=yes` | always |
 | `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no`, without `onPrompt` |
-| `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt` |
+| `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt`; on Windows also `SYSTEM_SSH_ASKPASS_PORT` and `SYSTEM_SSH_ASKPASS_TOKEN`, for the helper to reach your app |
 | `KbdInteractiveAuthentication=no` | with `onPrompt` on Windows, whatever your config says; see [Passwords and passphrases](#passwords-and-passphrases) |
 | `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
 | `ConnectTimeout=15` | your config sets none |
@@ -378,9 +388,8 @@ started.
 - Forwards your config sets for the host open too.
 - Without `onPrompt`, a key with a passphrase needs an agent, and password
   and keyboard-interactive logins fail. A config that sets `BatchMode no`
-  looks like the default, so it doesn't bring prompts back.
-- On Windows, `onPrompt` gets no keyboard-interactive prompts, such as 2FA,
-  and none through a `ProxyJump` or `ProxyCommand`.
+  looks like the default, so it doesn't bring prompts back. On Windows,
+  `onPrompt` asks less; see [Passwords and passphrases](#passwords-and-passphrases).
 - On Windows, a child ssh starts in the instant before it joins its job object
   can outlive a crash.
 

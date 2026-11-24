@@ -20,9 +20,12 @@ void main() {
       setUp(fixture.setUp);
       tearDown(fixture.tearDown);
 
-      Future<SshTunnel> open(SshPromptHandler? onPrompt) async {
+      Future<SshTunnel> open(
+        SshPromptHandler? onPrompt, {
+        SshTarget? via,
+      }) async {
         final tunnel = await openSystemForward(
-          fixture.passphraseTarget,
+          via ?? fixture.passphraseTarget,
           forward: localForwardTo(fixture.echoHost, fixture.echoPort),
           onLog: fixture.logged(),
           onPrompt: onPrompt,
@@ -50,23 +53,46 @@ void main() {
       });
 
       test('throws SshLoginCancelledException when onPrompt cancels', () async {
+        var asked = 0;
+
         await expectLater(
-          open((_) async => null),
+          open((_) async {
+            asked++;
+            return null;
+          }),
           throwsA(isA<SshLoginCancelledException>()),
         );
+        expect(asked, 1);
       });
 
       test('throws SshLoginRefusedException for a wrong passphrase', () async {
         var asked = 0;
 
         await expectLater(
-          open((_) async {
-            asked++;
-            return 'wrong';
-          }),
+          open(
+            (_) async {
+              asked++;
+              return 'wrong';
+            },
+            via: fixture.passphraseOnceTarget,
+          ),
           throwsA(isA<SshLoginRefusedException>()),
         );
-        expect(asked, greaterThan(0));
+        expect(asked, 1);
+      });
+
+      test('opens a remote forward with the passphrase', () async {
+        final tunnel = await openSystemRemoteForward(
+          fixture.passphraseTarget,
+          localHost: fixture.echoHost,
+          localPort: fixture.echoPort,
+          onLog: fixture.logged(),
+          onPrompt: (_) async => fixture.keyPassphrase,
+          executable: fixture.ssh,
+        ).timeout(const Duration(seconds: 60));
+        addTearDown(tunnel.close);
+
+        expect(tunnel.remotePort, greaterThan(0));
       });
 
       test('fails without asking when there is no onPrompt', () async {

@@ -75,6 +75,9 @@ final class SshFixture {
   /// [keyPassphrase], which `.github/actions/sshd` sets up.
   SshTarget get passphraseTarget => const SshTarget('passphrase-key');
 
+  /// Like [passphraseTarget], but ssh asks for the passphrase only once.
+  SshTarget get passphraseOnceTarget => const SshTarget('passphrase-key-once');
+
   /// [passphraseTarget]'s key file.
   String get passphraseKeyPath =>
       '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}'
@@ -184,7 +187,10 @@ Host no-forwarding
   IdentityAgent none
   UserKnownHostsFile $knownHosts
 
-Host passphrase-key
+Host passphrase-key-once
+  NumberOfPasswordPrompts 1
+
+Host passphrase-key passphrase-key-once
   HostName 127.0.0.1
   Port $_port
   IdentityFile $passphraseKey

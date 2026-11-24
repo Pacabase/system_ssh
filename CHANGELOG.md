@@ -18,8 +18,9 @@
   );
   ```
 
-  It needs OpenSSH 8.4 or newer. On Windows, only passphrases and passwords
-  come, not a server's questions.
+  It needs OpenSSH 8.4 or newer; an older ssh throws an
+  `SshConfigException`. On Windows, only passphrases and passwords come, not
+  a server's questions, and none through a `ProxyJump` or `ProxyCommand`.
 - **Breaking:** a cancelled prompt throws an `SshLoginCancelledException`, a
   new `SshException` that is neither permanent nor temporary. A `switch`
   that names every `SshException` needs an `SshLoginCancelledException`

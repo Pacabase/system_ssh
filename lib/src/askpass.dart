@@ -11,7 +11,8 @@ import 'ssh_prompt.dart';
 /// prompt to an [SshPromptHandler] and the answer back to ssh. The answer
 /// never goes through an argument, the environment or a file: a FIFO in a
 /// directory only this user can open on POSIX, and a loopback socket that
-/// asks for a token on Windows.
+/// asks for a token on Windows. Once a prompt is cancelled, the rest are too,
+/// without asking.
 final class AskPass {
   AskPass._(this._directory, this._onPrompt);
 
@@ -44,6 +45,7 @@ final class AskPass {
   late final String _helper;
   Timer? _poll;
   ServerSocket? _server;
+  late final String _token;
   final _connections = <Socket>{};
   var _isClosed = false;
 
@@ -58,17 +60,29 @@ final class AskPass {
   (Object, StackTrace)? get error => _error;
   (Object, StackTrace)? _error;
 
+  /// Whether a helper reached the app on Windows, where PowerShell may be
+  /// locked down.
+  var _helperConnected = false;
+
   /// What ssh needs in its environment to ask through the helper.
   Map<String, String> get environment => {
         'SSH_ASKPASS': _helper,
         // Without it, ssh asks on a terminal when it has one, and before
         // OpenSSH 8.4 only uses SSH_ASKPASS with a DISPLAY set.
         'SSH_ASKPASS_REQUIRE': 'force',
+        // The environment of another user's process is out of reach, unlike
+        // a file in a %TEMP% that may be shared.
+        if (Platform.isWindows) ...{
+          'SYSTEM_SSH_ASKPASS_PORT': '${_server!.port}',
+          'SYSTEM_SSH_ASKPASS_TOKEN': _token,
+        },
       };
 
-  /// [exception], or what the answers say happened instead: the error
-  /// [_onPrompt] threw, or an [SshLoginCancelledException].
+  /// [exception], or what the answers say happened instead: for a refused
+  /// login, the error [_onPrompt] threw, or an [SshLoginCancelledException].
+  /// Any other failure, such as a host key or a taken port, stays itself.
   Object failure(SshException exception) {
+    if (exception is! SshLoginRefusedException) return exception;
     if (_error case (final error, _)) return error;
     if (_wasCancelled) {
       return SshLoginCancelledException(
@@ -81,8 +95,19 @@ final class AskPass {
 
   /// Rethrows [exception] as [failure] says.
   Never rethrowAs(SshException exception, StackTrace stackTrace) {
-    if (_error case (final error, final errorStackTrace)) {
-      Error.throwWithStackTrace(error, errorStackTrace);
+    if (exception is SshLoginRefusedException) {
+      if (_error case (final error, final errorStackTrace)) {
+        Error.throwWithStackTrace(error, errorStackTrace);
+      }
+      final asked = exception.log.any(
+        (line) => line.contains('read_passphrase: requested to askpass'),
+      );
+      if (Platform.isWindows && asked && !_helperConnected) {
+        logger.warning(
+          'ssh never reached the password prompt; PowerShell may be blocked '
+          'on this computer',
+        );
+      }
     }
     Error.throwWithStackTrace(failure(exception), stackTrace);
   }
@@ -109,7 +134,7 @@ final class AskPass {
   /// The answer to [text], or null to cancel. Never throws.
   Future<String?> _answer(String text) {
     final answer = _queue.then((_) async {
-      if (_isClosed) return null;
+      if (_isClosed || _wasCancelled || _error != null) return null;
       final prompt = classifyPrompt(text);
       logger.info('ssh asks: $prompt');
       try {
@@ -131,13 +156,12 @@ final class AskPass {
     return answer;
   }
 
-  // ---- POSIX: a sh script and FIFOs in a 0700 directory ----
-
   Future<void> _startPosix() async {
     _helper = '${_directory.path}/askpass';
     final quoted = "'${_directory.path.replaceAll("'", r"'\''")}'";
     File(_helper).writeAsStringSync(_posixScript.replaceAll('@DIR@', quoted));
-    final chmod = await Process.run('chmod', ['700', _directory.path, _helper]);
+    // createTemp already made the directory 0700.
+    final chmod = await Process.run('chmod', ['700', _helper]);
     if (chmod.exitCode != 0) {
       throw SshFailedException(
         'could not set up the password prompt: ${chmod.stderr}',
@@ -160,9 +184,11 @@ final class AskPass {
 
       final id = name.substring(0, name.length - '.prompt'.length);
       final String text;
+      final file = File(entry.path);
       try {
-        text = File(entry.path).readAsStringSync();
-        File(entry.path).deleteSync();
+        // A key path or a server's words needn't be UTF-8.
+        text = utf8.decode(file.readAsBytesSync(), allowMalformed: true);
+        file.deleteSync();
       } on FileSystemException {
         continue;
       }
@@ -177,9 +203,11 @@ final class AskPass {
         FileSystemEntityType.pipe) {
       return;
     }
+    // Opened for reading and writing, which doesn't wait for a reader. The
+    // helper holds the FIFO open itself, so the line waits for it there, and
+    // removes it only once it has read the line, so it can't vanish between
+    // the check and the open.
     try {
-      // Opened for reading and writing, which doesn't wait for a reader. The
-      // helper holds the FIFO open itself, so the line waits for it there.
       final file = File(fifo).openSync(mode: FileMode.write);
       try {
         file.writeStringSync(answer == null ? 'n\n' : 'y$answer\n');
@@ -206,55 +234,73 @@ final class AskPass {
     }
   }
 
-  // ---- Windows: a .cmd that runs PowerShell, talking over loopback ----
-
   Future<void> _startWindows() async {
-    final token = _randomToken();
+    _token = _randomToken();
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
-    server.listen((socket) => _serveWindows(socket, token));
+    server.listen(_serveWindows);
 
-    final script = _windowsScript
-        .replaceAll('@PORT@', '${server.port}')
-        .replaceAll('@TOKEN@', token);
-    final encoded = base64.encode(_utf16le(script));
     _helper = '${_directory.path}\\askpass.cmd';
-    File(_helper).writeAsStringSync(
-      _windowsCommand.replaceAll('@SCRIPT@', encoded).replaceAll('\n', '\r\n'),
-    );
+    File(_helper).writeAsStringSync(_windowsHelper);
   }
 
-  Future<void> _serveWindows(Socket socket, String token) async {
+  Future<void> _serveWindows(Socket socket) async {
     socket.done.ignore();
     if (_isClosed) return socket.destroy();
     _connections.add(socket);
     try {
-      final lines = socket
-          .cast<List<int>>()
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .transform(const LineSplitter());
-      final iterator = StreamIterator(lines);
-      Future<String?> next() async =>
-          await iterator.moveNext() ? iterator.current : null;
+      // Any user on this computer can connect, so it reads only as much as a
+      // helper sends: the token, then a prompt.
+      final lines = StreamIterator(
+        _boundedLines(socket, limit: _maxPromptBytes),
+      );
+      Future<List<int>?> next() async =>
+          await lines.moveNext() ? lines.current : null;
 
       final presented = await next().timeout(const Duration(seconds: 5));
-      if (presented == null || !_sameToken(presented, token)) {
+      if (presented == null || !_sameToken(presented, ascii.encode(_token))) {
         logger.warning('A connection to the password prompt had no token');
         return;
       }
+      _helperConnected = true;
       final encoded = await next().timeout(const Duration(seconds: 5));
       if (encoded == null) return;
-      final text = utf8.decode(base64.decode(encoded), allowMalformed: true);
+      final text = utf8.decode(
+        base64.decode(ascii.decode(encoded)),
+        allowMalformed: true,
+      );
 
       final answer = await _answer(text);
       socket.write(answer == null ? 'n\n' : 'y$answer\n');
       await socket.flush();
-      await iterator.cancel();
+      await lines.cancel();
     } catch (exception) {
       if (!_isClosed) logger.warning('The password prompt failed: $exception');
     } finally {
       _connections.remove(socket);
       socket.destroy();
+    }
+  }
+}
+
+/// The most a helper sends: a token, and a prompt as base64.
+const _maxPromptBytes = 16 * 1024;
+
+/// [socket]'s lines, as bytes without the newline, failing once it has sent
+/// more than [limit] bytes.
+Stream<List<int>> _boundedLines(Socket socket, {required int limit}) async* {
+  final buffer = <int>[];
+  var received = 0;
+  await for (final chunk in socket) {
+    received += chunk.length;
+    if (received > limit) throw const FormatException('too much input');
+    for (final byte in chunk) {
+      if (byte != 0x0a) {
+        buffer.add(byte);
+        continue;
+      }
+      yield [...buffer];
+      buffer.clear();
     }
   }
 }
@@ -267,11 +313,11 @@ String _randomToken() {
   ].join();
 }
 
-bool _sameToken(String presented, String token) {
+bool _sameToken(List<int> presented, List<int> token) {
   if (presented.length != token.length) return false;
   var difference = 0;
   for (var i = 0; i < token.length; i++) {
-    difference |= presented.codeUnitAt(i) ^ token.codeUnitAt(i);
+    difference |= presented[i] ^ token[i];
   }
   return difference == 0;
 }
@@ -280,25 +326,32 @@ List<int> _utf16le(String text) => [
       for (final unit in text.codeUnits) ...[unit & 0xff, unit >> 8],
     ];
 
+final _windowsHelper = _windowsCommand
+    .replaceAll('@SCRIPT@', base64.encode(_utf16le(_windowsScript)))
+    .replaceAll('\n', '\r\n');
+
 // ssh runs it with the prompt in $1, and reads the answer from its stdout.
 // SSH_ASKPASS_PROMPT is `none` for a notice, such as to touch a hardware
 // key, which ssh doesn't wait on, and `confirm` for a yes/no question, which
 // a tunnel never needs. The answer comes through a FIFO the script holds open
 // itself, so the app's write never waits, and stays in printf, a builtin, so
-// it never appears in a process's arguments. The background loop stops the
-// script if ssh goes first, and ends by itself once the script is done; it
-// leaves stdout alone, since ssh reads it to the end, and is never killed,
-// since some shells then print a notice.
+// it never appears in a process's arguments. The background loop ends once
+// ssh is gone or the FIFO is, by the script or by the app closing, and then
+// answers `n` through the FIFO it shares, so a script still waiting gives
+// up. It leaves stdout alone, since ssh reads it to the end. ssh leaves its
+// end of that stdout pipe open in the script too, so the script closes what
+// it inherited first, and the loop never waits on the script itself.
 const _posixScript = r'''#!/bin/sh
 d=@DIR@
 case "${SSH_ASKPASS_PROMPT:-}" in none) exit 0 ;; confirm) exit 1 ;; esac
 [ -d "$d" ] || exit 1
+exec 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-
 umask 077
 r="$d/$$"
 mkfifo "$r.answer" || exit 1
 exec 3<>"$r.answer"
 ( while kill -0 "$PPID" 2>/dev/null && [ -p "$r.answer" ]; do sleep 1; done
-  [ -p "$r.answer" ] && kill "$$" ) </dev/null >/dev/null 2>&1 &
+  echo n >&3 ) </dev/null >/dev/null 2>&1 &
 printf '%s' "$1" > "$r.tmp" && mv "$r.tmp" "$r.prompt" || exit 1
 IFS= read -r a <&3
 exec 3<&-
@@ -309,10 +362,13 @@ case $a in
 esac
 ''';
 
-// cmd.exe runs it, so it reads its argument only inside quotes, where `&`
-// and the like are plain text. PowerShell's stderr goes nowhere: it shares
-// ssh's, and its first start there writes a progress record. A prompt can't hold a `"` here: on Windows,
-// only ssh's own prompts come, whose words are the user's config and paths.
+// cmd.exe runs it as `cmd /c ""askpass.cmd" "<prompt>""`, which expands
+// `%NAME%` and, with delayed expansion on, `!NAME!` in the prompt before it
+// reads quotes, and a `"` there would end the quoting. So on Windows only
+// ssh's own prompts come, and only when the user, host and key files in them
+// hold none of those characters; see canPrompt. Inside the quotes, `&` and
+// the like are plain text. PowerShell's stderr goes nowhere: it shares ssh's,
+// and its first start there writes a progress record.
 const _windowsCommand = r'''@echo off
 setlocal DisableDelayedExpansion
 if "%SSH_ASKPASS_PROMPT%"=="none" exit /b 0
@@ -328,12 +384,12 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try {
   $utf8 = New-Object System.Text.UTF8Encoding($false)
-  $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', @PORT@)
+  $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', [int]$env:SYSTEM_SSH_ASKPASS_PORT)
   $stream = $client.GetStream()
   $writer = New-Object System.IO.StreamWriter($stream, $utf8)
   $writer.NewLine = "`n"
   $reader = New-Object System.IO.StreamReader($stream, $utf8)
-  $writer.WriteLine('@TOKEN@')
+  $writer.WriteLine($env:SYSTEM_SSH_ASKPASS_TOKEN)
   $writer.WriteLine([Convert]::ToBase64String($utf8.GetBytes($env:SYSTEM_SSH_PROMPT)))
   $writer.Flush()
   $answer = $reader.ReadLine()
@@ -405,13 +461,27 @@ Future<void> checkPromptSupport(
 /// server's own words as commands, so there a login asks only ssh's own
 /// prompts: keyboard-interactive is turned off, and nothing asks when a
 /// `ProxyJump` or `ProxyCommand` runs another ssh, which wouldn't get that
-/// option, or when the config couldn't be read.
-bool canPrompt(Map<String, String> config, {bool? onWindows}) {
-  if (!(onWindows ?? Platform.isWindows)) return true;
-  return config.isNotEmpty &&
-      !config.containsKey('proxyjump') &&
-      !config.containsKey('proxycommand');
+/// option, when the config couldn't be read, or when the user, host or a key
+/// file ssh would name in a prompt holds a character cmd.exe reads.
+bool canPrompt(Map<String, String> config, {bool? onWindows}) =>
+    _whyNoPrompts(config, onWindows: onWindows ?? Platform.isWindows) == null;
+
+String? _whyNoPrompts(Map<String, String> config, {required bool onWindows}) {
+  if (!onWindows) return null;
+  if (config.isEmpty) return "ssh -G couldn't read the config";
+  for (final option in ['proxyjump', 'proxycommand']) {
+    if (config.containsKey(option)) return 'the config sets a $option';
+  }
+  for (final option in _inPrompts) {
+    if (config[option]?.contains(_readByCmd) ?? false) {
+      return 'its $option holds one of " % ! ^ & | < >';
+    }
+  }
+  return null;
 }
+
+const _inPrompts = ['user', 'hostname', 'identityfile', 'certificatefile'];
+final _readByCmd = RegExp(r'["%!^&|<>]');
 
 /// Runs [open] with the environment and options ssh needs to ask
 /// [onPrompt], or as before when [onPrompt] is null or [canPrompt] says no.
@@ -425,10 +495,9 @@ Future<T> withPrompts<T>(
   required Future<T> Function(SshPrompts prompts) open,
 }) async {
   if (onPrompt == null) return open(SshPrompts.none(environment));
-  if (!canPrompt(config)) {
-    logger.info(
-      "Not asking for passwords: Windows' ssh can't ask safely through a "
-      'ProxyJump or ProxyCommand',
+  if (_whyNoPrompts(config, onWindows: Platform.isWindows) case final why?) {
+    logger.warning(
+      "Not asking for passwords: Windows' ssh can't ask safely when $why",
     );
     return open(SshPrompts.none(environment));
   }
