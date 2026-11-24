@@ -52,7 +52,7 @@ void main() {
         {
           'hostname': 'ssh.example.com',
           'port': '2222',
-          'hostkeyalias': 'bastion'
+          'hostkeyalias': 'bastion',
         },
         'bastion',
       ),
@@ -91,10 +91,10 @@ void main() {
     for (final value in ['yes', 'true', 'accept-new', 'no']) {
       test('leaves an unknown key alone where the config sets $value', () {
         expect(
-          hostKeyFailure(
-            failure(unknownLog),
-            {...askConfig, 'stricthostkeychecking': value},
-          ),
+          hostKeyFailure(failure(unknownLog), {
+            ...askConfig,
+            'stricthostkeychecking': value,
+          }),
           isNull,
         );
       });
@@ -215,15 +215,14 @@ void main() {
       ('C:/Users/alice/.ssh/known_hosts', 'C:/Users/alice/.ssh/known_hosts'),
       (
         r'C:\Users\alice\.ssh\known_hosts C:\kh2',
-        r'C:\Users\alice\.ssh\known_hosts'
+        r'C:\Users\alice\.ssh\known_hosts',
       ),
     ]) {
       test('is $path for $files', () {
         expect(
-          userKnownHostsFile(
-            {if (files != null) 'userknownhostsfile': files},
-            environment: environment,
-          ).path,
+          userKnownHostsFile({
+            if (files != null) 'userknownhostsfile': files,
+          }, environment: environment).path,
           path,
         );
       });
@@ -246,10 +245,9 @@ void main() {
     ]) {
       test('refuses $files, which ssh would not read back', () {
         expect(
-          () => userKnownHostsFile(
-            {'userknownhostsfile': files},
-            environment: environment,
-          ),
+          () => userKnownHostsFile({
+            'userknownhostsfile': files,
+          }, environment: environment),
           throwsA(isA<SshConfigException>()),
         );
       });
@@ -257,20 +255,18 @@ void main() {
 
     test('refuses UserKnownHostsFile none', () {
       expect(
-        () => userKnownHostsFile(
-          {'userknownhostsfile': 'none'},
-          environment: environment,
-        ),
+        () => userKnownHostsFile({
+          'userknownhostsfile': 'none',
+        }, environment: environment),
         throwsA(isA<SshConfigException>()),
       );
     });
 
     test("refuses a file named by a token it can't fill in", () {
       expect(
-        () => userKnownHostsFile(
-          {'userknownhostsfile': '~/.ssh/known_hosts_%h'},
-          environment: environment,
-        ),
+        () => userKnownHostsFile({
+          'userknownhostsfile': '~/.ssh/known_hosts_%h',
+        }, environment: environment),
         throwsA(isA<SshConfigException>()),
       );
     });
@@ -364,8 +360,11 @@ void main() {
       );
       expect(
         exception,
-        isA<SshUnknownHostKeyException>()
-            .having((exception) => exception.hostKey, 'hostKey', hostKey),
+        isA<SshUnknownHostKeyException>().having(
+          (exception) => exception.hostKey,
+          'hostKey',
+          hostKey,
+        ),
       );
       expect(fake.knownHosts.existsSync(), isFalse);
 
@@ -388,9 +387,9 @@ void main() {
       (
         'a shared connection',
         (SystemSshClient client) => SystemSshClient(
-              executable: client.executable,
-              shareConnections: true,
-            ).openTunnel(server, remoteHost: 'db.example.com', remotePort: 1),
+          executable: client.executable,
+          shareConnections: true,
+        ).openTunnel(server, remoteHost: 'db.example.com', remotePort: 1),
       ),
     ]) {
       test('$kind throws for an unknown key too', () async {
@@ -403,23 +402,20 @@ void main() {
       }, testOn: kind == 'a shared connection' ? '!windows' : null);
     }
 
-    test('a config that sets StrictHostKeyChecking yes gets ssh\'s failure',
-        () async {
-      fake
-        ..answerConfig([
-          'hostname ssh.example.com',
-          'port 2222',
-          'stricthostkeychecking true',
-        ])
-        ..hostKeyMode(HostKeyMode.unknown);
+    test(
+      'a config that sets StrictHostKeyChecking yes gets ssh\'s failure',
+      () async {
+        fake
+          ..answerConfig([
+            'hostname ssh.example.com',
+            'port 2222',
+            'stricthostkeychecking true',
+          ])
+          ..hostKeyMode(HostKeyMode.unknown);
 
-      await expectLater(
-        open(),
-        throwsA(
-          isA<SshHostKeyRefusedException>(),
-        ),
-      );
-    });
+        await expectLater(open(), throwsA(isA<SshHostKeyRefusedException>()));
+      },
+    );
 
     test('a changed key throws SshHostKeyChangedException', () async {
       fake.hostKeyMode(HostKeyMode.changed);
@@ -470,28 +466,33 @@ void main() {
       expect(ports.picks, 1);
     });
 
-    test("an unknown ProxyJump host is ssh's failure, not one to trust",
-        () async {
-      fake.hostKeyMode(HostKeyMode.jumpUnknown);
+    test(
+      "an unknown ProxyJump host is ssh's failure, not one to trust",
+      () async {
+        fake.hostKeyMode(HostKeyMode.jumpUnknown);
 
-      await expectLater(
-        open(),
-        throwsA(
-          isA<SshHostKeyRefusedException>().having(
+        await expectLater(
+          open(),
+          throwsA(
+            isA<SshHostKeyRefusedException>().having(
               (exception) => exception.message,
               'message',
-              contains('Host key verification failed')),
-        ),
-      );
-    });
+              contains('Host key verification failed'),
+            ),
+          ),
+        );
+      },
+    );
 
     group('trustHostKey', () {
       test('reads the key with the command for the server', () async {
         await client.trustHostKey(server, hostKey);
 
         final arguments = fake.trustArguments!;
-        expect(arguments,
-            containsAllInOrder(['-o', 'StrictHostKeyChecking=accept-new']));
+        expect(
+          arguments,
+          containsAllInOrder(['-o', 'StrictHostKeyChecking=accept-new']),
+        );
         expect(arguments, contains('PreferredAuthentications=none'));
         expect(
           arguments.firstWhere(
@@ -499,8 +500,12 @@ void main() {
           ),
           endsWith(' "${fake.knownHosts.path.replaceAll(r'\', '/')}"'),
         );
-        expect(arguments.sublist(arguments.length - 4),
-            ['-p', '2222', '--', 'ssh.example.com']);
+        expect(arguments.sublist(arguments.length - 4), [
+          '-p',
+          '2222',
+          '--',
+          'ssh.example.com',
+        ]);
         final readInto = RegExp('"([^"]+)"').firstMatch(
           arguments.firstWhere(
             (argument) => argument.startsWith('UserKnownHostsFile='),
@@ -520,35 +525,39 @@ void main() {
         );
       });
 
-      test('writes nothing when ssh got another key than the one checked',
-          () async {
-        // The fake's log names the checked key, as a server's banner can.
-        fake.trustMode(TrustMode.addsOther);
+      test(
+        'writes nothing when ssh got another key than the one checked',
+        () async {
+          // The fake's log names the checked key, as a server's banner can.
+          fake.trustMode(TrustMode.addsOther);
 
-        await expectLater(
-          client.trustHostKey(server, hostKey),
-          throwsA(
-            isA<SshUnknownHostKeyException>().having(
-              (exception) => exception.hostKey.fingerprint,
-              'fingerprint',
-              otherHostKeyFingerprint,
+          await expectLater(
+            client.trustHostKey(server, hostKey),
+            throwsA(
+              isA<SshUnknownHostKeyException>().having(
+                (exception) => exception.hostKey.fingerprint,
+                'fingerprint',
+                otherHostKeyFingerprint,
+              ),
             ),
-          ),
-        );
-        expect(fake.knownHosts.existsSync(), isFalse);
-      });
+          );
+          expect(fake.knownHosts.existsSync(), isFalse);
+        },
+      );
 
-      test('adds every entry ssh wrote for the key, hashed or by address',
-          () async {
-        fake.trustMode(TrustMode.checkHostIp);
+      test(
+        'adds every entry ssh wrote for the key, hashed or by address',
+        () async {
+          fake.trustMode(TrustMode.checkHostIp);
 
-        await client.trustHostKey(server, hostKey);
+          await client.trustHostKey(server, hostKey);
 
-        expect(
-          fake.knownHosts.readAsStringSync(),
-          checkHostIpEntries.map((entry) => '$entry\n').join(),
-        );
-      });
+          expect(
+            fake.knownHosts.readAsStringSync(),
+            checkHostIpEntries.map((entry) => '$entry\n').join(),
+          );
+        },
+      );
 
       test('adds the key once past a ProxyJump host it logged in to', () async {
         fake.trustMode(TrustMode.viaJump);
@@ -626,9 +635,10 @@ void main() {
           client.trustHostKey(server, hostKey),
           throwsA(
             isA<SshUnreachableException>().having(
-                (exception) => exception.message,
-                'message',
-                contains('Connection refused')),
+              (exception) => exception.message,
+              'message',
+              contains('Connection refused'),
+            ),
           ),
         );
         expect(fake.knownHosts.existsSync(), isFalse);
@@ -647,8 +657,11 @@ void main() {
         fake.trustMode(TrustMode.hang);
         final abort = Completer<void>();
 
-        final trusting =
-            client.trustHostKey(server, hostKey, abortTrigger: abort.future);
+        final trusting = client.trustHostKey(
+          server,
+          hostKey,
+          abortTrigger: abort.future,
+        );
         await eventually(() => fake.trustArguments);
         abort.complete();
 

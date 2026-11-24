@@ -30,12 +30,12 @@ void main() {
     tearDown(fixture.tearDown);
 
     Future<SshTunnel> open({void Function(SshLog log)? onLog}) async {
-      final tunnel =
-          await SystemSshClient(executable: fixture.ssh).openSocketTunnel(
-        fixture.target,
-        remoteSocket: socketPath,
-        onLog: fixture.logged(onLog),
-      );
+      final tunnel = await SystemSshClient(executable: fixture.ssh)
+          .openSocketTunnel(
+            fixture.target,
+            remoteSocket: socketPath,
+            onLog: fixture.logged(onLog),
+          );
       addTearDown(tunnel.close);
       return tunnel;
     }

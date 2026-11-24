@@ -21,16 +21,16 @@ final class CachedEnvironment {
   Future<Map<String, String>>? _environment;
 
   Future<Map<String, String>> read() => _environment ??= _read().then(
-        (environment) {
-          if (environment != null) return environment;
-          _environment = null;
-          return const {};
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          _environment = null;
-          Error.throwWithStackTrace(error, stackTrace);
-        },
-      );
+    (environment) {
+      if (environment != null) return environment;
+      _environment = null;
+      return const {};
+    },
+    onError: (Object error, StackTrace stackTrace) {
+      _environment = null;
+      Error.throwWithStackTrace(error, stackTrace);
+    },
+  );
 }
 
 /// Null when the shell fails or outlasts [timeout]. Empty on Windows, where
@@ -49,7 +49,8 @@ Future<Map<String, String>?> shellEnvironment(
   required Duration timeout,
 }) async {
   final random = Random.secure();
-  final marker = 'system_ssh_'
+  final marker =
+      'system_ssh_'
       '${List.generate(16, (_) => random.nextInt(16).toRadixString(16)).join()}';
 
   // startWatched gives the shell /dev/null as stdin.
@@ -66,8 +67,9 @@ Future<Map<String, String>?> shellEnvironment(
     return null;
   }
   unawaited(process.stderr.drain<void>());
-  final output =
-      process.stdout.transform(const Utf8Decoder(allowMalformed: true)).join();
+  final output = process.stdout
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .join();
 
   try {
     final (code, text) = await (process.exitCode, output).wait.timeout(timeout);

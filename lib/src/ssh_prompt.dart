@@ -29,7 +29,8 @@ sealed class SshPrompt {
 
   // Spelled out, since an obfuscated build renames runtimeType.
   @override
-  String toString() => '${switch (this) {
+  String toString() =>
+      '${switch (this) {
         SshPassphrasePrompt() => 'SshPassphrasePrompt',
         SshPasswordPrompt() => 'SshPasswordPrompt',
         SshCodePrompt() => 'SshCodePrompt',
@@ -77,8 +78,9 @@ final _passphrase = RegExp(r"^Enter passphrase for key '(.*)': ?$");
 // "Enter alice@host's old password: " and the like come when the server asks
 // for a new password. A local account name, ssh's default user, may hold a
 // space.
-final _password =
-    RegExp(r"^(Enter |Retype )?.+@[^@\s]+'s (old |new )?password: ?$");
+final _password = RegExp(
+  r"^(Enter |Retype )?.+@[^@\s]+'s (old |new )?password: ?$",
+);
 
 /// Whether [text] is ssh's yes/no question about an unknown or changed host
 /// key. A server's own questions start with `(user@host)`, so it can't pose

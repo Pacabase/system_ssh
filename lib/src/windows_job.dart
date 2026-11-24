@@ -28,14 +28,19 @@ Future<Process> startInJob(
   }
 
   // A child ssh starts before this assignment stays outside the job.
-  final handle =
-      _openProcess(_processSetQuota | _processTerminate, 0, process.pid);
+  final handle = _openProcess(
+    _processSetQuota | _processTerminate,
+    0,
+    process.pid,
+  );
   final isAssigned =
       handle != nullptr && _assignProcessToJobObject(job, handle) != 0;
   if (handle != nullptr) _closeHandle(handle);
   if (!isAssigned) {
-    logger.warning('Could not tie ${command.first} to this process; '
-        'it may outlive a crash');
+    logger.warning(
+      'Could not tie ${command.first} to this process; '
+      'it may outlive a crash',
+    );
   }
 
   return _JobProcess(process, job);
@@ -50,7 +55,8 @@ _Handle _createJob() {
   final limits = calloc<_ExtendedLimits>();
   try {
     limits.ref.basic.limitFlags = _jobObjectLimitKillOnJobClose;
-    final isSet = _setInformationJobObject(
+    final isSet =
+        _setInformationJobObject(
           job,
           _jobObjectExtendedLimitInformation,
           limits.cast(),
@@ -150,28 +156,37 @@ final class _ExtendedLimits extends Struct {
 
 final _kernel32 = DynamicLibrary.open('kernel32.dll');
 
-final _createJobObject = _kernel32.lookupFunction<
-    _Handle Function(_Handle, _Handle),
-    _Handle Function(_Handle, _Handle)>('CreateJobObjectW');
+final _createJobObject = _kernel32
+    .lookupFunction<
+      _Handle Function(_Handle, _Handle),
+      _Handle Function(_Handle, _Handle)
+    >('CreateJobObjectW');
 
-final _setInformationJobObject = _kernel32.lookupFunction<
-    Int32 Function(_Handle, Int32, _Handle, Uint32),
-    int Function(_Handle, int, _Handle, int)>(
-  'SetInformationJobObject',
-);
+final _setInformationJobObject = _kernel32
+    .lookupFunction<
+      Int32 Function(_Handle, Int32, _Handle, Uint32),
+      int Function(_Handle, int, _Handle, int)
+    >('SetInformationJobObject');
 
-final _openProcess = _kernel32.lookupFunction<
-    _Handle Function(Uint32, Int32, Uint32),
-    _Handle Function(int, int, int)>('OpenProcess');
+final _openProcess = _kernel32
+    .lookupFunction<
+      _Handle Function(Uint32, Int32, Uint32),
+      _Handle Function(int, int, int)
+    >('OpenProcess');
 
-final _assignProcessToJobObject = _kernel32.lookupFunction<
-    Int32 Function(_Handle, _Handle),
-    int Function(_Handle, _Handle)>('AssignProcessToJobObject');
+final _assignProcessToJobObject = _kernel32
+    .lookupFunction<
+      Int32 Function(_Handle, _Handle),
+      int Function(_Handle, _Handle)
+    >('AssignProcessToJobObject');
 
-final _terminateJobObject = _kernel32.lookupFunction<
-    Int32 Function(_Handle, Uint32),
-    int Function(_Handle, int)>('TerminateJobObject');
+final _terminateJobObject = _kernel32
+    .lookupFunction<
+      Int32 Function(_Handle, Uint32),
+      int Function(_Handle, int)
+    >('TerminateJobObject');
 
-final _closeHandle =
-    _kernel32.lookupFunction<Int32 Function(_Handle), int Function(_Handle)>(
-        'CloseHandle');
+final _closeHandle = _kernel32
+    .lookupFunction<Int32 Function(_Handle), int Function(_Handle)>(
+      'CloseHandle',
+    );

@@ -120,8 +120,11 @@ void main() {
           pool: pool,
         ),
         throwsA(
-          isA<SshRemotePortRefusedException>()
-              .having((exception) => exception.port, 'port', taken.port),
+          isA<SshRemotePortRefusedException>().having(
+            (exception) => exception.port,
+            'port',
+            taken.port,
+          ),
         ),
       );
     });
@@ -129,14 +132,14 @@ void main() {
     test('refuses the same remote forward twice', () async {
       final port = await pickFreePort();
       Future<SshRemoteTunnel> forward() => openSystemRemoteForward(
-            fixture.target,
-            localHost: fixture.echoHost,
-            localPort: fixture.echoPort,
-            remotePort: port,
-            onLog: logged([]),
-            executable: fixture.ssh,
-            pool: pool,
-          );
+        fixture.target,
+        localHost: fixture.echoHost,
+        localPort: fixture.echoPort,
+        remotePort: port,
+        onLog: logged([]),
+        executable: fixture.ssh,
+        pool: pool,
+      );
       final first = await forward();
       addTearDown(first.close);
 
@@ -171,8 +174,11 @@ void main() {
       expect(
         refusedLogs,
         contains(
-          isA<SshForwardUnreachable>()
-              .having((log) => log.reason, 'reason', 'Connection refused'),
+          isA<SshForwardUnreachable>().having(
+            (log) => log.reason,
+            'reason',
+            'Connection refused',
+          ),
         ),
       );
       expect(otherLogs, isNot(contains(isA<SshForwardFailed>())));

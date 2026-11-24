@@ -32,17 +32,16 @@ final class SystemSshTunnel implements SshTunnel {
     String bindAddress = '127.0.0.1',
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      SystemSshTunnel(
-        localPort,
-        await ForwardProcess.attach(
-          process,
-          readiness: LocalForwardReadiness(localPort),
-          describe: () => '${bracketIPv6(bindAddress)}:$localPort',
-          onLog: onLog,
-          abortTrigger: abortTrigger,
-        ),
-      );
+  }) async => SystemSshTunnel(
+    localPort,
+    await ForwardProcess.attach(
+      process,
+      readiness: LocalForwardReadiness(localPort),
+      describe: () => '${bracketIPv6(bindAddress)}:$localPort',
+      onLog: onLog,
+      abortTrigger: abortTrigger,
+    ),
+  );
 
   @override
   final int localPort;
@@ -160,11 +159,7 @@ final class ForwardProcess implements ForwardHandle {
     process.stderr
         .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
-        .listen(
-          onLine,
-          onError: (Object _) {},
-          onDone: stderrDone.complete,
-        );
+        .listen(onLine, onError: (Object _) {}, onDone: stderrDone.complete);
     unawaited(process.stdout.drain<void>());
 
     Future<void> waitForExit() async {

@@ -97,7 +97,8 @@ List<String> _matching(String parent, String segment) {
     return [
       for (final entity in Directory(parent.isEmpty ? '.' : parent).listSync())
         if (name.hasMatch(
-            entity.uri.pathSegments.lastWhere((part) => part.isNotEmpty)))
+          entity.uri.pathSegments.lastWhere((part) => part.isNotEmpty),
+        ))
           entity.path,
     ];
   } on FileSystemException {

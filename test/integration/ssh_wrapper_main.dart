@@ -7,11 +7,11 @@ import 'dart:io';
 /// `<its directory>/proxy.pid`.
 Future<void> main(List<String> arguments) async {
   final directory = File(Platform.resolvedExecutable).parent.path;
-  final ssh = await Process.start(
-    'ssh',
-    ['-F', '$directory\\config', ...arguments],
-    mode: ProcessStartMode.inheritStdio,
-  );
+  final ssh = await Process.start('ssh', [
+    '-F',
+    '$directory\\config',
+    ...arguments,
+  ], mode: ProcessStartMode.inheritStdio);
   if (arguments.contains('-W')) {
     File('$directory\\proxy.pid').writeAsStringSync('${ssh.pid}');
   }

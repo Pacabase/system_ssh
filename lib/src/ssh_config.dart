@@ -17,10 +17,11 @@ Future<Map<String, String>> resolveConfig(
 }) async {
   final abort = AbortSignal(abortTrigger);
 
-  final process = await startWatched(
-    [executable, '-G', ...destinationArguments(server)],
-    environment: environment,
-  );
+  final process = await startWatched([
+    executable,
+    '-G',
+    ...destinationArguments(server),
+  ], environment: environment);
   unawaited(process.stderr.drain<void>());
   final output = process.stdout
       .transform(const Utf8Decoder(allowMalformed: true))

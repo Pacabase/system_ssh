@@ -24,14 +24,13 @@ void main() {
     Object? log = anything,
     int exitCode = 255,
     Type type = SshFailedException,
-  }) =>
-      throwsA(
-        isA<SshException>()
-            .having((exception) => exception.runtimeType, 'type', type)
-            .having((exception) => exception.message, 'message', message)
-            .having((exception) => exception.log, 'log', log)
-            .having((exception) => exception.exitCode, 'exitCode', exitCode),
-      );
+  }) => throwsA(
+    isA<SshException>()
+        .having((exception) => exception.runtimeType, 'type', type)
+        .having((exception) => exception.message, 'message', message)
+        .having((exception) => exception.log, 'log', log)
+        .having((exception) => exception.exitCode, 'exitCode', exitCode),
+  );
 
   group('attach', () {
     test('says a refused login is permanent', () async {
@@ -275,8 +274,10 @@ void main() {
 
       await tunnel.close();
 
-      expect(
-          logs, const [SshProgress(listeningLine), SshProgress(sessionLine)]);
+      expect(logs, const [
+        SshProgress(listeningLine),
+        SshProgress(sessionLine),
+      ]);
     });
 
     test('drains stdout so a chatty ssh never blocks', () async {
@@ -392,7 +393,8 @@ void main() {
 
   group('done', () {
     test('says a refused login is permanent', () async {
-      const denied = 'Received disconnect from 10.0.0.1 port 22:2: '
+      const denied =
+          'Received disconnect from 10.0.0.1 port 22:2: '
           'Too many authentication failures';
       final process = await startFake([...ready, 'err:$denied', 'exit:255']);
 
@@ -460,11 +462,9 @@ void main() {
       await expectLater(
         tunnel.done.timeout(const Duration(seconds: 10)),
         throwsA(
-          isA<SshException>().having(
-            (exception) => exception.log,
-            'log',
-            [for (var line = 11; line <= 30; line++) 'debug1: line $line'],
-          ),
+          isA<SshException>().having((exception) => exception.log, 'log', [
+            for (var line = 11; line <= 30; line++) 'debug1: line $line',
+          ]),
         ),
       );
     });
@@ -570,33 +570,35 @@ void main() {
       addTearDown(subscription.cancel);
     });
 
-    test('logs every stderr line at FINE, even after the tunnel is up',
-        () async {
-      final process = await startFake([
-        'err:$connectingLine',
-        ...ready,
-        'err:debug1: channel 0: new [port listener]',
-        'exit:0',
-      ]);
+    test(
+      'logs every stderr line at FINE, even after the tunnel is up',
+      () async {
+        final process = await startFake([
+          'err:$connectingLine',
+          ...ready,
+          'err:debug1: channel 0: new [port listener]',
+          'exit:0',
+        ]);
 
-      final tunnel = await SystemSshTunnel.attach(
-        process,
-        localPort: localPort,
-      );
-      await ended(tunnel).timeout(const Duration(seconds: 10));
+        final tunnel = await SystemSshTunnel.attach(
+          process,
+          localPort: localPort,
+        );
+        await ended(tunnel).timeout(const Duration(seconds: 10));
 
-      expect(
-        records
-            .where((record) => record.level == Level.FINE)
-            .map((record) => record.message),
-        [
-          connectingLine,
-          listeningLine,
-          sessionLine,
-          'debug1: channel 0: new [port listener]',
-        ],
-      );
-    });
+        expect(
+          records
+              .where((record) => record.level == Level.FINE)
+              .map((record) => record.message),
+          [
+            connectingLine,
+            listeningLine,
+            sessionLine,
+            'debug1: channel 0: new [port listener]',
+          ],
+        );
+      },
+    );
 
     test('survives an onLog that throws, and logs it at WARNING', () async {
       final process = await startFake([

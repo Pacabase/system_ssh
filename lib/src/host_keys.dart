@@ -20,8 +20,9 @@ final _unknown = RegExp(
 final _changedHost = RegExp(
   r'[Hh]ost key for (.+) has changed and you have requested strict checking',
 );
-final _changedType =
-    RegExp(r'^The fingerprint for the (\S+) key sent by the remote host is');
+final _changedType = RegExp(
+  r'^The fingerprint for the (\S+) key sent by the remote host is',
+);
 final _known = RegExp(r"^debug\d: Host '(.+)' is known and matches the ");
 
 /// Whether `ssh -G` [config] leaves `StrictHostKeyChecking` at `ask`, where
@@ -148,14 +149,14 @@ String fingerprintOf(List<int> blob, {String like = 'SHA256:'}) {
 /// The name ssh's messages give a key type, such as `ED25519` for
 /// `ssh-ed25519`.
 String keyTypeName(String type) => switch (type) {
-      'ssh-ed25519' => 'ED25519',
-      'ssh-rsa' => 'RSA',
-      'ssh-dss' => 'DSA',
-      'sk-ssh-ed25519@openssh.com' => 'ED25519-SK',
-      'sk-ecdsa-sha2-nistp256@openssh.com' => 'ECDSA-SK',
-      _ when type.startsWith('ecdsa-sha2-') => 'ECDSA',
-      _ => type,
-    };
+  'ssh-ed25519' => 'ED25519',
+  'ssh-rsa' => 'RSA',
+  'ssh-dss' => 'DSA',
+  'sk-ssh-ed25519@openssh.com' => 'ED25519-SK',
+  'sk-ecdsa-sha2-nistp256@openssh.com' => 'ECDSA-SK',
+  _ when type.startsWith('ecdsa-sha2-') => 'ECDSA',
+  _ => type,
+};
 
 /// [open]'s result, with a host key failure thrown as its own exception.
 Future<T> checkingHostKeys<T>(
@@ -178,33 +179,29 @@ List<String> hostKeyCommand(
   required String knownHosts,
   Map<String, String> config = const {},
   String executable = 'ssh',
-}) =>
-    [
-      executable,
-      '-nNTv',
-      ...['-o', 'BatchMode=yes'],
-      ...['-o', 'StrictHostKeyChecking=accept-new'],
-      ...[
-        '-o',
-        'UserKnownHostsFile=${[
-          knownHosts,
-          ...userKnownHostsFiles(config),
-        ].map((file) => '"${file.replaceAll(r'\', '/')}"').join(' ')}',
-      ],
-      ...['-o', 'PreferredAuthentications=none'],
-      ...['-o', 'ClearAllForwardings=yes'],
-      ...['-o', 'PermitLocalCommand=no'],
-      ...['-o', 'ControlPath=none'],
-      if (config['forkafterauthentication'] == 'yes') ...[
-        '-o',
-        'ForkAfterAuthentication=no',
-      ],
-      if (config.isEmpty || config['connecttimeout'] == 'none') ...[
-        '-o',
-        'ConnectTimeout=15',
-      ],
-      ...destinationArguments(server),
-    ];
+}) => [
+  executable,
+  '-nNTv',
+  ...['-o', 'BatchMode=yes'],
+  ...['-o', 'StrictHostKeyChecking=accept-new'],
+  ...[
+    '-o',
+    'UserKnownHostsFile=${[knownHosts, ...userKnownHostsFiles(config)].map((file) => '"${file.replaceAll(r'\', '/')}"').join(' ')}',
+  ],
+  ...['-o', 'PreferredAuthentications=none'],
+  ...['-o', 'ClearAllForwardings=yes'],
+  ...['-o', 'PermitLocalCommand=no'],
+  ...['-o', 'ControlPath=none'],
+  if (config['forkafterauthentication'] == 'yes') ...[
+    '-o',
+    'ForkAfterAuthentication=no',
+  ],
+  if (config.isEmpty || config['connecttimeout'] == 'none') ...[
+    '-o',
+    'ConnectTimeout=15',
+  ],
+  ...destinationArguments(server),
+];
 
 /// `SystemSshClient.trustHostKey`, with the parts tests replace.
 Future<void> trustSystemHostKey(
@@ -236,8 +233,10 @@ Future<void> trustSystemHostKey(
       host: config['hostname'],
     );
 
-    final entries =
-        read.readAsLinesSync().where((line) => line.trim().isNotEmpty).toList();
+    final entries = read
+        .readAsLinesSync()
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (entries.isEmpty) {
       if (code == 127) throw sshNotFound();
       // ssh wrote no new key, so no server got far enough to print a banner:
@@ -298,31 +297,31 @@ Future<(List<String>, int)> _run(
       .transform(const Utf8Decoder(allowMalformed: true))
       .transform(const LineSplitter())
       .listen(
-    (line) {
-      logger.fine(line);
-      lines.add(line);
-      // A server that lets the `none` method in has nothing more to show. A
-      // ProxyJump host's ssh logs in to the jump host first, under its name.
-      if (host != null && line.startsWith('Authenticated to $host ')) {
-        process.kill();
-      }
-    },
-    onError: (Object _) {},
-    onDone: stderrDone.complete,
-  );
+        (line) {
+          logger.fine(line);
+          lines.add(line);
+          // A server that lets the `none` method in has nothing more to show. A
+          // ProxyJump host's ssh logs in to the jump host first, under its name.
+          if (host != null && line.startsWith('Authenticated to $host ')) {
+            process.kill();
+          }
+        },
+        onError: (Object _) {},
+        onDone: stderrDone.complete,
+      );
 
   try {
     final code = await abort.exitCodeOf(process, timeout: timeout);
     // ssh's last lines can land after its exit code; a ProxyCommand that
     // outlives it can hold stderr open longer.
-    await stderrDone.future
-        .timeout(const Duration(seconds: 1), onTimeout: () {});
+    await stderrDone.future.timeout(
+      const Duration(seconds: 1),
+      onTimeout: () {},
+    );
     abort.throwIfAborted();
     return (List<String>.unmodifiable(lines), code);
   } on TimeoutException {
-    throw const SshUnreachableException(
-      "ssh didn't read the host key in time",
-    );
+    throw const SshUnreachableException("ssh didn't read the host key in time");
   }
 }
 
@@ -338,8 +337,9 @@ List<String> userKnownHostsFiles(Map<String, String> config) =>
 /// The user's home, as ssh takes `~`: on Windows the profile, whatever
 /// `HOME` a shell set.
 String homeDirectory(Map<String, String> environment) {
-  final names =
-      Platform.isWindows ? ['USERPROFILE', 'HOME'] : ['HOME', 'USERPROFILE'];
+  final names = Platform.isWindows
+      ? ['USERPROFILE', 'HOME']
+      : ['HOME', 'USERPROFILE'];
   // Variables the app sets for ssh come before the process's own.
   return ([environment, Platform.environment]
               .expand((variables) => names.map((name) => variables[name]))
@@ -362,22 +362,23 @@ File userKnownHostsFile(
     );
   }
 
-  final user = environment['USER'] ??
+  final user =
+      environment['USER'] ??
       Platform.environment['USER'] ??
       Platform.environment['USERNAME'] ??
       '';
   final path = first
       .replaceFirst(RegExp(r'^~(?=[\\/]|$)'), home)
       .replaceAllMapped(RegExp('%(.)'), (match) {
-    return switch (match[1]) {
-      '%' => '%',
-      'd' => home,
-      'u' => user,
-      _ => throw SshConfigException(
-          "can't tell which file UserKnownHostsFile $first names",
-        ),
-    };
-  });
+        return switch (match[1]) {
+          '%' => '%',
+          'd' => home,
+          'u' => user,
+          _ => throw SshConfigException(
+            "can't tell which file UserKnownHostsFile $first names",
+          ),
+        };
+      });
   final expanded = path.replaceAllMapped(RegExp(r'\$\{(\w+)\}'), (match) {
     final name = match[1]!;
     return environment[name] ??

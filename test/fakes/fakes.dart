@@ -8,8 +8,9 @@ import 'package:system_ssh/src/ports.dart';
 import 'package:test/test.dart';
 
 /// The compiled `fake_ssh_main.dart`.
-final Future<String> fakeSshExecutable =
-    compileExecutable('test/fakes/fake_ssh_main.dart');
+final Future<String> fakeSshExecutable = compileExecutable(
+  'test/fakes/fake_ssh_main.dart',
+);
 
 /// [source], relative to the package root, compiled to an executable.
 ///
@@ -55,9 +56,9 @@ Future<String> compileExecutable(String source) async {
 }
 
 int _fnv1a(List<int> bytes) => bytes.fold(
-      0x811c9dc5,
-      (hash, byte) => ((hash ^ byte) * 0x01000193) & 0xffffffff,
-    );
+  0x811c9dc5,
+  (hash, byte) => ((hash ^ byte) * 0x01000193) & 0xffffffff,
+);
 
 /// The fake run directly, playing the steps in [arguments].
 final class FakeCommand {
@@ -88,10 +89,11 @@ final class FakeCommand {
 Future<FakeCommand> fakeCommand(List<String> steps) async {
   final directory = Directory.systemTemp.createTempSync('fake_command');
   final record = File('${directory.path}/pids');
-  final command = FakeCommand._(
-    [await fakeSshExecutable, 'record:${record.path}', ...steps],
-    record,
-  );
+  final command = FakeCommand._([
+    await fakeSshExecutable,
+    'record:${record.path}',
+    ...steps,
+  ], record);
   addTearDown(() {
     for (final pid in command.pids) {
       Process.killPid(pid, ProcessSignal.sigkill);
@@ -127,8 +129,9 @@ void deleteSoon(Directory directory) {
 
 /// The exit code of a process [Process.kill] stopped: SIGTERM's on POSIX,
 /// non-zero on Windows.
-final Matcher terminated =
-    Platform.isWindows ? isNot(0) : equals(-ProcessSignal.sigterm.signalNumber);
+final Matcher terminated = Platform.isWindows
+    ? isNot(0)
+    : equals(-ProcessSignal.sigterm.signalNumber);
 
 /// What [read] returns once it isn't null, polling until [timeout].
 Future<T> eventually<T extends Object>(
@@ -186,7 +189,7 @@ Future<bool> stops(int pid) async {
 /// free one.
 final class CountingPorts {
   CountingPorts([Future<int> Function(int pick)? port])
-      : _port = port ?? ((_) => pickFreePort());
+    : _port = port ?? ((_) => pickFreePort());
 
   final Future<int> Function(int pick) _port;
   int _picks = 0;
@@ -200,21 +203,27 @@ final class CountingPorts {
 
 final _kill = DynamicLibrary.process()
     .lookupFunction<Int32 Function(Int32, Int32), int Function(int, int)>(
-  'kill',
-);
+      'kill',
+    );
 
 const _processQueryLimitedInformation = 0x1000;
 const _stillActive = 259;
 
 final _kernel32 = DynamicLibrary.open('kernel32.dll');
 
-final _openProcess = _kernel32.lookupFunction<
-    Pointer<Void> Function(Uint32, Int32, Uint32),
-    Pointer<Void> Function(int, int, int)>('OpenProcess');
+final _openProcess = _kernel32
+    .lookupFunction<
+      Pointer<Void> Function(Uint32, Int32, Uint32),
+      Pointer<Void> Function(int, int, int)
+    >('OpenProcess');
 
-final _getExitCodeProcess = _kernel32.lookupFunction<
-    Int32 Function(Pointer<Void>, Pointer<Uint32>),
-    int Function(Pointer<Void>, Pointer<Uint32>)>('GetExitCodeProcess');
+final _getExitCodeProcess = _kernel32
+    .lookupFunction<
+      Int32 Function(Pointer<Void>, Pointer<Uint32>),
+      int Function(Pointer<Void>, Pointer<Uint32>)
+    >('GetExitCodeProcess');
 
-final _closeHandle = _kernel32.lookupFunction<Int32 Function(Pointer<Void>),
-    int Function(Pointer<Void>)>('CloseHandle');
+final _closeHandle = _kernel32
+    .lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>(
+      'CloseHandle',
+    );
