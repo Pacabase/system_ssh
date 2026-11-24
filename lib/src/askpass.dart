@@ -414,13 +414,16 @@ final _windowsHelper = _windowsCommand
 // it never appears in a process's arguments. The background loop ends once
 // ssh is gone or the FIFO is, by the script or by the app closing, and then
 // answers `n` through the FIFO it shares, so a script still waiting gives
-// up. It leaves stdout alone, since ssh reads it to the end. ssh leaves its
+// up. It leaves stdout alone, since ssh reads it to the end. The script
+// ignores TERM: stopping ssh stops its children first, and ssh, seeing the
+// script fail, would send an empty password before its own TERM came. ssh leaves its
 // end of that stdout pipe open in the script too, so the script closes what
 // it inherited first, and the loop never waits on the script itself.
 const _posixScript = r'''#!/bin/sh
 d=@DIR@
 case "${SSH_ASKPASS_PROMPT:-}" in none) exit 0 ;; confirm) exit 1 ;; esac
 [ -d "$d" ] || exit 1
+trap '' TERM
 exec 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-
 umask 077
 r="$d/$$"
