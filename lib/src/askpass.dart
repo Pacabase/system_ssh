@@ -160,8 +160,8 @@ final class AskPass {
     _helper = '${_directory.path}/askpass';
     final quoted = "'${_directory.path.replaceAll("'", r"'\''")}'";
     File(_helper).writeAsStringSync(_posixScript.replaceAll('@DIR@', quoted));
-    // createTemp already made the directory 0700.
-    final chmod = await Process.run('chmod', ['700', _helper]);
+    // createTemp leaves the directory to the umask on Linux, so 755 there.
+    final chmod = await Process.run('chmod', ['700', _directory.path, _helper]);
     if (chmod.exitCode != 0) {
       throw SshFailedException(
         'could not set up the password prompt: ${chmod.stderr}',

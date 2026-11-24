@@ -381,7 +381,8 @@ Future<bool> _ask(String directory, List<String> arguments) async {
     final expected = line.substring(0, tab);
     final prompt = line.substring(tab + 1);
 
-    final result = await Process.run(helper, [prompt]);
+    // ssh reads the answer as bytes, not in the system's code page.
+    final result = await Process.run(helper, [prompt], stdoutEncoding: utf8);
     // ssh takes the answer up to its first line break.
     final answered = '${result.stdout}'.split(RegExp('[\r\n]')).first;
     File('$directory/answers').writeAsStringSync(
