@@ -310,20 +310,22 @@ esac
 ''';
 
 // cmd.exe runs it, so it reads its argument only inside quotes, where `&`
-// and the like are plain text. A prompt can't hold a `"` here: on Windows,
+// and the like are plain text. PowerShell's stderr goes nowhere: it shares
+// ssh's, and its first start there writes a progress record. A prompt can't hold a `"` here: on Windows,
 // only ssh's own prompts come, whose words are the user's config and paths.
 const _windowsCommand = r'''@echo off
 setlocal DisableDelayedExpansion
 if "%SSH_ASKPASS_PROMPT%"=="none" exit /b 0
 if "%SSH_ASKPASS_PROMPT%"=="confirm" exit /b 1
 set "SYSTEM_SSH_PROMPT=%~1"
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -EncodedCommand @SCRIPT@
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -EncodedCommand @SCRIPT@ 2>nul
 exit /b %ERRORLEVEL%
 ''';
 
 // An encoded command, which no execution policy blocks.
 const _windowsScript = r'''
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 try {
   $utf8 = New-Object System.Text.UTF8Encoding($false)
   $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', @PORT@)
