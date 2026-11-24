@@ -11,21 +11,30 @@
 /// },
 /// ```
 sealed class SshPrompt {
-  const SshPrompt(this.text);
+  const SshPrompt(this.text, {this.isVerified = true});
 
   /// The prompt as ssh shows it, such as `alice@ssh.example.com's password: `.
   /// For an [SshCodePrompt] these are the server's own words, so show them as
   /// plain text, never as markup.
   final String text;
 
+  /// Whether ssh tells a server's questions apart from its own, so the kind
+  /// is sure. False before OpenSSH 8.5, which doesn't put `(user@host)` in
+  /// front of a server's question, so a server could word one as ssh's own,
+  /// such as a passphrase prompt. A terminal shows those prompts the same
+  /// way; an app may want to say where the prompt may come from, or not keep
+  /// what's typed.
+  final bool isVerified;
+
   @override
   bool operator ==(Object other) =>
       other is SshPrompt &&
       other.runtimeType == runtimeType &&
-      other.text == text;
+      other.text == text &&
+      other.isVerified == isVerified;
 
   @override
-  int get hashCode => Object.hash(runtimeType, text);
+  int get hashCode => Object.hash(runtimeType, text, isVerified);
 
   // Spelled out, since an obfuscated build renames runtimeType.
   @override
@@ -46,7 +55,11 @@ sealed class SshPrompt {
 /// ```
 final class SshPassphrasePrompt extends SshPrompt {
   /// ssh's [text], asking for the passphrase of [keyPath].
-  const SshPassphrasePrompt(super.text, {required this.keyPath});
+  const SshPassphrasePrompt(
+    super.text, {
+    required this.keyPath,
+    super.isVerified,
+  });
 
   /// The key file, as ssh names it, cut short past 100 characters.
   final String keyPath;
@@ -56,7 +69,7 @@ final class SshPassphrasePrompt extends SshPrompt {
 /// the way.
 final class SshPasswordPrompt extends SshPrompt {
   /// ssh's [text], such as `alice@ssh.example.com's password: `.
-  const SshPasswordPrompt(super.text);
+  const SshPasswordPrompt(super.text, {super.isVerified});
 }
 
 /// Anything else: mostly the server asking in its own words
@@ -65,7 +78,7 @@ final class SshPasswordPrompt extends SshPrompt {
 /// also ssh's own `Enter PIN for ED25519-SK key …: ` for a hardware key.
 final class SshCodePrompt extends SshPrompt {
   /// The server's [text].
-  const SshCodePrompt(super.text);
+  const SshCodePrompt(super.text, {super.isVerified});
 }
 
 /// Answers an [SshPrompt]: the text to send, or null to cancel the login. An
@@ -88,11 +101,18 @@ bool isHostKeyQuestion(String text) =>
     (text.contains('Are you sure you want to continue connecting (yes/no') ||
         text.startsWith("Please type 'yes', 'no' or the fingerprint"));
 
-/// [text], from ssh, as the kind of prompt its wording says.
-SshPrompt classifyPrompt(String text) {
+/// [text], from ssh, as the kind of prompt its wording says; see
+/// [SshPrompt.isVerified].
+SshPrompt classifyPrompt(String text, {bool isVerified = true}) {
   if (_passphrase.firstMatch(text) case final match?) {
-    return SshPassphrasePrompt(text, keyPath: match[1]!);
+    return SshPassphrasePrompt(
+      text,
+      keyPath: match[1]!,
+      isVerified: isVerified,
+    );
   }
-  if (_password.hasMatch(text)) return SshPasswordPrompt(text);
-  return SshCodePrompt(text);
+  if (_password.hasMatch(text)) {
+    return SshPasswordPrompt(text, isVerified: isVerified);
+  }
+  return SshCodePrompt(text, isVerified: isVerified);
 }

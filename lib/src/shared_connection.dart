@@ -58,7 +58,8 @@ final class ConnectionPool {
     ].join('\u0000');
 
     var connection = _connections[key];
-    if (connection == null || connection.isStopping) {
+    final isNew = connection == null || connection.isStopping;
+    if (isNew) {
       connection = _Connection(
         this,
         key,
@@ -68,10 +69,12 @@ final class ConnectionPool {
         onPrompt: onPrompt,
       );
       _connections[key] = connection;
-      connection.start(config);
     }
 
-    return connection.hold(onLog: onLog, abortTrigger: abortTrigger);
+    // Held before it starts, so the first tunnel hears what it says at once.
+    final holding = connection.hold(onLog: onLog, abortTrigger: abortTrigger);
+    if (isNew) connection.start(config);
+    return holding;
   }
 }
 
@@ -167,11 +170,18 @@ final class _Connection {
 
   Future<void> _start(Map<String, String> config) async {
     _directory = _masterDirectory();
+    void toWaiting(SshLog log) {
+      for (final onLog in [..._waiting]) {
+        reportTo(onLog, log);
+      }
+    }
+
     final master = await withPrompts(
       onPrompt,
       executable: executable,
       config: config,
       environment: environment,
+      onLog: toWaiting,
       open: (prompts) {
         final command = sshCommand(
           _server,
@@ -189,11 +199,7 @@ final class _Connection {
             await startWatched(command, environment: prompts.environment),
             readiness: MasterReadiness(),
             describe: () => 'the shared connection to ${_server.host}',
-            onLog: (log) {
-              for (final onLog in [..._waiting]) {
-                reportTo(onLog, log);
-              }
-            },
+            onLog: toWaiting,
             onLineAfterReady: _route,
             abortTrigger: prompts.stopOr(_abortStart.future),
           ),

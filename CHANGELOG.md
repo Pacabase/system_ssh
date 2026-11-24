@@ -18,9 +18,21 @@
   );
   ```
 
-  On Windows and before OpenSSH 8.5, only passphrases and passwords come,
-  not a server's questions, and none through a `ProxyJump` or
-  `ProxyCommand`.
+  On Windows, only passphrases and passwords come, not a server's
+  questions, and none through a `ProxyJump` or `ProxyCommand`. Before
+  OpenSSH 8.5, which doesn't mark a server's questions, every prompt still
+  comes, as in a terminal, with `isVerified` false.
+- **Breaking:** `onLog` gets an `SshPromptsOff`, a new kind of `SshLog`, when
+  a tunnel has an `onPrompt` but ssh won't ask through it, with the reason,
+  such as a `ProxyJump` on Windows. A refused login then says the reason at
+  the end of its message. A `switch` that names every `SshLog` needs an
+  `SshPromptsOff` case.
+
+  ```dart
+  onLog: (log) {
+    if (log is SshPromptsOff) showWarning(log.reason);
+  },
+  ```
 - **Breaking:** a cancelled prompt throws an `SshLoginCancelledException`, a
   new `SshException` that is neither permanent nor temporary. A `switch`
   that names every `SshException` needs an `SshLoginCancelledException`

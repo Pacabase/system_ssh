@@ -97,34 +97,6 @@ void main() {
   });
 
   group('canPrompt', () {
-    for (final (version, asks) in [
-      ((8, 2), false),
-      ((8, 4), false),
-      ((8, 5), true),
-      (null, true)
-    ]) {
-      test(
-          '${asks ? 'lets a ProxyJump ask' : 'keeps a ProxyJump from asking'} '
-          'on OpenSSH $version', () {
-        expect(
-          canPrompt(
-            const {'proxyjump': 'jump'},
-            onWindows: false,
-            version: version,
-          ),
-          asks,
-        );
-        expect(
-          canPrompt(
-            const {'batchmode': 'no'},
-            onWindows: false,
-            version: version,
-          ),
-          isTrue,
-        );
-      });
-    }
-
     test('lets every config ask outside Windows', () {
       expect(canPrompt(const {}, onWindows: false), isTrue);
       expect(
@@ -211,12 +183,16 @@ void main() {
         ..attemptModes([AttemptMode.ready]);
     });
 
-    Future<SshTunnel> open({SshPromptHandler? onPrompt}) async {
+    Future<SshTunnel> open({
+      SshPromptHandler? onPrompt,
+      void Function(SshLog log)? onLog,
+    }) async {
       final tunnel = await openSystemForward(
         server,
         forward: localForwardTo('db.example.com', 3306),
         executable: fake.path,
         onPrompt: onPrompt,
+        onLog: onLog,
       );
       addTearDown(tunnel.close);
       return tunnel;
@@ -460,17 +436,27 @@ void main() {
       ('OpenSSH_for_Windows_8.1p1, LibreSSL 3.0.2', true),
       ('OpenSSH_8.4p1 Debian-5+deb11u3, OpenSSL 1.1.1w', false),
     ]) {
-      test("asks only ssh's own prompts on $version", () async {
+      test('asks as a terminal would, unverified, on $version', () async {
         fake
           ..version(version)
           ..asks({passphrase: 'secret'});
+        final prompts = <SshPrompt>[];
 
-        await open(onPrompt: (_) async => 'secret');
+        await open(
+          onPrompt: (prompt) async {
+            prompts.add(prompt);
+            return 'secret';
+          },
+        );
 
         expect(fake.answers, ['secret']);
+        // Only ssh's own prompts come on Windows, so it knows who asks.
+        expect(prompts.single.isVerified, Platform.isWindows);
         expect(
           fake.attempts.single.join(' '),
-          contains('-o KbdInteractiveAuthentication=no'),
+          Platform.isWindows
+              ? contains('-o KbdInteractiveAuthentication=no')
+              : isNot(contains('KbdInteractiveAuthentication')),
         );
         if (setsDisplay) {
           expect(fake.attemptEnvironments.single['DISPLAY'], isNotNull);
@@ -478,18 +464,20 @@ void main() {
       });
     }
 
-    test('asks nothing through a ProxyJump on OpenSSH before 8.5', () async {
-      fake
-        ..version('OpenSSH_8.2p1 Ubuntu-4ubuntu0.11, OpenSSL 1.1.1f')
-        ..answerConfig(['host ssh.example.com', 'proxyjump jump'])
-        ..asks({passphrase: null});
+    test(
+      'asks through a ProxyJump on OpenSSH before 8.5',
+      () async {
+        fake
+          ..version('OpenSSH_8.2p1 Ubuntu-4ubuntu0.11, OpenSSL 1.1.1f')
+          ..answerConfig(['host ssh.example.com', 'proxyjump jump'])
+          ..asks({passphrase: 'secret'});
 
-      await expectLater(
-        open(onPrompt: (_) async => 'secret'),
-        throwsA(isA<SshLoginRefusedException>()),
-      );
-      expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
-    });
+        await open(onPrompt: (_) async => 'secret');
+
+        expect(fake.answers, ['secret']);
+      },
+      testOn: '!windows',
+    );
 
     test(
       'lets the server ask on OpenSSH 8.5 and newer',
@@ -497,9 +485,16 @@ void main() {
         fake
           ..version('OpenSSH_8.5p1, OpenSSL 1.1.1k')
           ..asks({passphrase: 'secret'});
+        final prompts = <SshPrompt>[];
 
-        await open(onPrompt: (_) async => 'secret');
+        await open(
+          onPrompt: (prompt) async {
+            prompts.add(prompt);
+            return 'secret';
+          },
+        );
 
+        expect(prompts.single.isVerified, isTrue);
         expect(
           fake.attempts.single.join(' '),
           isNot(contains('KbdInteractiveAuthentication')),
@@ -530,17 +525,27 @@ void main() {
     );
 
     test(
-      'asks nothing on Windows through a ProxyJump',
+      'asks nothing on Windows through a ProxyJump, and says why',
       () async {
         fake
           ..answerConfig(['host ssh.example.com', 'proxyjump jump'])
           ..asks({passphrase: null});
+        const why = "Windows' ssh can't ask safely when the config sets a "
+            'proxyjump';
+        final logs = <SshLog>[];
 
         await expectLater(
-          open(onPrompt: (_) async => 'secret'),
-          throwsA(isA<SshLoginRefusedException>()),
+          open(onPrompt: (_) async => 'secret', onLog: logs.add),
+          throwsA(
+            isA<SshLoginRefusedException>().having(
+              (exception) => exception.message,
+              'message',
+              endsWith('(not asking for passwords: $why)'),
+            ),
+          ),
         );
         expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
+        expect(logs.first, const SshPromptsOff(why));
       },
       testOn: 'windows',
     );

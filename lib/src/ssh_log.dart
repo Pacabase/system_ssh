@@ -60,6 +60,28 @@ final class SshMessage extends SshLog {
   String toString() => 'SshMessage($line)';
 }
 
+/// The tunnel was given an `onPrompt`, but ssh won't ask through it, so a
+/// login that needs a password or passphrase is refused; [reason] says why.
+/// Unlike the others, its [line] is this package's, not ssh's.
+///
+/// ```dart
+/// onLog: (log) {
+///   if (log is SshPromptsOff) showWarning(log.reason);
+/// },
+/// ```
+final class SshPromptsOff extends SshLog {
+  /// An entry saying prompts are off for [reason], as a fake [SshClient]
+  /// would report it.
+  const SshPromptsOff(this.reason) : super('Not asking for passwords: $reason');
+
+  /// Why ssh won't ask, such as
+  /// `Windows' ssh can't ask safely when the config sets a proxyjump`.
+  final String reason;
+
+  @override
+  String toString() => 'SshPromptsOff($reason)';
+}
+
 /// A connection through the open tunnel that couldn't be forwarded, while the
 /// tunnel itself stays open; switch on the subclass for why.
 sealed class SshForwardFailed extends SshLog {
