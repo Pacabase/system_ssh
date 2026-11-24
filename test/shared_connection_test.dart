@@ -674,8 +674,16 @@ void main() {
       final abort = Completer<void>();
 
       final first = open(abortTrigger: abort.future);
-      final second = open();
+      // The second waits on the login once the login's lines reach it.
+      final heard = Completer<void>();
+      final second = open(
+        onLog: (_) {
+          if (!heard.isCompleted) heard.complete();
+        },
+      );
       await eventually(() => fake.attemptPid(1));
+      fake.masterSays('debug1: Connecting to ssh.example.com port 22.');
+      await heard.future.timeout(const Duration(seconds: 10));
       abort.complete();
       await expectLater(first, throwsA(isA<SshTunnelAbortedException>()));
 
