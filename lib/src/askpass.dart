@@ -12,32 +12,59 @@ import 'ssh_prompt.dart';
 /// never goes through an argument, the environment or a file: a FIFO in a
 /// directory only this user can open on POSIX, and a loopback socket that
 /// asks for a token on Windows. Once a prompt is cancelled, the rest are too,
-/// without asking.
+/// without asking, and ssh is stopped before it would send an empty password.
 final class AskPass {
   AskPass._(this._directory, this._onPrompt);
 
-  /// Sets up the helper for [onPrompt] in a directory of its own.
-  static Future<AskPass> start(SshPromptHandler onPrompt) async {
-    final Directory directory;
-    try {
-      directory = Directory.systemTemp.createTempSync('ssh_askpass');
-    } on FileSystemException catch (exception) {
-      throw SshFailedException(
-        'could not make a directory for the password prompt: '
-        '${exception.message}',
-      );
-    }
+  /// Sets up the helper for [onPrompt] in a directory of its own, in the
+  /// first of [bases] (by default the temp directory, then
+  /// `XDG_RUNTIME_DIR`, then `~/.cache`) where it can run: a hardened `/tmp`
+  /// may forbid running programs.
+  static Future<AskPass> start(
+    SshPromptHandler onPrompt, {
+    List<String>? bases,
+  }) async {
+    final failures = <String>[];
+    for (final base in bases ?? _bases()) {
+      final Directory directory;
+      try {
+        directory = Directory(base).createTempSync('ssh_askpass');
+      } on FileSystemException catch (exception) {
+        failures.add('$base: ${exception.message}');
+        continue;
+      }
 
-    final askPass = AskPass._(directory, onPrompt);
-    try {
-      await (Platform.isWindows
-          ? askPass._startWindows()
-          : askPass._startPosix());
-    } catch (exception) {
-      await askPass.close();
-      rethrow;
+      final askPass = AskPass._(directory, onPrompt);
+      try {
+        await (Platform.isWindows
+            ? askPass._startWindows()
+            : askPass._startPosix());
+        return askPass;
+      } on _NotRunnable catch (exception) {
+        failures.add('$base: ${exception.reason}');
+        await askPass.close();
+      } catch (exception) {
+        await askPass.close();
+        rethrow;
+      }
     }
-    return askPass;
+    throw SshConfigException(
+      'no folder lets the password prompt run: ${failures.join('; ')}',
+    );
+  }
+
+  static List<String> _bases() {
+    final environment = Platform.environment;
+    return [
+      Directory.systemTemp.path,
+      if (!Platform.isWindows) ...[
+        if (environment['XDG_RUNTIME_DIR'] case final runtime?
+            when runtime.isNotEmpty)
+          runtime,
+        if (environment['HOME'] case final home? when home.isNotEmpty)
+          if (Directory('$home/.cache').existsSync()) '$home/.cache',
+      ],
+    ];
   }
 
   final Directory _directory;
@@ -49,8 +76,15 @@ final class AskPass {
   final _connections = <Socket>{};
   var _isClosed = false;
 
-  // One prompt at a time, so an app never shows two dialogs at once.
-  var _queue = Future<void>.value();
+  // One prompt at a time across every tunnel, so an app never shows two
+  // dialogs at once. A closed helper's prompt stops holding up the rest.
+  static var _queue = Future<void>.value();
+  final _closed = Completer<void>();
+
+  /// Completes when ssh must be stopped: it would send an empty password, or
+  /// an empty answer to the server's question, for a cancelled prompt.
+  Future<void> get stop => _stop.future;
+  final _stop = Completer<void>();
 
   /// Whether [_onPrompt] answered null to any prompt.
   bool get wasCancelled => _wasCancelled;
@@ -82,7 +116,7 @@ final class AskPass {
   /// login, the error [_onPrompt] threw, or an [SshLoginCancelledException].
   /// Any other failure, such as a host key or a taken port, stays itself.
   Object failure(SshException exception) {
-    if (exception is! SshLoginRefusedException) return exception;
+    if (!_isLoginFailure(exception)) return exception;
     if (_error case (final error, _)) return error;
     if (_wasCancelled) {
       return SshLoginCancelledException(
@@ -95,7 +129,7 @@ final class AskPass {
 
   /// Rethrows [exception] as [failure] says.
   Never rethrowAs(SshException exception, StackTrace stackTrace) {
-    if (exception is SshLoginRefusedException) {
+    if (_isLoginFailure(exception)) {
       if (_error case (final error, final errorStackTrace)) {
         Error.throwWithStackTrace(error, errorStackTrace);
       }
@@ -112,10 +146,16 @@ final class AskPass {
     Error.throwWithStackTrace(failure(exception), stackTrace);
   }
 
+  /// A refused login, or ssh stopped because of a cancelled prompt.
+  bool _isLoginFailure(SshException exception) =>
+      exception is SshLoginRefusedException ||
+      (_stop.isCompleted && exception is SshTunnelAbortedException);
+
   /// Stops answering, and has any helper still waiting give up.
   Future<void> close() async {
     if (_isClosed) return;
     _isClosed = true;
+    _closed.complete();
     _poll?.cancel();
     await _server?.close();
     // Closing the server leaves the helpers it accepted waiting; this ends
@@ -134,26 +174,43 @@ final class AskPass {
   /// The answer to [text], or null to cancel. Never throws.
   Future<String?> _answer(String text) {
     final answer = _queue.then((_) async {
-      if (_isClosed || _wasCancelled || _error != null) return null;
+      if (_isClosed) return null;
+      // An unknown ProxyJump host's key, which the jump's own ssh asks
+      // about; host keys are for trustHostKey to settle.
+      if (isHostKeyQuestion(text)) {
+        logger.info('Declined a host key question: $text');
+        return null;
+      }
       final prompt = classifyPrompt(text);
+      if (_wasCancelled || _error != null) return _refuse(prompt);
       logger.info('ssh asks: $prompt');
       try {
         final answer = await _onPrompt(prompt);
         if (answer == null) {
           _wasCancelled = true;
-        } else if (answer.contains(RegExp('[\r\n]'))) {
+          return _refuse(prompt);
+        }
+        if (answer.contains(RegExp('[\r\n]'))) {
           logger.warning('An answer with a line break was cancelled');
           _wasCancelled = true;
-          return null;
+          return _refuse(prompt);
         }
         return answer;
-      } catch (error, stackTrace) {
-        _error ??= (error, stackTrace);
-        return null;
+      } catch (exception, stackTrace) {
+        _error ??= (exception, stackTrace);
+        return _refuse(prompt);
       }
     });
-    _queue = answer.then((_) {});
+    _queue = Future.any([answer.then((_) {}), _closed.future]);
     return answer;
+  }
+
+  /// No answer. ssh skips a key whose passphrase isn't given, but sends a
+  /// password or a server's question empty, which the server counts as a
+  /// failed login, so for those ssh is stopped instead.
+  String? _refuse(SshPrompt prompt) {
+    if (prompt is! SshPassphrasePrompt && !_stop.isCompleted) _stop.complete();
+    return null;
   }
 
   Future<void> _startPosix() async {
@@ -166,6 +223,17 @@ final class AskPass {
       throw SshFailedException(
         'could not set up the password prompt: ${chmod.stderr}',
       );
+    }
+    // A notice, which the helper answers at once, shows it can run here.
+    try {
+      final probe = await Process.run(
+        _helper,
+        const [],
+        environment: const {'SSH_ASKPASS_PROMPT': 'none'},
+      );
+      if (probe.exitCode != 0) throw _NotRunnable('exit ${probe.exitCode}');
+    } on ProcessException catch (exception) {
+      throw _NotRunnable(exception.message);
     }
     _poll = Timer.periodic(const Duration(milliseconds: 50), (_) => _scan());
   }
@@ -192,7 +260,12 @@ final class AskPass {
       } on FileSystemException {
         continue;
       }
-      unawaited(_answer(text).then((answer) => _reply(id, answer)));
+      // A helper left unanswered goes with ssh, which is being stopped.
+      unawaited(
+        _answer(text).then((answer) {
+          if (!_stop.isCompleted) _reply(id, answer);
+        }),
+      );
     }
   }
 
@@ -271,6 +344,9 @@ final class AskPass {
       );
 
       final answer = await _answer(text);
+      // Holding the connection keeps the helper from answering until ssh,
+      // which is being stopped, and the helper with it, are gone.
+      if (_stop.isCompleted) return await _closed.future;
       socket.write(answer == null ? 'n\n' : 'y$answer\n');
       await socket.flush();
       await lines.cancel();
@@ -440,17 +516,18 @@ Future<(int, int)?> _readVersion(
 }
 
 /// Throws an [SshConfigException] when [executable] is an OpenSSH older than
-/// 8.4, whose `SSH_ASKPASS` can't be made to ask without a terminal.
+/// 8.5: 8.4 added `SSH_ASKPASS_REQUIRE`, and 8.5 began marking the server's
+/// own questions with `(user@host)`, so it can't word one as ssh's prompt.
 Future<void> checkPromptSupport(
   String executable, {
   Map<String, String> environment = const {},
 }) async {
   final version = await sshVersion(executable, environment: environment);
   if (version case (final major, final minor)
-      when major < 8 || (major == 8 && minor < 4)) {
+      when major < 8 || (major == 8 && minor < 5)) {
     throw SshConfigException(
       'OpenSSH $major.$minor is too old to ask for a password or passphrase; '
-      'it needs 8.4 or newer',
+      'it needs 8.5 or newer',
     );
   }
 }
@@ -480,7 +557,13 @@ String? _whyNoPrompts(Map<String, String> config, {required bool onWindows}) {
   return null;
 }
 
-const _inPrompts = ['user', 'hostname', 'identityfile', 'certificatefile'];
+const _inPrompts = [
+  'user',
+  'hostname',
+  'hostkeyalias',
+  'identityfile',
+  'certificatefile',
+];
 final _readByCmd = RegExp(r'["%!^&|<>]');
 
 /// Runs [open] with the environment and options ssh needs to ask
@@ -510,6 +593,7 @@ Future<T> withPrompts<T>(
         {...environment, ...askPass.environment},
         enabled: true,
         ownOnly: Platform.isWindows,
+        stop: askPass.stop,
       ),
     );
   } on SshException catch (exception, stackTrace) {
@@ -522,12 +606,18 @@ Future<T> withPrompts<T>(
 /// How one ssh asks for passwords: the [environment] to run it in, and
 /// whether its command turns prompts on.
 final class SshPrompts {
-  SshPrompts._(this.environment, {required this.enabled, this.ownOnly = false});
+  SshPrompts._(
+    this.environment, {
+    required this.enabled,
+    this.ownOnly = false,
+    this.stop,
+  });
 
   /// No prompts: ssh runs in [environment] with `BatchMode=yes`.
   SshPrompts.none(this.environment)
       : enabled = false,
-        ownOnly = false;
+        ownOnly = false,
+        stop = null;
 
   final Map<String, String> environment;
 
@@ -536,4 +626,26 @@ final class SshPrompts {
 
   /// For `sshCommand`'s `ownPromptsOnly`.
   final bool ownOnly;
+
+  /// Completes when ssh must be stopped; see [AskPass.stop].
+  final Future<void>? stop;
+
+  /// What stops ssh while it connects: [abortTrigger] or [stop]. A trigger
+  /// that fails never aborts, as before.
+  Future<void>? stopOr(Future<void>? abortTrigger) {
+    final stop = this.stop;
+    if (stop == null) return abortTrigger;
+    if (abortTrigger == null) return stop;
+    return Future.any([
+      abortTrigger.then((_) {},
+          onError: (Object _) => Completer<void>().future),
+      stop,
+    ]);
+  }
+}
+
+final class _NotRunnable implements Exception {
+  const _NotRunnable(this.reason);
+
+  final String reason;
 }

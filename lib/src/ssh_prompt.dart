@@ -75,9 +75,18 @@ typedef SshPromptHandler = Future<String?> Function(SshPrompt prompt);
 final _passphrase = RegExp(r"^Enter passphrase for key '(.*)': ?$");
 
 // "Enter alice@host's old password: " and the like come when the server asks
-// for a new password.
+// for a new password. A local account name, ssh's default user, may hold a
+// space.
 final _password =
-    RegExp(r"^(Enter |Retype )?\S+@\S+'s (old |new )?password: ?$");
+    RegExp(r"^(Enter |Retype )?.+@[^@\s]+'s (old |new )?password: ?$");
+
+/// Whether [text] is ssh's yes/no question about an unknown or changed host
+/// key. A server's own questions start with `(user@host)`, so it can't pose
+/// as one.
+bool isHostKeyQuestion(String text) =>
+    !text.startsWith('(') &&
+    (text.contains('Are you sure you want to continue connecting (yes/no') ||
+        text.startsWith("Please type 'yes', 'no' or the fingerprint"));
 
 /// [text], from ssh, as the kind of prompt its wording says.
 SshPrompt classifyPrompt(String text) {

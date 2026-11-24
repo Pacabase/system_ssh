@@ -12,6 +12,6 @@ export 'src/exceptions.dart';
 export 'src/ssh_client.dart';
 export 'src/ssh_host_key.dart';
 export 'src/ssh_log.dart';
-export 'src/ssh_prompt.dart' hide classifyPrompt;
+export 'src/ssh_prompt.dart' hide classifyPrompt, isHostKeyQuestion;
 export 'src/ssh_target.dart';
 export 'src/terminal_command.dart';

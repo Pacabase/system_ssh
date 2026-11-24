@@ -74,8 +74,10 @@ abstract interface class SshClient {
   /// a password, or a server's own question such as a 2FA code. Without it,
   /// ssh asks nothing, and a login that needs an answer fails with an
   /// [SshLoginRefusedException]. Answering null cancels the login: nothing
-  /// more is asked, and once ssh has run out of ways to log in, it throws an
-  /// [SshLoginCancelledException]. Prompts come one at a time, and none comes
+  /// more is asked, ssh is stopped before it would send an empty password,
+  /// and once it has run out of ways to log in, it throws an
+  /// [SshLoginCancelledException]. Prompts come one at a time, across every
+  /// tunnel, and none comes
   /// once the tunnel is open; with `shareConnections`, only the tunnel that
   /// starts the shared login is asked, even if it is aborted while another
   /// waits on that login. The package waits as long as [onPrompt] does: the
@@ -88,7 +90,7 @@ abstract interface class SshClient {
   /// },
   /// ```
   ///
-  /// It needs OpenSSH 8.4 or newer. On Windows, only ssh's own prompts come,
+  /// It needs OpenSSH 8.5 or newer. On Windows, only ssh's own prompts come,
   /// a passphrase or a password, never a server's question, and none when a
   /// `ProxyJump` or `ProxyCommand` runs another ssh; see the README.
   ///
@@ -110,7 +112,7 @@ abstract interface class SshClient {
   /// - [SshLoginCancelledException] when the login fails after [onPrompt]
   ///   answered null, or what [onPrompt] threw.
   /// - [SshConfigException] with an [onPrompt], when ssh is older than
-  ///   OpenSSH 8.4.
+  ///   OpenSSH 8.5.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.
@@ -195,7 +197,7 @@ abstract interface class SshClient {
   /// - [SshLoginCancelledException] when the login fails after [onPrompt]
   ///   answered null, or what [onPrompt] threw.
   /// - [SshConfigException] with an [onPrompt], when ssh is older than
-  ///   OpenSSH 8.4.
+  ///   OpenSSH 8.5.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
   ///   starting with `-` or holding spaces or shell characters, or a
   ///   [localPort] or [remotePort] outside 1 to 65535.
@@ -235,7 +237,7 @@ abstract interface class SshClient {
   /// - [SshLoginCancelledException] when the login fails after [onPrompt]
   ///   answered null, or what [onPrompt] threw.
   /// - [SshConfigException] with an [onPrompt], when ssh is older than
-  ///   OpenSSH 8.4.
+  ///   OpenSSH 8.5.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.

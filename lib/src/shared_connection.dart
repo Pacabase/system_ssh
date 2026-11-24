@@ -195,7 +195,7 @@ final class _Connection {
               }
             },
             onLineAfterReady: _route,
-            abortTrigger: _abortStart.future,
+            abortTrigger: prompts.stopOr(_abortStart.future),
           ),
         );
       },

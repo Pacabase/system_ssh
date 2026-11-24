@@ -323,7 +323,7 @@ Future<SshTunnel> openSystemForward(
         localPort: port,
         bindAddress: bindAddress,
         onLog: onLog,
-        abortTrigger: abortTrigger,
+        abortTrigger: prompts.stopOr(abortTrigger),
       ),
     );
   }
@@ -475,7 +475,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
             await startWatched(command, environment: prompts.environment),
             readiness: RemoteForwardReadiness(forward),
             onLog: onLog,
-            abortTrigger: abortTrigger,
+            abortTrigger: prompts.stopOr(abortTrigger),
           ),
         ),
       );

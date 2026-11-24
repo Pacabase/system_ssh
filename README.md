@@ -162,22 +162,30 @@ final tunnel = await client.openTunnel(
   plain text: the server may have written it.
 - Answer null to cancel: nothing more is asked, and once ssh has no other
   way to log in, such as another key or your agent, it throws an
-  `SshLoginCancelledException`. If `onPrompt` throws, the login is cancelled
+  `SshLoginCancelledException`. ssh is stopped before it would send an empty
+  password or answer, which a server counts as a failed login. If `onPrompt` throws, the login is cancelled
   the same way and that error is thrown. An answer can't hold a line break;
   one that does cancels.
 - A wrong passphrase or password is asked again up to
   `NumberOfPasswordPrompts` times (3 by default); the server decides how
   often it asks its own questions. Then it throws an
   `SshLoginRefusedException`.
-- Prompts come one at a time, and only while ssh logs in, a `ProxyJump` host
-  included. The package doesn't time them out; the server ends a login
-  nobody answers, usually after two minutes.
+- Prompts come one at a time, across every tunnel, and only while ssh logs
+  in, a `ProxyJump` host included. A jump host's unknown host key is never
+  asked about: it fails with an `SshHostKeyRefusedException`. The package
+  doesn't time prompts out; the server ends a login nobody answers, usually
+  after two minutes.
+- A tunnel on a port the package picks can be retried if another program
+  takes the port while ssh logs in, and the retry asks again.
+- The helper runs from the temp folder, or, where that doesn't allow
+  running programs, `XDG_RUNTIME_DIR` or `~/.cache`.
 - With `shareConnections`, only the tunnel that starts the shared login is
   asked, so a server asks once, not once per tunnel. A tunnel with
   `onPrompt` and one without never share a connection.
 - A config that sets `BatchMode yes` still keeps ssh from asking.
-- It needs OpenSSH 8.4 or newer; an older ssh, such as Windows 10's built-in
-  8.1, throws an `SshConfigException`.
+- It needs OpenSSH 8.5 or newer, which marks a server's questions with
+  `(user@host)` so a server can't word one as ssh's own prompt; an older
+  ssh, such as Windows 10's built-in 8.1, throws an `SshConfigException`.
 - On Windows, only ssh's own prompts come, a passphrase or a password.
   Windows' ssh runs the helper through `cmd.exe`, which would read a
   server's words, or a `%` or `"` in a name, as commands. So there
@@ -326,7 +334,7 @@ try {
 |---|---|
 | **`SshPermanentException`** | |
 | `SshNotFoundException` | no `ssh` could be started; on Windows the message says how to add OpenSSH Client |
-| `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`); or `onPrompt` was passed to an ssh older than OpenSSH 8.4 |
+| `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`); or `onPrompt` was passed to an ssh older than OpenSSH 8.5 |
 | `SshPortInUseException` | the `localPort` you asked for is taken; `port` and `address` say which |
 | `SshDuplicateForwardException` | with `shareConnections`, another open tunnel on the server already has the same remote forward; `forward` says which |
 | `SshRemotePortRefusedException` | the server wouldn't listen on a remote forward's port, a remote tunnel's `remotePort` or one your config adds: it's taken there, or its sshd doesn't allow remote forwarding; `port` says which |
@@ -418,23 +426,29 @@ class FakeSshClient implements SshClient {
   Future<SshTunnel> openTunnel(SshTarget server,
           {required String remoteHost,
           required int remotePort,
+          String bindAddress = '127.0.0.1',
           int? localPort,
           void Function(SshLog log)? onLog,
+          SshPromptHandler? onPrompt,
           Future<void>? abortTrigger}) =>
       throw const SshLoginRefusedException('Permission denied (publickey).');
 
   @override
   Future<SshTunnel> openSocksProxy(SshTarget server,
-          {int? localPort,
+          {String bindAddress = '127.0.0.1',
+          int? localPort,
           void Function(SshLog log)? onLog,
+          SshPromptHandler? onPrompt,
           Future<void>? abortTrigger}) =>
       throw const SshLoginRefusedException('Permission denied (publickey).');
 
   @override
   Future<SshTunnel> openSocketTunnel(SshTarget server,
           {required String remoteSocket,
+          String bindAddress = '127.0.0.1',
           int? localPort,
           void Function(SshLog log)? onLog,
+          SshPromptHandler? onPrompt,
           Future<void>? abortTrigger}) =>
       throw UnimplementedError();
 
@@ -444,6 +458,7 @@ class FakeSshClient implements SshClient {
           required int localPort,
           int? remotePort,
           void Function(SshLog log)? onLog,
+          SshPromptHandler? onPrompt,
           Future<void>? abortTrigger}) =>
       throw UnimplementedError();
 
