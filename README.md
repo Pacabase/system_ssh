@@ -183,20 +183,35 @@ final tunnel = await client.openTunnel(
   asked, so a server asks once, not once per tunnel. A tunnel with
   `onPrompt` and one without never share a connection.
 - A config that sets `BatchMode yes` still keeps ssh from asking.
-- On Windows and before OpenSSH 8.5, only ssh's own prompts come, a
-  passphrase or a password. Keyboard-interactive logins are off there, so a
-  server that takes passwords only that way, as many PAM setups do, refuses
-  the login, and nothing asks when your config sets a `ProxyJump` or
-  `ProxyCommand`, which runs another ssh, or when `ssh -G` can't read your
-  config.
-  - Before 8.5, ssh doesn't mark a server's questions with `(user@host)`,
-    so a server could word one as ssh's own prompt. Before 8.4, ssh asks
-    through `SSH_ASKPASS` only without a terminal, so a command-line app
-    run from one gets ssh's own prompt there.
-  - Windows' ssh runs the helper through `cmd.exe`, which would read a
-    server's words, or a `%` or `"` in a name, as commands. So nothing asks
-    there either when the user, host or a key file's path holds one of
-    `" % ! ^ & | < >`.
+- On Windows, ssh runs a small helper program that the package builds with
+  your app (see [Building on Windows](#building-on-windows)), so everything
+  is asked there too.
+- Before OpenSSH 8.5, only ssh's own prompts come, a passphrase or a
+  password: ssh doesn't mark a server's questions with `(user@host)` yet,
+  so a server could word one as ssh's own prompt. Keyboard-interactive
+  logins are off there, so a server that takes passwords only that way, as
+  many PAM setups do, refuses the login, and nothing asks when your config
+  sets a `ProxyJump` or `ProxyCommand`, which runs another ssh, or when
+  `ssh -G` can't read your config. Before 8.4, ssh asks through
+  `SSH_ASKPASS` only without a terminal, so a command-line app run from one
+  gets ssh's own prompt there.
+
+### Building on Windows
+
+The package's build hook compiles the Windows helper, `system_ssh_askpass.exe`,
+when you build or run your app for Windows, and Dart or Flutter ships it
+next to your app (in `lib\` for `dart build cli`). That needs Visual
+Studio's C++ tools, which Flutter's Windows builds need anyway; nothing is
+built for macOS or Linux, where ssh runs a shell script instead.
+
+- If you sign your Windows release, sign `system_ssh_askpass.exe` with the
+  rest of it.
+- Without a C compiler the build still works, and prompts go through a
+  `.cmd` helper instead. Windows' ssh runs that through `cmd.exe`, which
+  would read a server's words, or a `%` or `"` in a name, as commands, so
+  then only ssh's own prompts come, as before OpenSSH 8.5, and nothing asks
+  either when the user, host or a key file's path holds one of
+  `" % ! ^ & | < >`.
 
 ## Sharing a connection
 
@@ -374,7 +389,7 @@ unattended tunnel needs:
 | `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no`, without `onPrompt` |
 | `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt`; on Windows also `SYSTEM_SSH_ASKPASS_PORT` and `SYSTEM_SSH_ASKPASS_TOKEN`, for the helper to reach your app; before OpenSSH 8.4 also `DISPLAY=:0` unless one is set |
-| `KbdInteractiveAuthentication=no` | with `onPrompt` on Windows or before OpenSSH 8.5, whatever your config says; see [Passwords and passphrases](#passwords-and-passphrases) |
+| `KbdInteractiveAuthentication=no` | with `onPrompt` before OpenSSH 8.5, or on Windows through the `.cmd` helper, whatever your config says; see [Passwords and passphrases](#passwords-and-passphrases) |
 | `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
 | `ConnectTimeout=15` | your config sets none |
 | `trustHostKey`'s ssh | `StrictHostKeyChecking=accept-new`, a `UserKnownHostsFile` of a temp file before yours, `PreferredAuthentications=none`, `ClearAllForwardings=yes`, `PermitLocalCommand=no`, `ControlPath=none` and `BatchMode=yes`: it reads the key without logging in or forwarding |

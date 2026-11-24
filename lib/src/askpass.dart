@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'askpass_locator.dart';
 import 'exceptions.dart';
 import 'logger.dart';
 import 'ssh_prompt.dart';
@@ -19,11 +20,14 @@ final class AskPass {
   /// Sets up the helper for [onPrompt] in a directory of its own, in the
   /// first of [bases] (by default the temp directory, then
   /// `XDG_RUNTIME_DIR`, then `~/.cache`) where it can run: a hardened `/tmp`
-  /// may forbid running programs.
+  /// may forbid running programs. On Windows, ssh runs [windowsProgram],
+  /// the helper the build hook bundled, or else a `.cmd` written there.
   static Future<AskPass> start(
     SshPromptHandler onPrompt, {
     List<String>? bases,
+    String? windowsProgram,
   }) async {
+    windowsProgram ??= bundledWindowsHelper;
     final failures = <String>[];
     for (final base in bases ?? _bases()) {
       final Directory directory;
@@ -37,7 +41,7 @@ final class AskPass {
       final askPass = AskPass._(directory, onPrompt);
       try {
         await (Platform.isWindows
-            ? askPass._startWindows()
+            ? askPass._startWindows(windowsProgram)
             : askPass._startPosix());
         return askPass;
       } on _NotRunnable catch (exception) {
@@ -100,17 +104,17 @@ final class AskPass {
 
   /// What ssh needs in its environment to ask through the helper.
   Map<String, String> get environment => {
-        'SSH_ASKPASS': _helper,
-        // Without it, ssh asks on a terminal when it has one, and before
-        // OpenSSH 8.4 only uses SSH_ASKPASS with a DISPLAY set.
-        'SSH_ASKPASS_REQUIRE': 'force',
-        // The environment of another user's process is out of reach, unlike
-        // a file in a %TEMP% that may be shared.
-        if (Platform.isWindows) ...{
-          'SYSTEM_SSH_ASKPASS_PORT': '${_server!.port}',
-          'SYSTEM_SSH_ASKPASS_TOKEN': _token,
-        },
-      };
+    'SSH_ASKPASS': _helper,
+    // Without it, ssh asks on a terminal when it has one, and before
+    // OpenSSH 8.4 only uses SSH_ASKPASS with a DISPLAY set.
+    'SSH_ASKPASS_REQUIRE': 'force',
+    // The environment of another user's process is out of reach, unlike
+    // a file in a %TEMP% that may be shared.
+    if (Platform.isWindows) ...{
+      'SYSTEM_SSH_ASKPASS_PORT': '${_server!.port}',
+      'SYSTEM_SSH_ASKPASS_TOKEN': _token,
+    },
+  };
 
   /// [exception], or what the answers say happened instead: for a refused
   /// login, the error [_onPrompt] threw, or an [SshLoginCancelledException].
@@ -138,8 +142,9 @@ final class AskPass {
       );
       if (Platform.isWindows && asked && !_helperConnected) {
         logger.warning(
-          'ssh never reached the password prompt; PowerShell may be blocked '
-          'on this computer',
+          'ssh asked, but its password helper never reached the app; '
+          'something on this computer may block it, such as a locked-down '
+          'PowerShell for the .cmd helper',
         );
       }
     }
@@ -307,12 +312,16 @@ final class AskPass {
     }
   }
 
-  Future<void> _startWindows() async {
+  Future<void> _startWindows(String? program) async {
     _token = _randomToken();
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
     server.listen(_serveWindows);
 
+    if (program != null) {
+      _helper = program;
+      return;
+    }
     _helper = '${_directory.path}\\askpass.cmd';
     File(_helper).writeAsStringSync(_windowsHelper);
   }
@@ -399,8 +408,8 @@ bool _sameToken(List<int> presented, List<int> token) {
 }
 
 List<int> _utf16le(String text) => [
-      for (final unit in text.codeUnits) ...[unit & 0xff, unit >> 8],
-    ];
+  for (final unit in text.codeUnits) ...[unit & 0xff, unit >> 8],
+];
 
 final _windowsHelper = _windowsCommand
     .replaceAll('@SCRIPT@', base64.encode(_utf16le(_windowsScript)))
@@ -505,25 +514,27 @@ Future<(int, int)?> _readVersion(
 ) async {
   final ProcessResult result;
   try {
-    result = await Process.run(executable, ['-V'], environment: environment)
-        .timeout(const Duration(seconds: 5));
+    result = await Process.run(executable, [
+      '-V',
+    ], environment: environment).timeout(const Duration(seconds: 5));
   } on ProcessException {
     return null;
   } on TimeoutException {
     return null;
   }
-  final match = RegExp(r'OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)')
-      .firstMatch('${result.stderr}${result.stdout}');
+  final match = RegExp(
+    r'OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)',
+  ).firstMatch('${result.stderr}${result.stdout}');
   if (match == null) return null;
   return (int.parse(match[1]!), int.parse(match[2]!));
 }
 
 /// Whether [version] is older than [major].[minor].
 bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
-      (final versionMajor, final versionMinor) =>
-        versionMajor < major || (versionMajor == major && versionMinor < minor),
-      null => false,
-    };
+  (final versionMajor, final versionMinor) =>
+    versionMajor < major || (versionMajor == major && versionMinor < minor),
+  null => false,
+};
 
 /// Whether ssh may ask through `onPrompt` with [config], what `ssh -G` said,
 /// and the OpenSSH [version] `ssh -V` reported.
@@ -531,35 +542,41 @@ bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
 /// Where ssh can't keep a server's words out of the prompts, only ssh's own
 /// prompts come: keyboard-interactive is turned off, and nothing asks when a
 /// `ProxyJump` or `ProxyCommand` runs another ssh, which wouldn't get that
-/// option, or when the config couldn't be read to tell. That is on Windows,
-/// where ssh runs the helper through cmd.exe, which would read a server's
-/// words, or a user, host or key file holding a character it reads, as
-/// commands; and before OpenSSH 8.5, which doesn't mark a server's
-/// questions with `(user@host)`, so a server could word one as ssh's own.
+/// option, or when the config couldn't be read to tell. That is when
+/// Windows' ssh runs the `.cmd` helper ([throughCmd]: the app was built
+/// without the bundled program) through cmd.exe, which would read a
+/// server's words, or a user, host or key file holding a character it
+/// reads, as commands; and before OpenSSH 8.5, which doesn't mark a
+/// server's questions with `(user@host)`, so a server could word one as
+/// ssh's own.
 bool canPrompt(
   Map<String, String> config, {
-  bool? onWindows,
+  bool? throughCmd,
   (int, int)? version,
 }) =>
     _whyNoPrompts(
       config,
-      onWindows: onWindows ?? Platform.isWindows,
+      throughCmd: throughCmd ?? _throughCmd,
       version: version,
     ) ==
     null;
 
 /// Whether only ssh's own prompts may come; see [canPrompt].
-bool ownPromptsOnly({bool? onWindows, (int, int)? version}) =>
-    (onWindows ?? Platform.isWindows) || _olderThan(version, 8, 5);
+bool ownPromptsOnly({bool? throughCmd, (int, int)? version}) =>
+    (throughCmd ?? _throughCmd) || _olderThan(version, 8, 5);
+
+bool get _throughCmd => Platform.isWindows && bundledWindowsHelper == null;
 
 String? _whyNoPrompts(
   Map<String, String> config, {
-  required bool onWindows,
+  required bool throughCmd,
   required (int, int)? version,
 }) {
-  if (!ownPromptsOnly(onWindows: onWindows, version: version)) return null;
-  final who =
-      onWindows ? "Windows' ssh" : 'OpenSSH ${version!.$1}.${version.$2}';
+  if (!ownPromptsOnly(throughCmd: throughCmd, version: version)) return null;
+  final who = throughCmd
+      ? "Windows' ssh, through the .cmd helper of an app built without a C "
+            'compiler,'
+      : 'OpenSSH ${version!.$1}.${version.$2}';
   if (config.isEmpty) {
     return "$who can't ask safely: ssh -G couldn't read the config";
   }
@@ -568,7 +585,7 @@ String? _whyNoPrompts(
       return "$who can't ask safely when the config sets a $option";
     }
   }
-  if (onWindows) {
+  if (throughCmd) {
     for (final option in _inPrompts) {
       if (config[option]?.contains(_readByCmd) ?? false) {
         return "$who can't ask safely when its $option holds one of "
@@ -601,11 +618,7 @@ Future<T> withPrompts<T>(
 }) async {
   if (onPrompt == null) return open(SshPrompts.none(environment));
   final version = await sshVersion(executable, environment: environment);
-  if (_whyNoPrompts(
-    config,
-    onWindows: Platform.isWindows,
-    version: version,
-  )
+  if (_whyNoPrompts(config, throughCmd: _throughCmd, version: version)
       case final why?) {
     logger.warning('Not asking for passwords: $why');
     return open(SshPrompts.none(environment));
@@ -650,9 +663,9 @@ final class SshPrompts {
 
   /// No prompts: ssh runs in [environment] with `BatchMode=yes`.
   SshPrompts.none(this.environment)
-      : enabled = false,
-        ownOnly = false,
-        stop = null;
+    : enabled = false,
+      ownOnly = false,
+      stop = null;
 
   final Map<String, String> environment;
 
@@ -672,8 +685,10 @@ final class SshPrompts {
     if (stop == null) return abortTrigger;
     if (abortTrigger == null) return stop;
     return Future.any([
-      abortTrigger.then((_) {},
-          onError: (Object _) => Completer<void>().future),
+      abortTrigger.then(
+        (_) {},
+        onError: (Object _) => Completer<void>().future,
+      ),
       stop,
     ]);
   }

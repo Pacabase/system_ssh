@@ -18,9 +18,12 @@
   );
   ```
 
-  On Windows and before OpenSSH 8.5, only passphrases and passwords come,
-  not a server's questions, and none through a `ProxyJump` or
-  `ProxyCommand`.
+  Before OpenSSH 8.5, only passphrases and passwords come, not a server's
+  questions, and none through a `ProxyJump` or `ProxyCommand`. On Windows,
+  ssh runs a small helper program the package's build hook compiles with
+  your app, so everything is asked there too; see the README's "Building on
+  Windows".
+- **Breaking:** the package needs Dart 3.10 or newer, for its build hook.
 - **Breaking:** a cancelled prompt throws an `SshLoginCancelledException`, a
   new `SshException` that is neither permanent nor temporary. A `switch`
   that names every `SshException` needs an `SshLoginCancelledException`

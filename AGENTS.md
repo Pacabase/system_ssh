@@ -41,4 +41,6 @@ dart test --exclude-tags integration
 dart pub publish --dry-run
 ```
 
-CI also runs the unit tests on Dart 3.5, the oldest SDK `pubspec.yaml` allows, so don't use a newer API.
+CI also runs the unit tests on Dart 3.10, the oldest SDK `pubspec.yaml` allows, so don't use a newer API.
+
+On Windows, `hook/build.dart` compiles `src/askpass_helper.c`, the program ssh runs for prompts, and `src/askpass_locator.c`, which tells Dart where it was installed. They need a C compiler (Visual Studio's C++ tools); without one the hook logs why and prompts fall back to the `.cmd` helper.
