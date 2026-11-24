@@ -26,8 +26,9 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze --fatal-infos
       - run: dart pub publish --dry-run
-      # The lowest versions pubspec.yaml allows; test's own dependencies have no working lowest set.
-      - run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints
+      # The lowest versions pubspec.yaml allows. test's own dependencies have no working lowest set,
+      # and platform's lowest, which process allows, doesn't build on today's Dart.
+      - run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints platform
       - run: dart analyze --fatal-infos && dart test --exclude-tags integration
 
   # The oldest supported SDK on each OS; integration runs the newest.

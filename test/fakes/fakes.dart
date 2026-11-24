@@ -35,18 +35,22 @@ Future<String> compileExecutable(String source) async {
   final build = Directory(
     '${directory.path}.$pid.${DateTime.now().microsecondsSinceEpoch}',
   )..createSync(recursive: true);
+  // Compiled from a copy outside the package: Dart 3.10's `dart compile`
+  // refuses a package with build hooks, and the fakes import only dart:.
+  final copy = file.copySync('${build.path}/$name.dart');
   final result = await Process.run(Platform.resolvedExecutable, [
     'compile',
     'exe',
     '-o',
     '${build.path}/$executableName',
-    file.path,
+    copy.path,
   ]);
   if (result.exitCode != 0) {
     throw StateError(
       'Could not compile $source:\n${result.stdout}${result.stderr}',
     );
   }
+  copy.deleteSync();
   try {
     build.renameSync(directory.path);
   } on FileSystemException {
