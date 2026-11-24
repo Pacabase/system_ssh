@@ -44,6 +44,7 @@ final class AskPass {
   late final String _helper;
   Timer? _poll;
   ServerSocket? _server;
+  final _connections = <Socket>{};
   var _isClosed = false;
 
   // One prompt at a time, so an app never shows two dialogs at once.
@@ -92,6 +93,11 @@ final class AskPass {
     _isClosed = true;
     _poll?.cancel();
     await _server?.close();
+    // Closing the server leaves the helpers it accepted waiting; this ends
+    // their read, and they give up.
+    for (final socket in [..._connections]) {
+      socket.destroy();
+    }
     if (!Platform.isWindows) _cancelWaitingHelpers();
     try {
       _directory.deleteSync(recursive: true);
@@ -220,6 +226,8 @@ final class AskPass {
 
   Future<void> _serveWindows(Socket socket, String token) async {
     socket.done.ignore();
+    if (_isClosed) return socket.destroy();
+    _connections.add(socket);
     try {
       final lines = socket
           .cast<List<int>>()
@@ -243,8 +251,9 @@ final class AskPass {
       await socket.flush();
       await iterator.cancel();
     } catch (exception) {
-      logger.warning('The password prompt failed: $exception');
+      if (!_isClosed) logger.warning('The password prompt failed: $exception');
     } finally {
+      _connections.remove(socket);
       socket.destroy();
     }
   }
