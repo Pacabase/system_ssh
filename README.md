@@ -183,17 +183,20 @@ final tunnel = await client.openTunnel(
   asked, so a server asks once, not once per tunnel. A tunnel with
   `onPrompt` and one without never share a connection.
 - A config that sets `BatchMode yes` still keeps ssh from asking.
-- It needs OpenSSH 8.5 or newer, which marks a server's questions with
-  `(user@host)` so a server can't word one as ssh's own prompt; an older
-  ssh, such as Windows 10's built-in 8.1, throws an `SshConfigException`.
-- On Windows, only ssh's own prompts come, a passphrase or a password.
-  Windows' ssh runs the helper through `cmd.exe`, which would read a
-  server's words, or a `%` or `"` in a name, as commands. So there
-  keyboard-interactive logins are off, and a server that takes passwords
-  only that way, as many PAM setups do, refuses the login. Nothing asks
-  when your config sets a `ProxyJump` or `ProxyCommand`, which runs another
-  ssh, when `ssh -G` can't read your config, or when the user, host or a
-  key file's path holds one of `" % ! ^ & | < >`.
+- On Windows and before OpenSSH 8.5, only ssh's own prompts come, a
+  passphrase or a password. Keyboard-interactive logins are off there, so a
+  server that takes passwords only that way, as many PAM setups do, refuses
+  the login, and nothing asks when your config sets a `ProxyJump` or
+  `ProxyCommand`, which runs another ssh, or when `ssh -G` can't read your
+  config.
+  - Before 8.5, ssh doesn't mark a server's questions with `(user@host)`,
+    so a server could word one as ssh's own prompt. Before 8.4, ssh asks
+    through `SSH_ASKPASS` only without a terminal, so a command-line app
+    run from one gets ssh's own prompt there.
+  - Windows' ssh runs the helper through `cmd.exe`, which would read a
+    server's words, or a `%` or `"` in a name, as commands. So nothing asks
+    there either when the user, host or a key file's path holds one of
+    `" % ! ^ & | < >`.
 
 ## Sharing a connection
 
@@ -334,7 +337,7 @@ try {
 |---|---|
 | **`SshPermanentException`** | |
 | `SshNotFoundException` | no `ssh` could be started; on Windows the message says how to add OpenSSH Client |
-| `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`); or `onPrompt` was passed to an ssh older than OpenSSH 8.5 |
+| `SshConfigException` | your ssh config for the host stops the tunnel: `ClearAllForwardings yes`, a bad option, a syntax error, the file's owner or permissions, or no algorithm the server offers (`Unable to negotiate`); or no folder lets `onPrompt`'s password prompt run |
 | `SshPortInUseException` | the `localPort` you asked for is taken; `port` and `address` say which |
 | `SshDuplicateForwardException` | with `shareConnections`, another open tunnel on the server already has the same remote forward; `forward` says which |
 | `SshRemotePortRefusedException` | the server wouldn't listen on a remote forward's port, a remote tunnel's `remotePort` or one your config adds: it's taken there, or its sshd doesn't allow remote forwarding; `port` says which |
@@ -370,8 +373,8 @@ unattended tunnel needs:
 | `ExitOnForwardFailure=yes` | always |
 | `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no`, without `onPrompt` |
-| `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt`; on Windows also `SYSTEM_SSH_ASKPASS_PORT` and `SYSTEM_SSH_ASKPASS_TOKEN`, for the helper to reach your app |
-| `KbdInteractiveAuthentication=no` | with `onPrompt` on Windows, whatever your config says; see [Passwords and passphrases](#passwords-and-passphrases) |
+| `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt`; on Windows also `SYSTEM_SSH_ASKPASS_PORT` and `SYSTEM_SSH_ASKPASS_TOKEN`, for the helper to reach your app; before OpenSSH 8.4 also `DISPLAY=:0` unless one is set |
+| `KbdInteractiveAuthentication=no` | with `onPrompt` on Windows or before OpenSSH 8.5, whatever your config says; see [Passwords and passphrases](#passwords-and-passphrases) |
 | `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
 | `ConnectTimeout=15` | your config sets none |
 | `trustHostKey`'s ssh | `StrictHostKeyChecking=accept-new`, a `UserKnownHostsFile` of a temp file before yours, `PreferredAuthentications=none`, `ClearAllForwardings=yes`, `PermitLocalCommand=no`, `ControlPath=none` and `BatchMode=yes`: it reads the key without logging in or forwarding |

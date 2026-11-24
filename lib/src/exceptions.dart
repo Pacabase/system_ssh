@@ -93,9 +93,8 @@ final class SshNotFoundException extends SshPermanentException {
 /// The user's ssh config for the host stops the tunnel: it sets
 /// `ClearAllForwardings`, ssh can't read it, for a bad option, a syntax error
 /// or the file's owner or permissions, or it allows no algorithm the server
-/// offers (`Unable to negotiate`). It also says when the `ssh` installed is
-/// too old for an `onPrompt`, which needs OpenSSH 8.5 or newer, or when no
-/// folder lets its password prompt run.
+/// offers (`Unable to negotiate`). It also says when no folder lets an
+/// `onPrompt`'s password prompt run.
 final class SshConfigException extends SshPermanentException {
   /// An error saying, in [message], what in the config stops the tunnel.
   const SshConfigException(super.message, {super.log, super.exitCode});

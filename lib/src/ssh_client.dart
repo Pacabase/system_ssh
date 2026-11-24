@@ -90,8 +90,8 @@ abstract interface class SshClient {
   /// },
   /// ```
   ///
-  /// It needs OpenSSH 8.5 or newer. On Windows, only ssh's own prompts come,
-  /// a passphrase or a password, never a server's question, and none when a
+  /// On Windows and before OpenSSH 8.5, only ssh's own prompts come, a
+  /// passphrase or a password, never a server's question, and none when a
   /// `ProxyJump` or `ProxyCommand` runs another ssh; see the README.
   ///
   /// Completing [abortTrigger] before the tunnel is open stops ssh; after,
@@ -111,8 +111,6 @@ abstract interface class SshClient {
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshLoginCancelledException] when the login fails after [onPrompt]
   ///   answered null, or what [onPrompt] threw.
-  /// - [SshConfigException] with an [onPrompt], when ssh is older than
-  ///   OpenSSH 8.5.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.
@@ -196,8 +194,6 @@ abstract interface class SshClient {
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshLoginCancelledException] when the login fails after [onPrompt]
   ///   answered null, or what [onPrompt] threw.
-  /// - [SshConfigException] with an [onPrompt], when ssh is older than
-  ///   OpenSSH 8.5.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
   ///   starting with `-` or holding spaces or shell characters, or a
   ///   [localPort] or [remotePort] outside 1 to 65535.
@@ -236,8 +232,6 @@ abstract interface class SshClient {
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
   /// - [SshLoginCancelledException] when the login fails after [onPrompt]
   ///   answered null, or what [onPrompt] threw.
-  /// - [SshConfigException] with an [onPrompt], when ssh is older than
-  ///   OpenSSH 8.5.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.

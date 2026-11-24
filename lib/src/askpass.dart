@@ -518,43 +518,62 @@ Future<(int, int)?> _readVersion(
   return (int.parse(match[1]!), int.parse(match[2]!));
 }
 
-/// Throws an [SshConfigException] when [executable] is an OpenSSH older than
-/// 8.5: 8.4 added `SSH_ASKPASS_REQUIRE`, and 8.5 began marking the server's
-/// own questions with `(user@host)`, so it can't word one as ssh's prompt.
-Future<void> checkPromptSupport(
-  String executable, {
-  Map<String, String> environment = const {},
-}) async {
-  final version = await sshVersion(executable, environment: environment);
-  if (version case (final major, final minor)
-      when major < 8 || (major == 8 && minor < 5)) {
-    throw SshConfigException(
-      'OpenSSH $major.$minor is too old to ask for a password or passphrase; '
-      'it needs 8.5 or newer',
-    );
-  }
-}
+/// Whether [version] is older than [major].[minor].
+bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
+      (final versionMajor, final versionMinor) =>
+        versionMajor < major || (versionMajor == major && versionMinor < minor),
+      null => false,
+    };
 
-/// Whether ssh may ask through `onPrompt` with [config], what `ssh -G` said.
+/// Whether ssh may ask through `onPrompt` with [config], what `ssh -G` said,
+/// and the OpenSSH [version] `ssh -V` reported.
 ///
-/// On Windows, ssh runs the helper through cmd.exe, which would read a
-/// server's own words as commands, so there a login asks only ssh's own
-/// prompts: keyboard-interactive is turned off, and nothing asks when a
+/// Where ssh can't keep a server's words out of the prompts, only ssh's own
+/// prompts come: keyboard-interactive is turned off, and nothing asks when a
 /// `ProxyJump` or `ProxyCommand` runs another ssh, which wouldn't get that
-/// option, when the config couldn't be read, or when the user, host or a key
-/// file ssh would name in a prompt holds a character cmd.exe reads.
-bool canPrompt(Map<String, String> config, {bool? onWindows}) =>
-    _whyNoPrompts(config, onWindows: onWindows ?? Platform.isWindows) == null;
+/// option, or when the config couldn't be read to tell. That is on Windows,
+/// where ssh runs the helper through cmd.exe, which would read a server's
+/// words, or a user, host or key file holding a character it reads, as
+/// commands; and before OpenSSH 8.5, which doesn't mark a server's
+/// questions with `(user@host)`, so a server could word one as ssh's own.
+bool canPrompt(
+  Map<String, String> config, {
+  bool? onWindows,
+  (int, int)? version,
+}) =>
+    _whyNoPrompts(
+      config,
+      onWindows: onWindows ?? Platform.isWindows,
+      version: version,
+    ) ==
+    null;
 
-String? _whyNoPrompts(Map<String, String> config, {required bool onWindows}) {
-  if (!onWindows) return null;
-  if (config.isEmpty) return "ssh -G couldn't read the config";
-  for (final option in ['proxyjump', 'proxycommand']) {
-    if (config.containsKey(option)) return 'the config sets a $option';
+/// Whether only ssh's own prompts may come; see [canPrompt].
+bool ownPromptsOnly({bool? onWindows, (int, int)? version}) =>
+    (onWindows ?? Platform.isWindows) || _olderThan(version, 8, 5);
+
+String? _whyNoPrompts(
+  Map<String, String> config, {
+  required bool onWindows,
+  required (int, int)? version,
+}) {
+  if (!ownPromptsOnly(onWindows: onWindows, version: version)) return null;
+  final who =
+      onWindows ? "Windows' ssh" : 'OpenSSH ${version!.$1}.${version.$2}';
+  if (config.isEmpty) {
+    return "$who can't ask safely: ssh -G couldn't read the config";
   }
-  for (final option in _inPrompts) {
-    if (config[option]?.contains(_readByCmd) ?? false) {
-      return 'its $option holds one of " % ! ^ & | < >';
+  for (final option in ['proxyjump', 'proxycommand']) {
+    if (config.containsKey(option)) {
+      return "$who can't ask safely when the config sets a $option";
+    }
+  }
+  if (onWindows) {
+    for (final option in _inPrompts) {
+      if (config[option]?.contains(_readByCmd) ?? false) {
+        return "$who can't ask safely when its $option holds one of "
+            '" % ! ^ & | < >';
+      }
     }
   }
   return null;
@@ -581,21 +600,34 @@ Future<T> withPrompts<T>(
   required Future<T> Function(SshPrompts prompts) open,
 }) async {
   if (onPrompt == null) return open(SshPrompts.none(environment));
-  if (_whyNoPrompts(config, onWindows: Platform.isWindows) case final why?) {
-    logger.warning(
-      "Not asking for passwords: Windows' ssh can't ask safely when $why",
-    );
+  final version = await sshVersion(executable, environment: environment);
+  if (_whyNoPrompts(
+    config,
+    onWindows: Platform.isWindows,
+    version: version,
+  )
+      case final why?) {
+    logger.warning('Not asking for passwords: $why');
     return open(SshPrompts.none(environment));
   }
-  await checkPromptSupport(executable, environment: environment);
 
   final askPass = await AskPass.start(onPrompt);
   try {
     return await open(
       SshPrompts._(
-        {...environment, ...askPass.environment},
+        {
+          ...environment,
+          ...askPass.environment,
+          // Before 8.4, which added SSH_ASKPASS_REQUIRE, ssh uses
+          // SSH_ASKPASS only with a DISPLAY set, and only when it has no
+          // terminal: run from one, it asks there instead.
+          if (_olderThan(version, 8, 4) &&
+              !environment.containsKey('DISPLAY') &&
+              !Platform.environment.containsKey('DISPLAY'))
+            'DISPLAY': ':0',
+        },
         enabled: true,
-        ownOnly: Platform.isWindows,
+        ownOnly: ownPromptsOnly(version: version),
         stop: askPass.stop,
       ),
     );

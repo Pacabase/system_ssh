@@ -97,6 +97,34 @@ void main() {
   });
 
   group('canPrompt', () {
+    for (final (version, asks) in [
+      ((8, 2), false),
+      ((8, 4), false),
+      ((8, 5), true),
+      (null, true)
+    ]) {
+      test(
+          '${asks ? 'lets a ProxyJump ask' : 'keeps a ProxyJump from asking'} '
+          'on OpenSSH $version', () {
+        expect(
+          canPrompt(
+            const {'proxyjump': 'jump'},
+            onWindows: false,
+            version: version,
+          ),
+          asks,
+        );
+        expect(
+          canPrompt(
+            const {'batchmode': 'no'},
+            onWindows: false,
+            version: version,
+          ),
+          isTrue,
+        );
+      });
+    }
+
     test('lets every config ask outside Windows', () {
       expect(canPrompt(const {}, onWindows: false), isTrue);
       expect(
@@ -427,18 +455,58 @@ void main() {
       expect(File(helper).parent.existsSync(), isFalse);
     });
 
-    test('throws SshConfigException for OpenSSH before 8.5', () async {
-      fake.version('OpenSSH_8.2p1 Ubuntu-4ubuntu0.11, OpenSSL 1.1.1f');
+    for (final (version, setsDisplay) in [
+      ('OpenSSH_8.2p1 Ubuntu-4ubuntu0.11, OpenSSL 1.1.1f', true),
+      ('OpenSSH_for_Windows_8.1p1, LibreSSL 3.0.2', true),
+      ('OpenSSH_8.4p1 Debian-5+deb11u3, OpenSSL 1.1.1w', false),
+    ]) {
+      test("asks only ssh's own prompts on $version", () async {
+        fake
+          ..version(version)
+          ..asks({passphrase: 'secret'});
+
+        await open(onPrompt: (_) async => 'secret');
+
+        expect(fake.answers, ['secret']);
+        expect(
+          fake.attempts.single.join(' '),
+          contains('-o KbdInteractiveAuthentication=no'),
+        );
+        if (setsDisplay) {
+          expect(fake.attemptEnvironments.single['DISPLAY'], isNotNull);
+        }
+      });
+    }
+
+    test('asks nothing through a ProxyJump on OpenSSH before 8.5', () async {
+      fake
+        ..version('OpenSSH_8.2p1 Ubuntu-4ubuntu0.11, OpenSSL 1.1.1f')
+        ..answerConfig(['host ssh.example.com', 'proxyjump jump'])
+        ..asks({passphrase: null});
 
       await expectLater(
         open(onPrompt: (_) async => 'secret'),
-        throwsA(
-          isA<SshConfigException>().having(
-              (exception) => exception.message, 'message', contains('8.5')),
-        ),
+        throwsA(isA<SshLoginRefusedException>()),
       );
-      expect(fake.attempts, isEmpty);
+      expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
     });
+
+    test(
+      'lets the server ask on OpenSSH 8.5 and newer',
+      () async {
+        fake
+          ..version('OpenSSH_8.5p1, OpenSSL 1.1.1k')
+          ..asks({passphrase: 'secret'});
+
+        await open(onPrompt: (_) async => 'secret');
+
+        expect(
+          fake.attempts.single.join(' '),
+          isNot(contains('KbdInteractiveAuthentication')),
+        );
+      },
+      testOn: '!windows',
+    );
 
     test('takes an ssh whose version it cannot read', () async {
       fake.version('ssh: some other build');
