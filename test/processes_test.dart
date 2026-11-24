@@ -326,7 +326,7 @@ List<int> childrenOf(int pid) => [
       in (Process.runSync('pgrep', ['-P', '$pid']).stdout as String).split(
         '\n',
       ))
-    if (int.tryParse(line) case final child?) child,
+    ?int.tryParse(line),
 ];
 
 // Empty once the process is gone.

@@ -43,7 +43,9 @@ Future<String> compileExecutable(String source) async {
     file.path,
   ]);
   if (result.exitCode != 0) {
-    throw StateError('Could not compile $source:\n${result.stdout}');
+    throw StateError(
+      'Could not compile $source:\n${result.stdout}${result.stderr}',
+    );
   }
   try {
     build.renameSync(directory.path);

@@ -221,7 +221,7 @@ void main() {
       test('is $path for $files', () {
         expect(
           userKnownHostsFile({
-            if (files != null) 'userknownhostsfile': files,
+            'userknownhostsfile': ?files,
           }, environment: environment).path,
           path,
         );
