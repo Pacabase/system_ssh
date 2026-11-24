@@ -71,6 +71,19 @@ final class SshFixture {
   /// 127.0.0.1:9, which `.github/actions/sshd` sets up.
   SshTarget get noForwardingTarget => const SshTarget('no-forwarding');
 
+  /// Same server, logged in only with a key whose passphrase is
+  /// [keyPassphrase], which `.github/actions/sshd` sets up.
+  SshTarget get passphraseTarget => const SshTarget('passphrase-key');
+
+  /// [passphraseTarget]'s key file.
+  String get passphraseKeyPath =>
+      '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}'
+      '${Platform.pathSeparator}.ssh${Platform.pathSeparator}'
+      'id_ed25519_passphrase';
+
+  /// The passphrase of [passphraseTarget]'s key.
+  String get keyPassphrase => 'correct-horse-battery';
+
   /// Same server, but `StrictHostKeyChecking yes` in the config.
   SshTarget get strictTarget => const SshTarget('strict-host-keys');
 
@@ -129,6 +142,8 @@ final class SshFixture {
         Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
     final restrictedKey =
         '$home/.ssh/id_ed25519_no_forwarding'.replaceAll(r'\', '/');
+    final passphraseKey =
+        '$home/.ssh/id_ed25519_passphrase'.replaceAll(r'\', '/');
     String agentHost(String name, String? agent) => '''
 Host $name
   HostName 127.0.0.1
@@ -167,6 +182,15 @@ Host no-forwarding
   IdentityFile $restrictedKey
   IdentitiesOnly yes
   IdentityAgent none
+  UserKnownHostsFile $knownHosts
+
+Host passphrase-key
+  HostName 127.0.0.1
+  Port $_port
+  IdentityFile $passphraseKey
+  IdentitiesOnly yes
+  IdentityAgent none
+  PreferredAuthentications publickey
   UserKnownHostsFile $knownHosts
 
 Host strict-host-keys

@@ -36,6 +36,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50000);
@@ -47,6 +48,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50002);
@@ -58,6 +60,7 @@ final class _FakeSshClient implements SshClient {
     required int localPort,
     int? remotePort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async =>
       _FakeRemoteTunnel(remotePort ?? 41234);
@@ -68,6 +71,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async =>
       _FakeTunnel(localPort ?? 50001);
@@ -325,6 +329,7 @@ void main() {
           SshRemotePortRefusedException(:final port) => 'server port $port',
           SshFailedException() => 'failed',
           SshTunnelAbortedException() => 'aborted',
+          SshLoginCancelledException() => 'cancelled',
         };
 
     expect(reason(const SshPortInUseException(5432)), 'port 5432 in use');
@@ -332,6 +337,21 @@ void main() {
       reason(const SshRemotePortRefusedException('refused', port: 8080)),
       'server port 8080',
     );
+  });
+
+  test('lets a switch name every prompt', () {
+    String ask(SshPrompt prompt) => switch (prompt) {
+          SshPassphrasePrompt(:final keyPath) => 'passphrase for $keyPath',
+          SshPasswordPrompt() => 'password',
+          SshCodePrompt(:final text) => 'code: $text',
+        };
+
+    expect(
+      ask(const SshPassphrasePrompt('Enter passphrase', keyPath: '/k')),
+      'passphrase for /k',
+    );
+    expect(ask(const SshPasswordPrompt("a@b's password: ")), 'password');
+    expect(ask(const SshCodePrompt('Code: ')), 'code: Code: ');
   });
 
   test('acts out an unknown host key and trusts it', () async {

@@ -29,6 +29,9 @@ runs:
         # A second key the sshd lets forward only to 127.0.0.1:9, so a test sees a forward it forbids.
         [ -f ~/.ssh/id_ed25519_no_forwarding ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519_no_forwarding
         echo "permitopen=\"127.0.0.1:9\" $(cat ~/.ssh/id_ed25519_no_forwarding.pub)" >> "$dir/authorized_keys"
+        # A key with a passphrase, which ssh asks for through SSH_ASKPASS.
+        [ -f ~/.ssh/id_ed25519_passphrase ] || ssh-keygen -q -t ed25519 -N 'correct-horse-battery' -f ~/.ssh/id_ed25519_passphrase
+        cat ~/.ssh/id_ed25519_passphrase.pub >> "$dir/authorized_keys"
         options=(-o "Port=$PORT" -o ListenAddress=127.0.0.1 -o "HostKey=$dir/host_key"
           -o "AuthorizedKeysFile=$dir/authorized_keys" -o "PidFile=$dir/sshd.pid"
           -o StrictModes=no -o UsePAM=no)
@@ -60,6 +63,9 @@ runs:
         # A second key the sshd lets forward only to 127.0.0.1:9, so a test sees a forward it forbids.
         if (-not (Test-Path ~/.ssh/id_ed25519_no_forwarding)) { ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519_no_forwarding }
         Add-Content $keys ('permitopen="127.0.0.1:9" ' + (Get-Content ~/.ssh/id_ed25519_no_forwarding.pub))
+        # A key with a passphrase, which ssh asks for through SSH_ASKPASS.
+        if (-not (Test-Path ~/.ssh/id_ed25519_passphrase)) { ssh-keygen -q -t ed25519 -N 'correct-horse-battery' -f ~/.ssh/id_ed25519_passphrase }
+        Add-Content $keys (Get-Content ~/.ssh/id_ed25519_passphrase.pub)
         icacls $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null
         $config = "$env:ProgramData\ssh\sshd_config"
         (Get-Content $config) -replace '^#?Port .*', "Port $env:PORT" `

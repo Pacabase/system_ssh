@@ -1,3 +1,33 @@
+## Unreleased
+
+- `openTunnel`, `openSocketTunnel`, `openRemoteTunnel` and `openSocksProxy`
+  take an `onPrompt` that answers what ssh asks while it logs in: a key's
+  passphrase without an agent, a password, or the server's own question,
+  such as a 2FA code. Answering null cancels the login. Without it, nothing
+  changes: ssh asks nothing.
+
+  ```dart
+  final tunnel = await client.openTunnel(
+    server,
+    remoteHost: 'db.example.com',
+    remotePort: 5432,
+    onPrompt: (prompt) => switch (prompt) {
+      SshPassphrasePrompt(:final keyPath) => askForPassphrase(keyPath),
+      SshPasswordPrompt() || SshCodePrompt() => askFor(prompt.text),
+    },
+  );
+  ```
+
+  It needs OpenSSH 8.4 or newer. On Windows, only passphrases and passwords
+  come, not a server's questions.
+- **Breaking:** a cancelled prompt throws an `SshLoginCancelledException`, a
+  new `SshException` that is neither permanent nor temporary. A `switch`
+  that names every `SshException` needs an `SshLoginCancelledException`
+  case.
+- **Breaking:** `SshClient`'s four `open*` methods take an
+  `SshPromptHandler? onPrompt`. A class that implements `SshClient`, such
+  as a fake in tests, adds the parameter to each.
+
 ## 0.11.0
 
 - **Breaking:** `onLog` gets an `SshLoginStarted`, a new kind of `SshLog`,

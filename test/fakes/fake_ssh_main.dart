@@ -193,6 +193,11 @@ Future<void> _ssh(String directory, List<String> arguments) async {
 
   file('pids').writeAsStringSync('$pid\n', mode: FileMode.append);
 
+  if (arguments.first == '-V') {
+    stderr.writeln(read('version') ?? 'OpenSSH_9.9p1, LibreSSL 3.3.6');
+    return _run([]);
+  }
+
   if (arguments.first == '-G') {
     file('config_argv').writeAsStringSync(arguments.join('\n'));
     file('config_pid').writeAsStringSync('$pid');
@@ -230,6 +235,13 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       .map(AttemptMode.values.byName)
       .toList();
   final mode = attempt <= modes.length ? modes[attempt - 1] : modes.last;
+
+  if (!await _ask(directory)) {
+    return _run([
+      'err:user@ssh.example.com: Permission denied (publickey,password).',
+      'exit:255',
+    ]);
+  }
 
   final knownHosts = read('known_hosts') ?? '';
   final hostKeyMode = switch (read('host_key_mode')) {
@@ -341,6 +353,34 @@ Future<void> _ssh(String directory, List<String> arguments) async {
         'exit:255',
       ],
   });
+}
+
+/// Asks each prompt in the `prompts` file through `SSH_ASKPASS`, as ssh does,
+/// and records what came back in `answers`, one line per prompt: the answer,
+/// or `<cancelled>` for a non-zero exit. Each line of `prompts` is the answer
+/// to expect, a tab, then the prompt; an empty expectation takes any answer.
+/// Whether every answer was the expected one.
+Future<bool> _ask(String directory) async {
+  final prompts = File('$directory/prompts');
+  if (!prompts.existsSync()) return true;
+
+  final helper = Platform.environment['SSH_ASKPASS'];
+  for (final line in prompts.readAsLinesSync()) {
+    final tab = line.indexOf('\t');
+    final expected = line.substring(0, tab);
+    final prompt = line.substring(tab + 1);
+    if (helper == null) return false;
+
+    final result = await Process.run(helper, [prompt]);
+    final answered = '${result.stdout}'.replaceFirst(RegExp(r'\r?\n$'), '');
+    File('$directory/answers').writeAsStringSync(
+      '${result.exitCode == 0 ? answered : '<cancelled>'}\n',
+      mode: FileMode.append,
+    );
+    if (result.exitCode != 0) return false;
+    if (expected.isNotEmpty && answered != expected) return false;
+  }
+  return true;
 }
 
 /// The ssh that reads a host key to trust it: records its arguments as

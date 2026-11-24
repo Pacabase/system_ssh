@@ -46,6 +46,25 @@ final class FakeSsh {
   void answerConfig(List<String> lines) =>
       _file('config').writeAsStringSync(lines.map((line) => '$line\n').join());
 
+  /// Has each tunnel attempt ask [prompts] through `SSH_ASKPASS`, in order,
+  /// before it plays its mode, and fail the login unless each answer is the
+  /// prompt's value; a null value takes any answer.
+  void asks(Map<String, String?> prompts) => _file('prompts').writeAsStringSync(
+        prompts.entries
+            .map((prompt) => '${prompt.value ?? ''}\t${prompt.key}\n')
+            .join(),
+      );
+
+  /// What each prompt [asks] got back through `SSH_ASKPASS`, in order: the
+  /// answer, or `<cancelled>`.
+  List<String> get answers {
+    final file = _file('answers');
+    return file.existsSync() ? file.readAsLinesSync() : const [];
+  }
+
+  /// Has `ssh -V` say [line].
+  void version(String line) => _file('version').writeAsStringSync(line);
+
   /// Has `ssh -G` hang.
   void hangOnConfig() => _file('config_mode').writeAsStringSync('hang');
 

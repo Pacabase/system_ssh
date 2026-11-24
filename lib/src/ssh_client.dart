@@ -1,6 +1,7 @@
 import 'exceptions.dart';
 import 'ssh_host_key.dart';
 import 'ssh_log.dart';
+import 'ssh_prompt.dart';
 import 'ssh_target.dart';
 
 /// A forward that is open: an [SshTunnel] (a local forward, to a port or a
@@ -68,6 +69,27 @@ abstract interface class SshClient {
   /// refused. Windows' sshd closes such a connection without saying, so there
   /// it isn't reported. The tunnel's own failures aren't logs: they're thrown,
   /// or fail [SshTunnel.done].
+  ///
+  /// [onPrompt] answers what ssh asks while it logs in: a key's passphrase,
+  /// a password, or a server's own question such as a 2FA code. Without it,
+  /// ssh asks nothing, and a login that needs an answer fails with an
+  /// [SshLoginRefusedException]. Answering null cancels the login. Prompts
+  /// come one at a time, and none comes once the tunnel is open; with
+  /// `shareConnections`, only the tunnel that starts the shared login is
+  /// asked. The package waits as long as [onPrompt] does: the server ends a
+  /// login nobody answers, usually after two minutes.
+  ///
+  /// ```dart
+  /// onPrompt: (prompt) => switch (prompt) {
+  ///   SshPassphrasePrompt(:final keyPath) => askForPassphrase(keyPath),
+  ///   SshPasswordPrompt() || SshCodePrompt() => askFor(prompt.text),
+  /// },
+  /// ```
+  ///
+  /// It needs OpenSSH 8.4 or newer. On Windows, only ssh's own prompts come,
+  /// a passphrase or a password, never a server's question, and none when a
+  /// `ProxyJump` or `ProxyCommand` runs another ssh.
+  ///
   /// Completing [abortTrigger] before the tunnel is open stops ssh; after,
   /// it is ignored, and [SshTunnel.close] stops it instead.
   ///
@@ -83,6 +105,10 @@ abstract interface class SshClient {
   /// - [SshHostKeyChangedException] when the server's host key isn't the one
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
+  /// - [SshLoginCancelledException] when [onPrompt] answers null, or what
+  ///   [onPrompt] throws.
+  /// - [SshConfigException] with an [onPrompt], when ssh is older than
+  ///   OpenSSH 8.4.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.
@@ -97,6 +123,7 @@ abstract interface class SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   });
 
@@ -115,8 +142,8 @@ abstract interface class SshClient {
   /// The server needs an sshd that serves Unix sockets, as OpenSSH does on
   /// Linux and macOS, and a login allowed to open [remoteSocket]. A
   /// connection it can't make comes to [onLog] as an [SshForwardFailed].
-  /// [bindAddress], [onLog] and [abortTrigger] otherwise work as in
-  /// [openTunnel].
+  /// [bindAddress], [onLog], [onPrompt] and [abortTrigger] otherwise work as
+  /// in [openTunnel].
   ///
   /// Throws as [openTunnel] does, and an [ArgumentError] for a
   /// [remoteSocket] that isn't an absolute path, or holds `:`, `%` or `$`,
@@ -127,6 +154,7 @@ abstract interface class SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   });
 
@@ -143,7 +171,8 @@ abstract interface class SshClient {
   /// ```
   ///
   /// The server's port is on its loopback only, unless its sshd sets
-  /// `GatewayPorts yes`. [onLog] and [abortTrigger] work as in [openTunnel],
+  /// `GatewayPorts yes`. [onLog], [onPrompt] and [abortTrigger] work as in
+  /// [openTunnel],
   /// except that a connection that can't reach [localHost] comes as an
   /// [SshMessage].
   ///
@@ -162,6 +191,8 @@ abstract interface class SshClient {
   /// - [SshHostKeyChangedException] when the server's host key isn't the one
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
+  /// - [SshLoginCancelledException] when [onPrompt] answers null, or what
+  ///   [onPrompt] throws.
   /// - [ArgumentError] for a host or user ssh could misread, such as one
   ///   starting with `-` or holding spaces or shell characters, or a
   ///   [localPort] or [remotePort] outside 1 to 65535.
@@ -171,6 +202,7 @@ abstract interface class SshClient {
     required int localPort,
     int? remotePort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   });
 
@@ -183,7 +215,8 @@ abstract interface class SshClient {
   /// );
   /// ```
   ///
-  /// [bindAddress], [onLog] and [abortTrigger] work as in [openTunnel].
+  /// [bindAddress], [onLog], [onPrompt] and [abortTrigger] work as in
+  /// [openTunnel].
   ///
   /// Throws:
   /// - [SshNotFoundException] when no `ssh` can be started.
@@ -196,6 +229,10 @@ abstract interface class SshClient {
   /// - [SshHostKeyChangedException] when the server's host key isn't the one
   ///   `known_hosts` holds for it.
   /// - [SshTunnelAbortedException] when [abortTrigger] completes first.
+  /// - [SshLoginCancelledException] when [onPrompt] answers null, or what
+  ///   [onPrompt] throws.
+  /// - [SshConfigException] with an [onPrompt], when ssh is older than
+  ///   OpenSSH 8.4.
   /// - [SshPortInUseException] when [localPort] is taken.
   /// - [SshAddressUnavailableException] when [bindAddress] isn't an address
   ///   of this computer.
@@ -208,6 +245,7 @@ abstract interface class SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   });
 
