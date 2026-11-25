@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:system_ssh/src/askpass.dart';
+import 'package:system_ssh/src/askpass_locator.dart';
 import 'package:system_ssh/src/shared_connection.dart';
 import 'package:system_ssh/src/ssh_command.dart';
 import 'package:system_ssh/src/ssh_prompt.dart';
@@ -12,6 +13,22 @@ import 'package:test/test.dart';
 
 import 'fakes/fake_ssh.dart';
 import 'fakes/fakes.dart';
+
+/// Checks that the helper ssh ran in [environment] is gone: its directory,
+/// and on Windows the port it reached the app on. The program bundled on
+/// Windows lives with the app, and stays.
+Future<void> expectHelperRemoved(Map<String, String> environment) async {
+  final helper = environment['SSH_ASKPASS']!;
+  if (helper != bundledWindowsHelper) {
+    expect(File(helper).parent.existsSync(), isFalse);
+  }
+  if (environment['SYSTEM_SSH_ASKPASS_PORT'] case final port?) {
+    await expectLater(
+      Socket.connect(InternetAddress.loopbackIPv4, int.parse(port)),
+      throwsA(isA<SocketException>()),
+    );
+  }
+}
 
 void main() {
   const server = SshTarget('ssh.example.com');
@@ -101,59 +118,10 @@ void main() {
     });
   });
 
-  group('canPrompt', () {
-    test('lets every config ask outside Windows', () {
-      expect(canPrompt(const {}, onWindows: false), isTrue);
-      expect(canPrompt(const {'proxyjump': 'jump'}, onWindows: false), isTrue);
-    });
-
-    test('lets a config without another ssh ask on Windows', () {
-      expect(canPrompt(const {'batchmode': 'no'}, onWindows: true), isTrue);
-    });
-
-    for (final option in ['proxyjump', 'proxycommand']) {
-      test('keeps a config with $option from asking on Windows', () {
-        expect(
-          canPrompt({'batchmode': 'no', option: 'x'}, onWindows: true),
-          isFalse,
-        );
-      });
-    }
-
-    test('keeps an unread config from asking on Windows', () {
-      expect(canPrompt(const {}, onWindows: true), isFalse);
-    });
-
-    for (final (option, value) in [
-      ('user', 'a%OS%b'),
-      ('hostname', 'host!PATH!'),
-      ('hostkeyalias', 'db%OS%'),
-      ('identityfile', 'C:/keys/ok\nC:/keys/a"b'),
-      ('certificatefile', 'C:/keys/a&b-cert.pub'),
-    ]) {
-      test('keeps a $option cmd.exe would read from asking on Windows', () {
-        expect(
-          canPrompt({'batchmode': 'no', option: value}, onWindows: true),
-          isFalse,
-        );
-        expect(
-          canPrompt({'batchmode': 'no', option: value}, onWindows: false),
-          isTrue,
-        );
-      });
-    }
-  });
-
   group('sshCommand', () {
     const config = {'batchmode': 'no'};
-    List<String> command({bool prompts = false, bool ownOnly = false}) =>
-        sshCommand(
-          server,
-          forward: null,
-          config: config,
-          prompts: prompts,
-          ownPromptsOnly: ownOnly,
-        );
+    List<String> command({bool prompts = false}) =>
+        sshCommand(server, forward: null, config: config, prompts: prompts);
 
     test('turns prompts off without them', () {
       expect(command().join(' '), contains('-o BatchMode=yes'));
@@ -165,13 +133,6 @@ void main() {
       expect(
         command(prompts: true).join(' '),
         isNot(contains('KbdInteractive')),
-      );
-    });
-
-    test("turns the server's questions off for ssh's own prompts only", () {
-      expect(
-        command(prompts: true, ownOnly: true).join(' '),
-        contains('-o KbdInteractiveAuthentication=no'),
       );
     });
   });
@@ -232,11 +193,7 @@ void main() {
     });
 
     test('passes the answer and the prompt through as they are', () async {
-      // A `"` can't reach the helper on Windows, see canPrompt, and cmd.exe
-      // shows a `%NAME%` there as the variable's value.
-      final prompt = Platform.isWindows
-          ? r"Enter passphrase for key 'C:\a b&echo x^|<>(c)!\key': "
-          : r"""Code '"$(touch x)`id`\n; & | < > \: """;
+      const prompt = r"""Code für '"$(touch x)`id`\n; & | < > ^ ! %OS% \: """;
       const answer = r"""pa ss'"$(x)`y`\n;&|<>\ %PATH% ^ ! hörse €""";
       fake.asks({prompt: answer});
       final texts = <String>[];
@@ -387,9 +344,8 @@ void main() {
 
         await open(onPrompt: handler).then((_) {}, onError: (Object _) {});
 
-        final helper = fake.attemptEnvironments.single['SSH_ASKPASS']!;
         expect(fake.answers, hasLength(1));
-        expect(File(helper).parent.existsSync(), isFalse);
+        await expectHelperRemoved(fake.attemptEnvironments.single);
       });
     }
 
@@ -435,8 +391,7 @@ void main() {
         abort.complete();
 
         await expectLater(opening, throwsA(isA<SshTunnelAbortedException>()));
-        final helper = fake.attemptEnvironments.single['SSH_ASKPASS']!;
-        expect(File(helper).parent.existsSync(), isFalse);
+        await expectHelperRemoved(fake.attemptEnvironments.single);
       },
     );
 
@@ -459,13 +414,10 @@ void main() {
         );
 
         expect(fake.answers, ['secret']);
-        // Only ssh's own prompts come on Windows, so it knows who asks.
-        expect(prompts.single.isVerified, Platform.isWindows);
+        expect(prompts.single.isVerified, isFalse);
         expect(
           fake.attempts.single.join(' '),
-          Platform.isWindows
-              ? contains('-o KbdInteractiveAuthentication=no')
-              : isNot(contains('KbdInteractiveAuthentication')),
+          isNot(contains('KbdInteractiveAuthentication')),
         );
         if (setsDisplay) {
           expect(fake.attemptEnvironments.single['DISPLAY'], isNotNull);
@@ -482,7 +434,11 @@ void main() {
       await open(onPrompt: (_) async => 'secret');
 
       expect(fake.answers, ['secret']);
-    }, testOn: '!windows');
+      expect(
+        fake.attempts.single.join(' '),
+        isNot(contains('KbdInteractiveAuthentication')),
+      );
+    });
 
     test('lets the server ask on OpenSSH 8.5 and newer', () async {
       fake
@@ -502,7 +458,26 @@ void main() {
         fake.attempts.single.join(' '),
         isNot(contains('KbdInteractiveAuthentication')),
       );
-    }, testOn: '!windows');
+    });
+
+    test('takes the longest answer ssh reads', () async {
+      fake.asks({passphrase: 'x' * 1023});
+
+      await open(onPrompt: (_) async => 'x' * 1023);
+
+      expect(fake.answers, ['x' * 1023]);
+    });
+
+    test('cancels an answer longer than ssh reads, in bytes', () async {
+      fake.asks({passphrase: null});
+
+      await expectLater(
+        // 342 characters, but 1026 bytes.
+        open(onPrompt: (_) async => '€' * 342),
+        throwsA(isA<SshLoginCancelledException>()),
+      );
+      expect(fake.answers, ['<cancelled>']);
+    });
 
     test('takes an ssh whose version it cannot read', () async {
       fake.version('ssh: some other build');
@@ -512,55 +487,73 @@ void main() {
       expect(fake.attempts, hasLength(1));
     });
 
-    test("asks only ssh's own prompts on Windows", () async {
-      await open(onPrompt: (_) async => 'secret');
+    group('on Windows', () {
+      test('has the program the package ships', () {
+        expect(bundledWindowsHelper, endsWith(r'\system_ssh_askpass.exe'));
+      });
 
-      expect(
-        fake.attempts.single.join(' '),
-        contains('-o KbdInteractiveAuthentication=no'),
-      );
-    }, testOn: 'windows');
-
-    test('asks nothing on Windows through a ProxyJump, and says why', () async {
-      fake
-        ..answerConfig(['host ssh.example.com', 'proxyjump jump'])
-        ..asks({passphrase: null});
-      const why =
-          "Windows' ssh can't ask safely when the config sets a "
-          'proxyjump';
-      final logs = <SshLog>[];
-
-      await expectLater(
-        open(onPrompt: (_) async => 'secret', onLog: logs.add),
-        throwsA(
-          isA<SshLoginRefusedException>().having(
-            (exception) => exception.message,
-            'message',
-            endsWith('(not asking for passwords: $why)'),
-          ),
-        ),
-      );
-      expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
-      expect(logs.first, const SshPromptsOff(why));
-    }, testOn: 'windows');
-
-    test(
-      'asks through a ProxyJump, and lets the server ask, outside Windows',
-      () async {
+      test('runs it for every prompt, a ProxyJump\'s too', () async {
         fake
           ..answerConfig(['host ssh.example.com', 'proxyjump jump'])
-          ..asks({passphrase: 'secret'});
+          ..asks({'Verification code: ': '123456'});
 
-        await open(onPrompt: (_) async => 'secret');
+        await open(onPrompt: (_) async => '123456');
 
-        expect(fake.answers, ['secret']);
         expect(
-          fake.attempts.single.join(' '),
-          isNot(contains('KbdInteractiveAuthentication')),
+          fake.attemptEnvironments.single['SSH_ASKPASS'],
+          bundledWindowsHelper,
         );
-      },
-      testOn: '!windows',
-    );
+        expect(fake.answers, ['123456']);
+      });
+
+      test('asks nothing without the program, and says why', () async {
+        final bundled = bundledWindowsHelper;
+        bundledWindowsHelper = null;
+        addTearDown(() => bundledWindowsHelper = bundled);
+        fake.asks({passphrase: null});
+        const why =
+            "system_ssh_askpass.exe isn't with the app, so ssh can't ask";
+        final logs = <SshLog>[];
+
+        await expectLater(
+          open(onPrompt: (_) async => 'secret', onLog: logs.add),
+          throwsA(
+            isA<SshLoginRefusedException>().having(
+              (exception) => exception.message,
+              'message',
+              endsWith('(not asking for passwords: $why)'),
+            ),
+          ),
+        );
+        expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
+        expect(logs.first, const SshPromptsOff(why));
+      });
+
+      test('asks nothing when Windows won\'t run the program', () async {
+        final folder = Directory.systemTemp.createTempSync('not_a_program');
+        addTearDown(() => folder.deleteSync(recursive: true));
+        final notAProgram = File('${folder.path}\\system_ssh_askpass.exe')
+          ..writeAsStringSync('not a program');
+        final bundled = bundledWindowsHelper;
+        bundledWindowsHelper = notAProgram.path;
+        addTearDown(() => bundledWindowsHelper = bundled);
+        fake.asks({passphrase: null});
+        final logs = <SshLog>[];
+
+        await expectLater(
+          open(onPrompt: (_) async => 'secret', onLog: logs.add),
+          throwsA(isA<SshLoginRefusedException>()),
+        );
+        expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
+        expect(
+          logs.whereType<SshPromptsOff>().single.reason,
+          allOf(
+            startsWith("Windows wouldn't run ${notAProgram.path}"),
+            endsWith("so ssh can't ask"),
+          ),
+        );
+      });
+    }, testOn: 'windows');
 
     test('asks through a SOCKS proxy', () async {
       fake.asks({passphrase: 'secret'});
@@ -722,6 +715,17 @@ void main() {
       expect('${result.stdout}'.trim(), 'secret');
       expect(asked, [const SshPasswordPrompt(password)]);
     });
+
+    test('joins a prompt that ssh split at its spaces', () async {
+      final result = await Process.run(askPass.environment['SSH_ASKPASS']!, [
+        'Code',
+        'for',
+        'you:',
+      ], environment: askPass.environment).timeout(const Duration(seconds: 20));
+
+      expect(result.exitCode, 0);
+      expect(asked.single.text, 'Code for you:');
+    }, testOn: 'windows');
 
     test("doesn't ask about a notice ssh doesn't wait on", () async {
       final result = await runHelper(

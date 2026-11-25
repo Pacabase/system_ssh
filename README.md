@@ -163,9 +163,10 @@ final tunnel = await client.openTunnel(
 - Answer null to cancel: nothing more is asked, and once ssh has no other
   way to log in, such as another key or your agent, it throws an
   `SshLoginCancelledException`. ssh is stopped before it would send an empty
-  password or answer, which a server counts as a failed login. If `onPrompt` throws, the login is cancelled
-  the same way and that error is thrown. An answer can't hold a line break;
-  one that does cancels.
+  password or answer, which a server counts as a failed login. If
+  `onPrompt` throws, the login is cancelled the same way and that error is
+  thrown. An answer can't hold a line break or be longer than 1023 bytes in
+  UTF-8, the most ssh reads; one that does cancels.
 - A wrong passphrase or password is asked again up to
   `NumberOfPasswordPrompts` times (3 by default); the server decides how
   often it asks its own questions. Then it throws an
@@ -179,29 +180,44 @@ final tunnel = await client.openTunnel(
   close its dialog then; the next prompt may already be on its way.
 - A tunnel on a port the package picks can be retried if another program
   takes the port while ssh logs in, and the retry asks again.
-- The helper runs from the temp folder, or, where that doesn't allow
-  running programs, `XDG_RUNTIME_DIR` or `~/.cache`.
+- On macOS and Linux, the helper is a script in the temp folder, or, where
+  that doesn't allow running programs, `XDG_RUNTIME_DIR` or `~/.cache`.
 - With `shareConnections`, only the tunnel that starts the shared login is
   asked, so a server asks once, not once per tunnel. A tunnel with
   `onPrompt` and one without never share a connection.
 - A config that sets `BatchMode yes` still keeps ssh from asking.
+- On Windows, ssh runs a small helper program that ships with the package
+  (see [Building on Windows](#building-on-windows)), so everything is asked
+  there too. If it's missing from your app, or Windows won't run it, such
+  as under an AppLocker policy, nothing asks: `onLog` gets an
+  `SshPromptsOff` with the reason, and an `SshLoginRefusedException` says it
+  at the end of its message. 32-bit Windows has no helper, so nothing asks
+  there.
 - Before OpenSSH 8.5, every prompt still comes, as in a terminal, but ssh
   doesn't mark a server's questions with `(user@host)`, so a server could
   word one as ssh's own prompt. Those prompts have `isVerified` false, for
   an app that wants to say so. Before 8.4, ssh asks through `SSH_ASKPASS`
   only without a terminal, so a command-line app run from one gets ssh's
   own prompt there.
-- On Windows, only ssh's own prompts come, a passphrase or a password.
-  Windows' ssh runs the helper through `cmd.exe`, which would read a
-  server's words, or a `%` or `"` in a name, as commands, so
-  keyboard-interactive logins are off there: a server that takes passwords
-  only that way, as many PAM setups do, refuses the login. Nothing asks when
-  your config sets a `ProxyJump` or `ProxyCommand`, which runs another ssh,
-  when `ssh -G` can't read your config, or when the user, host or a key
-  file's path holds one of `" % ! ^ & | < >`.
-- When ssh won't ask for one of those reasons, `onLog` gets an
-  `SshPromptsOff` with the reason, and an `SshLoginRefusedException` says it
-  at the end of its message.
+
+### Building on Windows
+
+The package ships the Windows helper, `system_ssh_askpass.exe`, built ahead
+of time for x64 and arm64, and its build hook hands it to Dart or Flutter,
+which put it next to your app (in `lib\` for `dart build cli`). Nothing is
+compiled on your machine, and nothing ships for macOS or Linux, where ssh
+runs a shell script instead. 32-bit Windows gets no helper, so tunnels
+there don't ask.
+
+- Because the package has a build hook, a command-line app that uses it
+  builds with `dart build cli`, on every system: `dart compile exe` refuses
+  packages with build hooks. `dart run`, `dart test` and Flutter work as
+  before.
+- If you sign your Windows release, sign `system_ssh_askpass.exe` with the
+  rest of it.
+- The program is built from `src/askpass_helper.c` with a pinned
+  compiler, so the same source always gives the same bytes; CI rebuilds
+  it and fails if the shipped files differ.
 
 ## Sharing a connection
 
@@ -379,7 +395,6 @@ unattended tunnel needs:
 | `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no`, without `onPrompt` |
 | `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt`; on Windows also `SYSTEM_SSH_ASKPASS_PORT` and `SYSTEM_SSH_ASKPASS_TOKEN`, for the helper to reach your app; before OpenSSH 8.4 also `DISPLAY=:0` unless one is set |
-| `KbdInteractiveAuthentication=no` | with `onPrompt` on Windows, whatever your config says; see [Passwords and passphrases](#passwords-and-passphrases) |
 | `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
 | `ConnectTimeout=15` | your config sets none |
 | `trustHostKey`'s ssh | `StrictHostKeyChecking=accept-new`, a `UserKnownHostsFile` of a temp file before yours, `PreferredAuthentications=none`, `ClearAllForwardings=yes`, `PermitLocalCommand=no`, `ControlPath=none` and `BatchMode=yes`: it reads the key without logging in or forwarding |
@@ -404,8 +419,7 @@ started.
 - Forwards your config sets for the host open too.
 - Without `onPrompt`, a key with a passphrase needs an agent, and password
   and keyboard-interactive logins fail. A config that sets `BatchMode no`
-  looks like the default, so it doesn't bring prompts back. On Windows,
-  `onPrompt` asks less; see [Passwords and passphrases](#passwords-and-passphrases).
+  looks like the default, so it doesn't bring prompts back.
 - On Windows, a child ssh starts in the instant before it joins its job object
   can outlive a crash.
 

@@ -30,6 +30,99 @@ jobs:
       - run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints
       - run: dart analyze --fatal-infos && dart test --exclude-tags integration
 
+  # The shipped Windows helper must be what its source builds to. When it
+  # isn't, the run uploads what it built, and commit-askpass commits it.
+  windows-askpass:
+    name: windows-askpass (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: mstorsjo/llvm-mingw:20261117@sha256:7b8c46ceb9a469e9fd93678d59294bf3a8e518f1fb5f92555eb1f7bf1bf695d7
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, target: x86_64 }
+          - { arch: arm64, target: aarch64 }
+    env:
+      CC: ${{ matrix.target }}-w64-mingw32-clang
+      # No timestamp and no symbols, so a rebuild gives the same bytes.
+      FLAGS: -O2 -s -Wl,--no-insert-timestamp
+      OUT: windows/${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The branch itself, not its merge with the base, since that's where
+          # commit-askpass commits.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build the helper
+        run: $CC $FLAGS -municode -o $OUT/system_ssh_askpass.exe src/askpass_helper.c -lws2_32
+      - name: Build the locator
+        run: $CC $FLAGS -shared -o $OUT/system_ssh_askpass_locator.dll src/askpass_locator.c
+      # Lists any file that differs from, or is missing in, the commit. Windows
+      # ignores the executable bit, and an API commit can't set it.
+      - name: Check the committed files match
+        id: check
+        run: |
+          # The checkout belongs to another user than the container's.
+          git config --global --add safe.directory "$PWD"
+          changes=$(git -c core.fileMode=false status --porcelain windows/)
+          echo "$changes"
+          test -z "$changes"
+      - if: failure() && steps.check.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-askpass-${{ matrix.arch }}
+          path: ${{ env.OUT }}/
+
+  # Commits a rebuilt helper to the PR's branch. GitHub holds the run for that
+  # commit until someone approves it on the PR. A fork's PR gets no write
+  # token, so its author commits the uploads by hand.
+  commit-askpass:
+    needs: windows-askpass
+    if: >-
+      always() && needs.windows-askpass.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: windows-askpass-*
+          path: built
+      - name: Commit the rebuilt files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          shopt -s nullglob
+          additions='[]'
+          for file in built/windows-askpass-*/*; do
+            arch=$(basename "$(dirname "$file")"); arch=${arch#windows-askpass-}
+            base64 -w0 "$file" > "$RUNNER_TEMP/contents"
+            additions=$(jq -c --arg path "windows/$arch/$(basename "$file")" \
+              --rawfile contents "$RUNNER_TEMP/contents" \
+              '. + [{path: $path, contents: $contents}]' <<<"$additions")
+          done
+          # Uploads only come from a mismatch, not from a failed build.
+          [ "$additions" != '[]' ] || exit 0
+          # GitHub signs a commit made through its API, as main's rules require.
+          jq -n --arg repo "$GH_REPO" --arg branch "$BRANCH" --arg head "$HEAD" \
+            --argjson additions "$additions" '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {input: {
+                branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+                expectedHeadOid: $head,
+                message: {headline: "Rebuild the Windows askpass helper"},
+                fileChanges: {additions: $additions}
+              }}
+            }' | gh api graphql --input -
+
   # The oldest supported SDK on each OS; integration runs the newest.
   unit:
     name: unit (${{ matrix.os }}, 3.10)
@@ -91,7 +184,7 @@ jobs:
   # The one required check, so the matrix can change without touching branch rules.
   ci:
     if: always()
-    needs: [analyze, unit, integration]
+    needs: [analyze, windows-askpass, unit, integration]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

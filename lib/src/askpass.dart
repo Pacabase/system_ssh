@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 
+import 'askpass_locator.dart';
 import 'exceptions.dart';
 import 'logger.dart';
 import 'ssh_log.dart';
@@ -17,8 +19,9 @@ import 'ssh_prompt.dart';
 final class AskPass {
   AskPass._(this._directory, this._onPrompt, this._verified);
 
-  /// Sets up the helper for [onPrompt] in a directory of its own, in the
-  /// first of [bases] (by default the temp directory, then
+  /// Sets up the helper for [onPrompt]. On Windows, ssh runs the program the
+  /// build hook bundled. Elsewhere the helper is a script in a directory of
+  /// its own, in the first of [bases] (by default the temp directory, then
   /// `XDG_RUNTIME_DIR`, then `~/.cache`) where it can run: a hardened `/tmp`
   /// may forbid running programs. Each prompt's [SshPrompt.isVerified] is
   /// [verified].
@@ -27,6 +30,11 @@ final class AskPass {
     List<String>? bases,
     bool verified = true,
   }) async {
+    if (Platform.isWindows) {
+      final askPass = AskPass._(null, onPrompt, verified);
+      await askPass._startWindows();
+      return askPass;
+    }
     final failures = <String>[];
     for (final base in bases ?? _bases()) {
       final Directory directory;
@@ -39,9 +47,7 @@ final class AskPass {
 
       final askPass = AskPass._(directory, onPrompt, verified);
       try {
-        await (Platform.isWindows
-            ? askPass._startWindows()
-            : askPass._startPosix());
+        await askPass._startPosix();
         return askPass;
       } on _NotRunnable catch (exception) {
         failures.add('$base: ${exception.reason}');
@@ -60,17 +66,15 @@ final class AskPass {
     final environment = Platform.environment;
     return [
       Directory.systemTemp.path,
-      if (!Platform.isWindows) ...[
-        if (environment['XDG_RUNTIME_DIR'] case final runtime?
-            when runtime.isNotEmpty)
-          runtime,
-        if (environment['HOME'] case final home? when home.isNotEmpty)
-          if (Directory('$home/.cache').existsSync()) '$home/.cache',
-      ],
+      if (environment['XDG_RUNTIME_DIR'] case final runtime?
+          when runtime.isNotEmpty)
+        runtime,
+      if (environment['HOME'] case final home? when home.isNotEmpty)
+        if (Directory('$home/.cache').existsSync()) '$home/.cache',
     ];
   }
 
-  final Directory _directory;
+  final Directory? _directory;
   final SshPromptHandler _onPrompt;
   final bool _verified;
   late final String _helper;
@@ -98,8 +102,8 @@ final class AskPass {
   (Object, StackTrace)? get error => _error;
   (Object, StackTrace)? _error;
 
-  /// Whether a helper reached the app on Windows, where PowerShell may be
-  /// locked down.
+  /// Whether a helper reached the app on Windows, where something may block
+  /// it from running.
   var _helperConnected = false;
 
   /// What ssh needs in its environment to ask through the helper.
@@ -142,8 +146,8 @@ final class AskPass {
       );
       if (Platform.isWindows && asked && !_helperConnected) {
         logger.warning(
-          'ssh never reached the password prompt; PowerShell may be blocked '
-          'on this computer',
+          'ssh asked, but its password helper never reached the app; '
+          'something on this computer may block it',
         );
       }
     }
@@ -169,7 +173,7 @@ final class AskPass {
     }
     if (!Platform.isWindows) _cancelWaitingHelpers();
     try {
-      _directory.deleteSync(recursive: true);
+      _directory?.deleteSync(recursive: true);
     } on FileSystemException {
       // Left to the OS's temp cleanup.
     }
@@ -204,6 +208,12 @@ final class AskPass {
           _wasCancelled = true;
           return _refuse(prompt);
         }
+        // ssh reads at most 1023 bytes of an answer and drops the rest.
+        if (utf8.encode(answer).length > 1023) {
+          logger.warning('An answer longer than ssh reads was cancelled');
+          _wasCancelled = true;
+          return _refuse(prompt);
+        }
         return answer;
       } catch (exception, stackTrace) {
         logger.warning('onPrompt threw', exception, stackTrace);
@@ -228,11 +238,12 @@ final class AskPass {
   }
 
   Future<void> _startPosix() async {
-    _helper = '${_directory.path}/askpass';
-    final quoted = "'${_directory.path.replaceAll("'", r"'\''")}'";
+    final directory = _directory!;
+    _helper = '${directory.path}/askpass';
+    final quoted = "'${directory.path.replaceAll("'", r"'\''")}'";
     File(_helper).writeAsStringSync(_posixScript.replaceAll('@DIR@', quoted));
     // createTemp leaves the directory to the umask on Linux, so 755 there.
-    final chmod = await Process.run('chmod', ['700', _directory.path, _helper]);
+    final chmod = await Process.run('chmod', ['700', directory.path, _helper]);
     if (chmod.exitCode != 0) {
       throw SshFailedException(
         'could not set up the password prompt: ${chmod.stderr}',
@@ -256,7 +267,7 @@ final class AskPass {
     if (_isClosed) return;
     final List<FileSystemEntity> entries;
     try {
-      entries = _directory.listSync();
+      entries = _directory!.listSync();
     } on FileSystemException {
       return;
     }
@@ -284,7 +295,7 @@ final class AskPass {
   }
 
   void _reply(String id, String? answer) {
-    final fifo = '${_directory.path}/$id.answer';
+    final fifo = '${_directory!.path}/$id.answer';
     // Never create a file holding the answer: only a FIFO the helper made.
     if (FileSystemEntity.typeSync(fifo, followLinks: false) !=
         FileSystemEntityType.pipe) {
@@ -315,7 +326,7 @@ final class AskPass {
   void _cancelWaitingHelpers() {
     final List<FileSystemEntity> entries;
     try {
-      entries = _directory.listSync();
+      entries = _directory!.listSync();
     } on FileSystemException {
       return;
     }
@@ -333,8 +344,8 @@ final class AskPass {
     _server = server;
     server.listen(_serveWindows);
 
-    _helper = '${_directory.path}\\askpass.cmd';
-    File(_helper).writeAsStringSync(_windowsHelper);
+    // withPrompts checks first that it's there and runs.
+    _helper = bundledWindowsHelper!;
   }
 
   Future<void> _serveWindows(Socket socket) async {
@@ -418,14 +429,6 @@ bool _sameToken(List<int> presented, List<int> token) {
   return difference == 0;
 }
 
-List<int> _utf16le(String text) => [
-  for (final unit in text.codeUnits) ...[unit & 0xff, unit >> 8],
-];
-
-final _windowsHelper = _windowsCommand
-    .replaceAll('@SCRIPT@', base64.encode(_utf16le(_windowsScript)))
-    .replaceAll('\n', '\r\n');
-
 // ssh runs it with the prompt in $1, and reads the answer from its stdout.
 // SSH_ASKPASS_PROMPT is `none` for a notice, such as to touch a hardware
 // key, which ssh doesn't wait on, and `confirm` for a yes/no question, which
@@ -459,49 +462,6 @@ case $a in
   y*) printf '%s\n' "${a#y}" ;;
   *) exit 1 ;;
 esac
-''';
-
-// cmd.exe runs it as `cmd /c ""askpass.cmd" "<prompt>""`, which expands
-// `%NAME%` and, with delayed expansion on, `!NAME!` in the prompt before it
-// reads quotes, and a `"` there would end the quoting. So on Windows only
-// ssh's own prompts come, and only when the user, host and key files in them
-// hold none of those characters; see canPrompt. Inside the quotes, `&` and
-// the like are plain text. PowerShell's stderr goes nowhere: it shares ssh's,
-// and its first start there writes a progress record.
-const _windowsCommand = r'''@echo off
-setlocal DisableDelayedExpansion
-if "%SSH_ASKPASS_PROMPT%"=="none" exit /b 0
-if "%SSH_ASKPASS_PROMPT%"=="confirm" exit /b 1
-set "SYSTEM_SSH_PROMPT=%~1"
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -EncodedCommand @SCRIPT@ 2>nul
-exit /b %ERRORLEVEL%
-''';
-
-// An encoded command, which no execution policy blocks.
-const _windowsScript = r'''
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-try {
-  $utf8 = New-Object System.Text.UTF8Encoding($false)
-  $client = New-Object System.Net.Sockets.TcpClient('127.0.0.1', [int]$env:SYSTEM_SSH_ASKPASS_PORT)
-  $stream = $client.GetStream()
-  $writer = New-Object System.IO.StreamWriter($stream, $utf8)
-  $writer.NewLine = "`n"
-  $reader = New-Object System.IO.StreamReader($stream, $utf8)
-  $writer.WriteLine($env:SYSTEM_SSH_ASKPASS_TOKEN)
-  $writer.WriteLine([Convert]::ToBase64String($utf8.GetBytes($env:SYSTEM_SSH_PROMPT)))
-  $writer.Flush()
-  $answer = $reader.ReadLine()
-  $client.Close()
-  if ($answer -ne $null -and $answer.StartsWith('y')) {
-    $bytes = $utf8.GetBytes($answer.Substring(1) + "`n")
-    $out = [Console]::OpenStandardOutput()
-    $out.Write($bytes, 0, $bytes.Length)
-    $out.Flush()
-    exit 0
-  }
-} catch {}
-exit 1
 ''';
 
 /// The OpenSSH version [executable] reports, such as `(9, 5)`, or null when
@@ -547,66 +507,75 @@ bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
   null => false,
 };
 
-/// Whether ssh may ask through `onPrompt` with [config], what `ssh -G` said.
-///
-/// On Windows, ssh runs the helper through cmd.exe, which would read a
-/// server's words, or a user, host or key file holding a character it reads,
-/// as commands. So only ssh's own prompts come there: keyboard-interactive is
-/// turned off, and nothing asks when a `ProxyJump` or `ProxyCommand` runs
-/// another ssh, which wouldn't get that option, or when the config couldn't
-/// be read to tell.
-bool canPrompt(Map<String, String> config, {bool? onWindows}) =>
-    _whyNoPrompts(config, onWindows: onWindows ?? Platform.isWindows) == null;
-
-/// Whether only ssh's own prompts may come; see [canPrompt].
-bool ownPromptsOnly({bool? onWindows}) => onWindows ?? Platform.isWindows;
-
-String? _whyNoPrompts(Map<String, String> config, {required bool onWindows}) {
-  if (!ownPromptsOnly(onWindows: onWindows)) return null;
-  const who = "Windows' ssh";
-  if (config.isEmpty) {
-    return "$who can't ask safely: ssh -G couldn't read the config";
+/// Why ssh can't ask on this computer, or null when it can: on Windows,
+/// the helper program must be with the app, and Windows must let it run.
+Future<String?> _whyNoPrompts() async {
+  if (!Platform.isWindows) return null;
+  if (Abi.current() == Abi.windowsIA32) {
+    return "32-bit Windows has no password helper, so ssh can't ask";
   }
-  for (final option in ['proxyjump', 'proxycommand']) {
-    if (config.containsKey(option)) {
-      return "$who can't ask safely when the config sets a $option";
-    }
+  final helper = bundledWindowsHelper;
+  if (helper == null) {
+    return "system_ssh_askpass.exe isn't with the app, so ssh can't ask";
   }
-  for (final option in _inPrompts) {
-    if (config[option]?.contains(_readByCmd) ?? false) {
-      return "$who can't ask safely when its $option holds one of "
-          '" % ! ^ & | < >';
-    }
-  }
-  return null;
+  // A refusal is tried again: the first run may be slow while antivirus
+  // scans the program, and the user may allow it later.
+  return _helperProbes[helper] ??= _probe(helper);
 }
 
-const _inPrompts = [
-  'user',
-  'hostname',
-  'hostkeyalias',
-  'identityfile',
-  'certificatefile',
-];
-final _readByCmd = RegExp(r'["%!^&|<>]');
+Future<String?> _probe(String helper) async {
+  final why = await _tryWindowsHelper(helper);
+  if (why != null) _helperProbes.removeWhere((path, _) => path == helper);
+  return why;
+}
+
+final _helperProbes = <String, Future<String?>>{};
+
+// Antivirus or an AppLocker policy may block an unsigned program; ssh would
+// then fail every prompt without saying why.
+Future<String?> _tryWindowsHelper(String helper) async {
+  final Process process;
+  try {
+    process = await Process.start(
+      helper,
+      const [],
+      environment: {'SSH_ASKPASS_PROMPT': 'none'},
+    );
+  } on ProcessException catch (exception) {
+    return "Windows wouldn't run $helper (${exception.message}), so ssh "
+        "can't ask";
+  }
+  unawaited(process.stdout.drain<void>());
+  unawaited(process.stderr.drain<void>());
+  try {
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 10),
+    );
+    if (exitCode == 0) return null;
+    return "Windows wouldn't run $helper (exit code $exitCode), so ssh "
+        "can't ask";
+  } on TimeoutException {
+    process.kill();
+    return "$helper didn't answer in time, so ssh can't ask";
+  }
+}
 
 /// Runs [open] with the environment and options ssh needs to ask
-/// [onPrompt], or as before when [onPrompt] is null or [canPrompt] says no.
+/// [onPrompt], or as before when [onPrompt] is null or ssh can't ask here.
 /// A login that fails after a cancelled prompt throws an
 /// [SshLoginCancelledException], or what [onPrompt] threw.
 ///
-/// When [canPrompt] says no, [onLog] gets an [SshPromptsOff], and a refused
-/// login says why in its message.
+/// When ssh can't ask, [onLog] gets an [SshPromptsOff], and a refused login
+/// says why in its message.
 Future<T> withPrompts<T>(
   SshPromptHandler? onPrompt, {
   required String executable,
-  required Map<String, String> config,
   required Map<String, String> environment,
   required Future<T> Function(SshPrompts prompts) open,
   void Function(SshLog log)? onLog,
 }) async {
   if (onPrompt == null) return open(SshPrompts.none(environment));
-  if (_whyNoPrompts(config, onWindows: Platform.isWindows) case final why?) {
+  if (await _whyNoPrompts() case final why?) {
     final off = SshPromptsOff(why);
     logger.warning(off.line);
     reportTo(onLog, off);
@@ -627,10 +596,8 @@ Future<T> withPrompts<T>(
   final version = await sshVersion(executable, environment: environment);
   final askPass = await AskPass.start(
     onPrompt,
-    // ssh's own prompts are all that come on Windows. An ssh whose version
-    // can't be read may be old.
-    verified:
-        Platform.isWindows || (version != null && !_olderThan(version, 8, 5)),
+    // An ssh whose version can't be read may be old.
+    verified: version != null && !_olderThan(version, 8, 5),
   );
   try {
     return await open(
@@ -647,7 +614,6 @@ Future<T> withPrompts<T>(
             'DISPLAY': ':0',
         },
         enabled: true,
-        ownOnly: ownPromptsOnly(),
         stop: askPass.stop,
       ),
     );
@@ -661,26 +627,15 @@ Future<T> withPrompts<T>(
 /// How one ssh asks for passwords: the [environment] to run it in, and
 /// whether its command turns prompts on.
 final class SshPrompts {
-  SshPrompts._(
-    this.environment, {
-    required this.enabled,
-    this.ownOnly = false,
-    this.stop,
-  });
+  SshPrompts._(this.environment, {required this.enabled, this.stop});
 
   /// No prompts: ssh runs in [environment] with `BatchMode=yes`.
-  SshPrompts.none(this.environment)
-    : enabled = false,
-      ownOnly = false,
-      stop = null;
+  SshPrompts.none(this.environment) : enabled = false, stop = null;
 
   final Map<String, String> environment;
 
   /// For `sshCommand`'s `prompts`.
   final bool enabled;
-
-  /// For `sshCommand`'s `ownPromptsOnly`.
-  final bool ownOnly;
 
   /// Completes when ssh must be stopped; see [AskPass.stop].
   final Future<void>? stop;

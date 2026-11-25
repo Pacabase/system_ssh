@@ -21,15 +21,19 @@
   );
   ```
 
-  On Windows, only passphrases and passwords come, not a server's
-  questions, and none through a `ProxyJump` or `ProxyCommand`. Before
-  OpenSSH 8.5, which doesn't mark a server's questions, every prompt still
-  comes, as in a terminal, with `isVerified` false.
+  On Windows, ssh asks through a small program that ships with the
+  package; 32-bit Windows doesn't ask. If you sign your release, sign
+  `system_ssh_askpass.exe` too; see the README's "Building on Windows".
+  Before OpenSSH 8.5, which doesn't mark a server's questions, every prompt
+  still comes, as in a terminal, with `isVerified` false.
+- **Breaking:** the package has a build hook, so a command-line app that
+  uses it builds with `dart build cli` instead of `dart compile exe`, which
+  refuses packages with build hooks.
 - **Breaking:** `onLog` gets an `SshPromptsOff`, a new kind of `SshLog`, when
   a tunnel has an `onPrompt` but ssh won't ask through it, with the reason,
-  such as a `ProxyJump` on Windows. A refused login then says the reason at
-  the end of its message. A `switch` that names every `SshLog` needs an
-  `SshPromptsOff` case.
+  such as Windows refusing to run the helper. A refused login then
+  says the reason at the end of its message. A `switch` that names every
+  `SshLog` needs an `SshPromptsOff` case.
 
   ```dart
   onLog: (log) {

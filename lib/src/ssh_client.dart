@@ -90,11 +90,10 @@ abstract interface class SshClient {
   /// },
   /// ```
   ///
-  /// On Windows, only ssh's own prompts come, a passphrase or a password,
-  /// never a server's question, and none when a `ProxyJump` or
-  /// `ProxyCommand` runs another ssh; [onLog] then gets an [SshPromptsOff]
-  /// saying why. Before OpenSSH 8.5, every prompt comes, with
-  /// [SshPrompt.isVerified] false; see the README.
+  /// On Windows, ssh asks through a program that ships with the package. If
+  /// it's missing from the app, or Windows won't run it, nothing asks, and
+  /// [onLog] gets an [SshPromptsOff] saying why. Before OpenSSH 8.5, every
+  /// prompt comes, with [SshPrompt.isVerified] false; see the README.
   ///
   /// Completing [abortTrigger] before the tunnel is open stops ssh; after,
   /// it is ignored, and [SshTunnel.close] stops it instead.
