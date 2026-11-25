@@ -3,8 +3,8 @@ import 'package:hooks/hooks.dart';
 
 /// On Windows, ships the program ssh runs as `SSH_ASKPASS`, and a library
 /// that tells Dart where it was installed. Both are built ahead of time into
-/// `windows/` by `tool/build_windows_helper.sh`, so building an app needs no
-/// C compiler. Elsewhere the package writes a shell script at runtime, so
+/// `windows/`, by CI's `windows-helper` job, so building an app needs no C
+/// compiler. Elsewhere the package writes a shell script at runtime, so
 /// nothing ships: Dart can't bundle a program there yet (macOS rewrites a
 /// bundled file as a library; Linux drops its executable bit).
 void main(List<String> arguments) async {

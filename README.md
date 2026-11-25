@@ -215,10 +215,9 @@ there don't ask.
   before.
 - If you sign your Windows release, sign `system_ssh_askpass.exe` with the
   rest of it.
-- The program is built from `src/askpass_helper.c` by
-  `tool/build_windows_helper.sh`, with a pinned compiler, so the same
-  source always gives the same bytes; CI rebuilds it and fails if the
-  shipped files differ.
+- The program is built from `src/askpass_helper.c` with a pinned
+  compiler, so the same source always gives the same bytes; CI rebuilds
+  it and fails if the shipped files differ.
 
 ## Sharing a connection
 
