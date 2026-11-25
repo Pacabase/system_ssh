@@ -17,9 +17,13 @@ import '../fakes/fakes.dart';
 final class SshFixture {
   SshFixture()
     : _port = int.tryParse(Platform.environment['SSH_TEST_PORT'] ?? ''),
+      _passwordPort = int.tryParse(
+        Platform.environment['SSH_TEST_PASSWORD_PORT'] ?? '',
+      ),
       _isCi = Platform.environment['CI'] == 'true';
 
   final int? _port;
+  final int? _passwordPort;
   final bool _isCi;
   final _unknownLines = <String>[];
 
@@ -77,6 +81,26 @@ final class SshFixture {
 
   /// Like [passphraseTarget], but ssh asks for the passphrase only once.
   SshTarget get passphraseOnceTarget => const SshTarget('passphrase-key-once');
+
+  /// [passphraseTarget] reached through a `ProxyJump` to itself, so both
+  /// hops ask for the passphrase.
+  SshTarget get passphraseJumpTarget => const SshTarget('passphrase-jump');
+
+  /// Why the password tests can't run here, or null when they can.
+  String? get passwordSkip => _passwordPort == null || password == null
+      ? 'Needs the password sshd CI starts (SSH_TEST_PASSWORD_PORT)'
+      : skip;
+
+  /// The user `sshtest`, which logs in only with [password].
+  SshTarget get passwordTarget => const SshTarget('password');
+
+  /// Like [passwordTarget], but the server asks for the password itself,
+  /// through keyboard-interactive, as it would for a 2FA code.
+  SshTarget get keyboardInteractiveTarget =>
+      const SshTarget('keyboard-interactive');
+
+  /// [passwordTarget]'s password.
+  String? get password => Platform.environment['SSH_TEST_PASSWORD'];
 
   /// [passphraseTarget]'s key file.
   String get passphraseKeyPath =>
@@ -202,6 +226,31 @@ Host passphrase-key passphrase-key-once
   IdentitiesOnly yes
   IdentityAgent none
   PreferredAuthentications publickey
+  UserKnownHostsFile $knownHosts
+
+Host passphrase-jump
+  HostName 127.0.0.1
+  Port $_port
+  ProxyJump passphrase-key
+  IdentityFile $passphraseKey
+  IdentitiesOnly yes
+  IdentityAgent none
+  PreferredAuthentications publickey
+  UserKnownHostsFile $knownHosts
+
+Host password
+  PreferredAuthentications password
+
+Host keyboard-interactive
+  PreferredAuthentications keyboard-interactive
+
+Host password keyboard-interactive
+  HostName 127.0.0.1
+  Port ${_passwordPort ?? _port}
+  User sshtest
+  PubkeyAuthentication no
+  IdentityAgent none
+  HostKeyAlias $_hostKeyName
   UserKnownHostsFile $knownHosts
 
 Host strict-host-keys

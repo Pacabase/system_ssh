@@ -130,7 +130,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # windows-11-arm runs the arm64 helper the package ships.
+        os: [ubuntu-latest, macos-latest, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -154,6 +155,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       SSH_TEST_PORT: 2222
+      # Windows' own sshd takes passwords, on the same port.
+      SSH_TEST_PASSWORD_PORT: ${{ startsWith(matrix.os, 'windows') && 2222 || 2223 }}
+      SSH_TEST_PASSWORD: correct-horse-staple
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -163,6 +167,8 @@ jobs:
         uses: ./.github/actions/sshd
         with:
           port: ${{ env.SSH_TEST_PORT }}
+          password-port: ${{ env.SSH_TEST_PASSWORD_PORT }}
+          password: ${{ env.SSH_TEST_PASSWORD }}
       - uses: dart-lang/setup-dart@2286a0c042b44434fe26d292bbce8d34f7ec662b # v1.8.2
       - run: dart pub get
       - run: ssh -V
@@ -179,7 +185,8 @@ jobs:
         shell: bash
         env:
           LOG: ${{ steps.sshd.outputs.log }}
-        run: cat "$LOG"
+        # The password sshd's log belongs to root.
+        run: for log in $LOG; do cat "$log" 2>/dev/null || sudo cat "$log"; done
 
   # The one required check, so the matrix can change without touching branch rules.
   ci:

@@ -46,6 +46,19 @@ void main() {
       );
     });
 
+    test('asks for each hop of a ProxyJump', () async {
+      final prompts = <SshPrompt>[];
+
+      final tunnel = await open((prompt) async {
+        prompts.add(prompt);
+        return fixture.keyPassphrase;
+      }, via: fixture.passphraseJumpTarget);
+
+      expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
+      expect(prompts, hasLength(2));
+      expect(prompts, everyElement(isA<SshPassphrasePrompt>()));
+    });
+
     test('throws SshLoginCancelledException when onPrompt cancels', () async {
       var asked = 0;
 
@@ -118,6 +131,71 @@ void main() {
         expect(asked, 1);
       },
       // Windows' OpenSSH can't share a connection.
+      testOn: '!windows',
+    );
+  });
+
+  group('A password', skip: fixture.passwordSkip, () {
+    setUpAll(fixture.setUpAll);
+    tearDownAll(fixture.tearDownAll);
+    setUp(fixture.setUp);
+    tearDown(fixture.tearDown);
+
+    Future<SshTunnel> open(SshPromptHandler onPrompt, {SshTarget? via}) async {
+      final tunnel = await openSystemForward(
+        via ?? fixture.passwordTarget,
+        forward: localForwardTo(fixture.echoHost, fixture.echoPort),
+        onLog: fixture.logged(),
+        onPrompt: onPrompt,
+        executable: fixture.ssh,
+      ).timeout(const Duration(seconds: 60));
+      addTearDown(tunnel.close);
+      return tunnel;
+    }
+
+    test('logs in with the password onPrompt answers', () async {
+      final prompts = <SshPrompt>[];
+
+      final tunnel = await open((prompt) async {
+        prompts.add(prompt);
+        return fixture.password;
+      });
+
+      expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
+      expect(prompts.single, isA<SshPasswordPrompt>());
+      expect(prompts.single.isVerified, isTrue);
+    });
+
+    test('throws SshLoginRefusedException for a wrong password', () async {
+      await expectLater(
+        open((_) async => 'wrong-password'),
+        throwsA(isA<SshLoginRefusedException>()),
+      );
+    });
+
+    test('throws SshLoginCancelledException when onPrompt cancels', () async {
+      await expectLater(
+        open((_) async => null),
+        throwsA(isA<SshLoginCancelledException>()),
+      );
+    });
+
+    test(
+      "answers the server's own question, as for a 2FA code",
+      () async {
+        final prompts = <SshPrompt>[];
+
+        final tunnel = await open((prompt) async {
+          prompts.add(prompt);
+          return fixture.password;
+        }, via: fixture.keyboardInteractiveTarget);
+
+        expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
+        expect(prompts.single, isA<SshCodePrompt>());
+        expect(prompts.single.text, contains('Password'));
+        expect(prompts.single.isVerified, isTrue);
+      },
+      // Windows' sshd has no PAM to ask through keyboard-interactive.
       testOn: '!windows',
     );
   });

@@ -5,21 +5,29 @@ inputs:
   port:
     description: 'The port sshd listens on.'
     default: '2222'
+  password-port:
+    description: "The port of a second sshd, run as root, where the user sshtest logs in with a password; Windows' sshd takes passwords on port."
+    default: '2223'
+  password:
+    description: "sshtest's password, a throwaway one for this runner."
+    default: 'correct-horse-staple'
 
 outputs:
   log:
-    description: "sshd's log."
+    description: "sshd's log, and the password sshd's after it."
     value: ${{ steps.unix.outputs.log || steps.windows.outputs.log }}
 
 runs:
   using: 'composite'
   steps:
-    # Runs as the runner user on a high port, so it needs no root.
+    # Runs as the runner user on a high port; only the password sshd needs root.
     - id: unix
       if: runner.os != 'Windows'
       shell: bash
       env:
         PORT: ${{ inputs.port }}
+        PASSWORD_PORT: ${{ inputs.password-port }}
+        PASSWORD: ${{ inputs.password }}
       run: |
         dir="$RUNNER_TEMP/sshd"
         mkdir -p "$dir" ~/.ssh
@@ -40,7 +48,23 @@ runs:
           options+=(-o PerSourcePenalties=no)
         fi
         /usr/sbin/sshd -f /dev/null -E "$dir/sshd.log" "${options[@]}"
-        echo "log=$dir/sshd.log" >> "$GITHUB_OUTPUT"
+
+        # Only root can check a password, so a second sshd, for a throwaway user.
+        if [ "$(uname)" = Darwin ]; then
+          id sshtest >/dev/null 2>&1 || sudo sysadminctl -addUser sshtest -password "$PASSWORD" 2>/dev/null
+        else
+          id sshtest >/dev/null 2>&1 || sudo useradd --create-home sshtest
+          echo "sshtest:$PASSWORD" | sudo chpasswd
+          sudo mkdir -p /run/sshd
+        fi
+        password_options=(-o "Port=$PASSWORD_PORT" -o ListenAddress=127.0.0.1 -o "HostKey=$dir/host_key"
+          -o "PidFile=$dir/sshd-password.pid" -o UsePAM=yes -o PasswordAuthentication=yes
+          -o KbdInteractiveAuthentication=yes -o AllowUsers=sshtest)
+        if [[ " ${options[*]} " == *PerSourcePenalties* ]]; then
+          password_options+=(-o PerSourcePenalties=no)
+        fi
+        sudo /usr/sbin/sshd -f /dev/null -E "$dir/sshd-password.log" "${password_options[@]}"
+        echo "log=$dir/sshd.log $dir/sshd-password.log" >> "$GITHUB_OUTPUT"
 
     # Windows ships OpenSSH Server as a service; it reads an administrator's keys from ProgramData only.
     - id: windows
@@ -48,6 +72,7 @@ runs:
       shell: pwsh
       env:
         PORT: ${{ inputs.port }}
+        PASSWORD: ${{ inputs.password }}
       run: |
         $ErrorActionPreference = 'Stop'
         if (-not (Get-Service sshd -ErrorAction SilentlyContinue)) {
@@ -71,5 +96,9 @@ runs:
         (Get-Content $config) -replace '^#?Port .*', "Port $env:PORT" `
           -replace '^#?ListenAddress 0\.0\.0\.0', 'ListenAddress 127.0.0.1' `
           -replace '^#?SyslogFacility .*', 'SyslogFacility LOCAL0' | Set-Content $config
+        # A throwaway user that logs in with a password.
+        if (-not (Get-LocalUser sshtest -ErrorAction SilentlyContinue)) {
+          New-LocalUser sshtest -Password (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+        }
         Start-Service sshd
         "log=$env:ProgramData\ssh\logs\sshd.log" >> $env:GITHUB_OUTPUT
