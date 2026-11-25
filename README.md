@@ -140,8 +140,8 @@ print('On the server, curl http://127.0.0.1:${tunnel.remotePort}');
 Without `onPrompt`, ssh asks nothing: a key with a passphrase works through
 your agent, and a login that needs an answer fails with an
 `SshLoginRefusedException`. With it, ssh asks your app through
-`SSH_ASKPASS`, and your answer reaches ssh through a pipe, never an
-argument, the environment or a file:
+`SSH_ASKPASS`, and your answer reaches ssh through a pipe, or on Windows
+a loopback socket, never an argument, the environment or a file:
 
 ```dart
 final tunnel = await client.openTunnel(
@@ -174,7 +174,8 @@ final tunnel = await client.openTunnel(
   in, a `ProxyJump` host included. A jump host's unknown host key is never
   asked about: it fails with an `SshHostKeyRefusedException`. The package
   doesn't time prompts out; the server ends a login nobody answers, usually
-  after two minutes.
+  after two minutes. A tunnel that fails or is aborted while its prompt
+  shows lets the next one come, so close its dialog when the open throws.
 - A tunnel on a port the package picks can be retried if another program
   takes the port while ssh logs in, and the retry asks again.
 - The helper runs from the temp folder, or, where that doesn't allow

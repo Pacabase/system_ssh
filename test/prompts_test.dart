@@ -62,6 +62,8 @@ void main() {
     for (final text in [
       'Verification code: ',
       '(alice@ssh.example.com) Password: ',
+      "(alice@jump.example.com) alice@db.example.com's password: ",
+      "(alice@jump.example.com) Enter passphrase for key 'x': ",
       "Enter passphrase for key 'x': and more",
       "alice@host's password: and more",
       '',
@@ -716,6 +718,51 @@ void main() {
 
       expect(results.map((result) => result.exitCode), [0, 0, 0]);
       expect(most, 1);
+    });
+
+    test('keeps a closed helper waiting in line from letting two in', () async {
+      final firstAsked = Completer<void>();
+      final firstAnswer = Completer<String?>();
+      addTearDown(() {
+        if (!firstAnswer.isCompleted) firstAnswer.complete(null);
+      });
+      var firstDone = false;
+      var overlapped = false;
+      final first = await AskPass.start((_) {
+        firstAsked.complete();
+        return firstAnswer.future;
+      });
+      final queued = await AskPass.start((_) async => 'secret');
+      final last = await AskPass.start((_) async {
+        if (!firstDone) overlapped = true;
+        return 'secret';
+      });
+      for (final helper in [first, queued, last]) {
+        addTearDown(helper.close);
+      }
+      Future<ProcessResult> run(AskPass helper) => Process.run(
+        helper.environment['SSH_ASKPASS']!,
+        [password],
+        environment: helper.environment,
+      );
+
+      final firstResult = run(first);
+      await firstAsked.future.timeout(const Duration(seconds: 20));
+      unawaited(run(queued));
+      // Long enough for its prompt to reach the line.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await queued.close();
+      final lastResult = run(last);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      firstDone = true;
+      firstAnswer.complete('secret');
+
+      expect(
+        (await lastResult.timeout(const Duration(seconds: 20))).exitCode,
+        0,
+      );
+      await firstResult;
+      expect(overlapped, isFalse);
     });
 
     test('lets a closed helper stop holding up the next prompt', () async {
