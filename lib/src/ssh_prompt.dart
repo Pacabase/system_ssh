@@ -1,3 +1,5 @@
+import 'dart:async';
+
 /// Something ssh asks while it logs in, for the app to answer or cancel
 /// through an `onPrompt`: an [SshPassphrasePrompt] for a key file, an
 /// [SshPasswordPrompt], or an [SshCodePrompt] for anything the server asks,
@@ -11,7 +13,8 @@
 /// },
 /// ```
 sealed class SshPrompt {
-  const SshPrompt(this.text, {this.isVerified = true});
+  const SshPrompt(this.text, {this.isVerified = true, Future<void>? withdrawn})
+    : _withdrawn = withdrawn;
 
   /// The prompt as ssh shows it, such as `alice@ssh.example.com's password: `.
   /// For an [SshCodePrompt] these are the server's own words, so show them as
@@ -25,6 +28,23 @@ sealed class SshPrompt {
   /// way; an app may want to say where the prompt may come from, or not keep
   /// what's typed.
   final bool isVerified;
+
+  /// Completes once ssh no longer waits for the answer: the login went on
+  /// another way, failed, or was aborted. Close the dialog then; an answer
+  /// after it goes nowhere. With `shareConnections`, a login another tunnel
+  /// waits on goes on after the tunnel that asked closes, so this, not that
+  /// tunnel's open call, says when the prompt is over.
+  ///
+  /// ```dart
+  /// onPrompt: (prompt) {
+  ///   final dialog = showPromptDialog(prompt);
+  ///   prompt.withdrawn.then((_) => dialog.close());
+  ///   return dialog.answer;
+  /// },
+  /// ```
+  Future<void> get withdrawn => _withdrawn ?? _never;
+  final Future<void>? _withdrawn;
+  static final _never = Completer<void>().future;
 
   @override
   bool operator ==(Object other) =>
@@ -60,6 +80,7 @@ final class SshPassphrasePrompt extends SshPrompt {
     super.text, {
     required this.keyPath,
     super.isVerified,
+    super.withdrawn,
   });
 
   /// The key file, as ssh names it, cut short past 100 characters.
@@ -70,7 +91,7 @@ final class SshPassphrasePrompt extends SshPrompt {
 /// the way.
 final class SshPasswordPrompt extends SshPrompt {
   /// ssh's [text], such as `alice@ssh.example.com's password: `.
-  const SshPasswordPrompt(super.text, {super.isVerified});
+  const SshPasswordPrompt(super.text, {super.isVerified, super.withdrawn});
 }
 
 /// Anything else: mostly the server asking in its own words
@@ -79,7 +100,7 @@ final class SshPasswordPrompt extends SshPrompt {
 /// also ssh's own `Enter PIN for ED25519-SK key …: ` for a hardware key.
 final class SshCodePrompt extends SshPrompt {
   /// The server's [text].
-  const SshCodePrompt(super.text, {super.isVerified});
+  const SshCodePrompt(super.text, {super.isVerified, super.withdrawn});
 }
 
 /// Answers an [SshPrompt]: the text to send, or null to cancel the login. An
@@ -105,18 +126,29 @@ bool isHostKeyQuestion(String text) =>
 
 /// [text], from ssh, as the kind of prompt its wording says; see
 /// [SshPrompt.isVerified].
-SshPrompt classifyPrompt(String text, {bool isVerified = true}) {
+SshPrompt classifyPrompt(
+  String text, {
+  bool isVerified = true,
+  Future<void>? withdrawn,
+}) {
   // A server's question, marked so since OpenSSH 8.5, whatever it says after.
-  if (text.startsWith('(')) return SshCodePrompt(text, isVerified: isVerified);
+  if (text.startsWith('(')) {
+    return SshCodePrompt(text, isVerified: isVerified, withdrawn: withdrawn);
+  }
   if (_passphrase.firstMatch(text) case final match?) {
     return SshPassphrasePrompt(
       text,
       keyPath: match[1]!,
       isVerified: isVerified,
+      withdrawn: withdrawn,
     );
   }
   if (_password.hasMatch(text)) {
-    return SshPasswordPrompt(text, isVerified: isVerified);
+    return SshPasswordPrompt(
+      text,
+      isVerified: isVerified,
+      withdrawn: withdrawn,
+    );
   }
-  return SshCodePrompt(text, isVerified: isVerified);
+  return SshCodePrompt(text, isVerified: isVerified, withdrawn: withdrawn);
 }

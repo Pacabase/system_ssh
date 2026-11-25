@@ -618,6 +618,79 @@ void main() {
       expect(asked, 1);
       expect(fake.answers, ['secret']);
     }, testOn: '!windows');
+
+    test(
+      "keeps a shared login's prompt when the tunnel that asked aborts",
+      () async {
+        fake.asks({passphrase: 'secret'});
+        final pool = ConnectionPool();
+        final asked = Completer<SshPrompt>();
+        final answer = Completer<String?>();
+        addTearDown(() {
+          if (!answer.isCompleted) answer.complete(null);
+        });
+        final abort = Completer<void>();
+        Future<SshTunnel> share({
+          Future<void>? abortTrigger,
+          required SshPromptHandler onPrompt,
+        }) => openSystemForward(
+          server,
+          forward: localForwardTo('db.example.com', 3306),
+          executable: fake.path,
+          pool: pool,
+          abortTrigger: abortTrigger,
+          onPrompt: onPrompt,
+        );
+
+        final first = share(
+          abortTrigger: abort.future,
+          onPrompt: (prompt) {
+            asked.complete(prompt);
+            return answer.future;
+          },
+        );
+        final prompt = await asked.future.timeout(const Duration(seconds: 20));
+        final second = share(onPrompt: (_) async => null);
+        // Long enough for the second to wait on the same login.
+        await Future<void>.delayed(const Duration(seconds: 2));
+        abort.complete();
+        await expectLater(first, throwsA(isA<SshTunnelAbortedException>()));
+        var isWithdrawn = false;
+        unawaited(prompt.withdrawn.then((_) => isWithdrawn = true));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        expect(isWithdrawn, isFalse);
+
+        answer.complete('secret');
+        final tunnel = await second.timeout(const Duration(seconds: 20));
+        addTearDown(tunnel.close);
+
+        expect(fake.answers, ['secret']);
+        await prompt.withdrawn.timeout(const Duration(seconds: 20));
+      },
+      testOn: '!windows',
+    );
+
+    test("withdraws a prompt once its tunnel's login ends", () async {
+      fake.asks({passphrase: null});
+      final abort = Completer<void>();
+      final asked = Completer<SshPrompt>();
+      final opening = openSystemForward(
+        server,
+        forward: localForwardTo('db.example.com', 3306),
+        executable: fake.path,
+        abortTrigger: abort.future,
+        onPrompt: (prompt) {
+          asked.complete(prompt);
+          return Completer<String?>().future;
+        },
+      );
+      final prompt = await asked.future.timeout(const Duration(seconds: 20));
+
+      abort.complete();
+
+      await expectLater(opening, throwsA(isA<SshTunnelAbortedException>()));
+      await prompt.withdrawn.timeout(const Duration(seconds: 20));
+    });
   });
 
   group('AskPass', () {
