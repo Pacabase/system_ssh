@@ -43,4 +43,4 @@ dart pub publish --dry-run
 
 CI also runs the unit tests on Dart 3.10, the oldest SDK `pubspec.yaml` allows, so don't use a newer API.
 
-On Windows, ssh runs `src/askpass_helper.c` for prompts, and `src/askpass_locator.c` tells Dart where it was installed. Both ship prebuilt in `windows/`, which `hook/build.dart` hands to the app. CI's `windows-helper` job builds them with a pinned llvm-mingw and fails if they differ from `windows/`. After changing either C file, commit the files that job uploads, kept executable (`chmod 755`).
+On Windows, ssh runs `src/askpass_helper.c` for prompts, and `src/askpass_locator.c` tells Dart where it was installed. Both ship prebuilt in `windows/`, which `hook/build.dart` hands to the app. CI's `windows-askpass` job builds them with a pinned llvm-mingw and fails if they differ from `windows/`. After changing either C file, commit the files that job uploads, kept executable (`chmod 755`).

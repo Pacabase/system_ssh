@@ -32,8 +32,8 @@ jobs:
 
   # The shipped Windows helper must be what its source builds to. A failed
   # run uploads what it built, to commit into windows/.
-  windows-helper:
-    name: windows-helper (${{ matrix.arch }})
+  windows-askpass:
+    name: windows-askpass (${{ matrix.arch }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     container: mstorsjo/llvm-mingw:20261117@sha256:7b8c46ceb9a469e9fd93678d59294bf3a8e518f1fb5f92555eb1f7bf1bf695d7
@@ -62,7 +62,7 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-helper-${{ matrix.arch }}
+          name: windows-askpass-${{ matrix.arch }}
           path: ${{ env.OUT }}/
 
   # The oldest supported SDK on each OS; integration runs the newest.
@@ -126,7 +126,7 @@ jobs:
   # The one required check, so the matrix can change without touching branch rules.
   ci:
     if: always()
-    needs: [analyze, windows-helper, unit, integration]
+    needs: [analyze, windows-askpass, unit, integration]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
