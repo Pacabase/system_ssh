@@ -1,4 +1,4 @@
-## Unreleased
+## 0.12.0
 
 - `SshTarget` takes an `identityFile`: ssh logs in with that key alone,
   from the file or your agent, so a server that allows few attempts doesn't
