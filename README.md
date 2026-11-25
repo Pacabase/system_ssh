@@ -138,10 +138,9 @@ print('On the server, curl http://127.0.0.1:${tunnel.remotePort}');
 ## Passwords and passphrases
 
 Without `onPrompt`, ssh asks nothing: a key with a passphrase works through
-your agent, and a login that needs an answer fails with an
-`SshLoginRefusedException`. With it, ssh asks your app through
-`SSH_ASKPASS`, and your answer reaches ssh through a pipe, or on Windows
-a loopback socket, never an argument, the environment or a file:
+your agent, and a login that needs an answer throws an
+`SshLoginRefusedException`. With it, ssh asks your app. The answer never
+goes through an argument, the environment or a file.
 
 ```dart
 final tunnel = await client.openTunnel(
@@ -156,68 +155,36 @@ final tunnel = await client.openTunnel(
 );
 ```
 
-- `SshPassphrasePrompt` is a key file's passphrase, `SshPasswordPrompt` a
-  password, and `SshCodePrompt` anything else, mostly what the server asks in
-  its own words (keyboard-interactive), such as a 2FA code. Show `text` as
-  plain text: the server may have written it.
-- Answer null to cancel: nothing more is asked, and once ssh has no other
-  way to log in, such as another key or your agent, it throws an
-  `SshLoginCancelledException`. ssh is stopped before it would send an empty
-  password or answer, which a server counts as a failed login. If
-  `onPrompt` throws, the login is cancelled the same way and that error is
-  thrown. An answer can't hold a line break or be longer than 1023 bytes in
-  UTF-8, the most ssh reads; one that does cancels.
-- A wrong passphrase or password is asked again up to
-  `NumberOfPasswordPrompts` times (3 by default); the server decides how
-  often it asks its own questions. Then it throws an
-  `SshLoginRefusedException`.
-- Prompts come one at a time, across every tunnel, and only while ssh logs
-  in, a `ProxyJump` host included. A jump host's unknown host key is never
-  asked about: it fails with an `SshHostKeyRefusedException`. The package
-  doesn't time prompts out; the server ends a login nobody answers, usually
-  after two minutes. Each prompt's `withdrawn` completes once ssh stops
-  waiting for its answer, such as when its tunnel fails or is aborted, so
-  close its dialog then; the next prompt may already be on its way.
-- A tunnel on a port the package picks can be retried if another program
-  takes the port while ssh logs in, and the retry asks again.
-- On macOS and Linux, the helper is a script in the temp folder, or, where
-  that doesn't allow running programs, `XDG_RUNTIME_DIR` or `~/.cache`.
-- With `shareConnections`, only the tunnel that starts the shared login is
-  asked, so a server asks once, not once per tunnel. A tunnel with
-  `onPrompt` and one without never share a connection.
-- A config that sets `BatchMode yes` still keeps ssh from asking.
-- On Windows, ssh runs a small helper program that ships with the package
-  (see [Building on Windows](#building-on-windows)), so everything is asked
-  there too. If it's missing from your app, or Windows won't run it, such
-  as under an AppLocker policy, nothing asks: `onLog` gets an
-  `SshPromptsOff` with the reason, and an `SshLoginRefusedException` says it
-  at the end of its message. 32-bit Windows has no helper, so nothing asks
-  there.
-- Before OpenSSH 8.5, every prompt still comes, as in a terminal, but ssh
-  doesn't mark a server's questions with `(user@host)`, so a server could
-  word one as ssh's own prompt. Those prompts have `isVerified` false, for
-  an app that wants to say so. Before 8.4, ssh asks through `SSH_ASKPASS`
-  only without a terminal, so a command-line app run from one gets ssh's
-  own prompt there.
+- **Kinds:** a key's passphrase, a password, or `SshCodePrompt` for what the
+  server asks in its own words, such as a 2FA code. Show `text` as plain
+  text: the server may have written it.
+- **Cancel** by answering null: nothing more is asked, and the login throws
+  an `SshLoginCancelledException`. An answer with a line break or over 1023
+  bytes, the most ssh reads, cancels too, and so does an `onPrompt` that
+  throws, which then throws its error.
+- **A wrong answer** is asked again, up to `NumberOfPasswordPrompts` times
+  (3 by default), then the login throws an `SshLoginRefusedException`.
+- **One prompt at a time,** across every tunnel. Close your dialog when the
+  prompt's `withdrawn` completes: ssh stopped waiting, such as when the
+  tunnel was aborted. With `shareConnections`, a server asks once, not once
+  per tunnel.
+- **`isVerified`** is false before OpenSSH 8.5, which doesn't tell a
+  server's questions from its own, so a server could word one as a
+  passphrase prompt.
+- **On Windows,** ssh asks through a small program that ships with the
+  package. If it's missing or Windows won't run it, such as under an
+  AppLocker policy, nothing asks, and `onLog` gets an `SshPromptsOff` saying
+  why. 32-bit Windows doesn't ask.
 
 ### Building on Windows
 
-The package ships the Windows helper, `system_ssh_askpass.exe`, built ahead
-of time for x64 and arm64, and its build hook hands it to Dart or Flutter,
-which put it next to your app (in `lib\` for `dart build cli`). Nothing is
-compiled on your machine, and nothing ships for macOS or Linux, where ssh
-runs a shell script instead. 32-bit Windows gets no helper, so tunnels
-there don't ask.
+The helper, `system_ssh_askpass.exe`, ships prebuilt for x64 and arm64, and
+Dart or Flutter put it next to your app. Nothing is compiled on your machine.
 
-- Because the package has a build hook, a command-line app that uses it
-  builds with `dart build cli`, on every system: `dart compile exe` refuses
-  packages with build hooks. `dart run`, `dart test` and Flutter work as
-  before.
-- If you sign your Windows release, sign `system_ssh_askpass.exe` with the
-  rest of it.
-- The program is built from `src/askpass_helper.c` with a pinned
-  compiler, so the same source always gives the same bytes; CI rebuilds
-  it and fails if the shipped files differ.
+- A command-line app builds with `dart build cli`, not `dart compile exe`,
+  which refuses packages with build hooks, and ships the folder it makes.
+  `dart run`, `dart test` and Flutter need nothing.
+- If you sign your release file by file, sign `system_ssh_askpass.exe` too.
 
 ## Sharing a connection
 
@@ -419,7 +386,10 @@ started.
 - Forwards your config sets for the host open too.
 - Without `onPrompt`, a key with a passphrase needs an agent, and password
   and keyboard-interactive logins fail. A config that sets `BatchMode no`
-  looks like the default, so it doesn't bring prompts back.
+  looks like the default, so it doesn't bring prompts back, and one that sets
+  `BatchMode yes` keeps ssh from asking even with `onPrompt`.
+- Before OpenSSH 8.4, a command-line app run from a terminal gets ssh's own
+  prompt there, not `onPrompt`.
 - On Windows, a child ssh starts in the instant before it joins its job object
   can outlive a crash.
 
