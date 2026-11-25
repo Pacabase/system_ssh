@@ -1,52 +1,26 @@
 ## Unreleased
 
-- **Breaking:** the package needs Dart 3.10 or newer. Raise your `sdk`
-  constraint to `^3.10.0`, or keep the previous release.
-- `openTunnel`, `openSocketTunnel`, `openRemoteTunnel` and `openSocksProxy`
-  take an `onPrompt` that answers what ssh asks while it logs in: a key's
-  passphrase without an agent, a password, or the server's own question,
-  such as a 2FA code. Answering null cancels the login. Without it, nothing
-  changes: ssh asks nothing. A prompt's `withdrawn` completes once ssh no
-  longer waits for its answer, for closing the dialog.
+- The `open*` methods take an `onPrompt` that answers what ssh asks while it
+  logs in: a key's passphrase, a password, or a 2FA code. Answer null to
+  cancel. Without it, nothing changes. See the README's "Passwords and
+  passphrases".
 
   ```dart
-  final tunnel = await client.openTunnel(
-    server,
-    remoteHost: 'db.example.com',
-    remotePort: 5432,
-    onPrompt: (prompt) => switch (prompt) {
-      SshPassphrasePrompt(:final keyPath) => askForPassphrase(keyPath),
-      SshPasswordPrompt() || SshCodePrompt() => askFor(prompt.text),
-    },
-  );
-  ```
-
-  On Windows, ssh asks through a small program that ships with the
-  package; 32-bit Windows doesn't ask. If you sign your release, sign
-  `system_ssh_askpass.exe` too; see the README's "Building on Windows".
-  Before OpenSSH 8.5, which doesn't mark a server's questions, every prompt
-  still comes, as in a terminal, with `isVerified` false.
-- **Breaking:** the package has a build hook, so a command-line app that
-  uses it builds with `dart build cli` instead of `dart compile exe`, which
-  refuses packages with build hooks.
-- **Breaking:** `onLog` gets an `SshPromptsOff`, a new kind of `SshLog`, when
-  a tunnel has an `onPrompt` but ssh won't ask through it, with the reason,
-  such as Windows refusing to run the helper. A refused login then
-  says the reason at the end of its message. A `switch` that names every
-  `SshLog` needs an `SshPromptsOff` case.
-
-  ```dart
-  onLog: (log) {
-    if (log is SshPromptsOff) showWarning(log.reason);
+  onPrompt: (prompt) => switch (prompt) {
+    SshPassphrasePrompt(:final keyPath) => askForPassphrase(keyPath),
+    SshPasswordPrompt() || SshCodePrompt() => askFor(prompt.text),
   },
   ```
-- **Breaking:** a cancelled prompt throws an `SshLoginCancelledException`, a
-  new `SshException` that is neither permanent nor temporary. A `switch`
-  that names every `SshException` needs an `SshLoginCancelledException`
-  case.
-- **Breaking:** `SshClient`'s four `open*` methods take an
-  `SshPromptHandler? onPrompt`. A class that implements `SshClient`, such
-  as a fake in tests, adds the parameter to each.
+- **Breaking:** the package needs Dart 3.10 or newer: raise your `sdk`
+  constraint to `^3.10.0`.
+- **Breaking:** a command-line app builds with `dart build cli` instead of
+  `dart compile exe`, which refuses packages with build hooks. Flutter,
+  `dart run` and `dart test` are unaffected.
+- **Breaking:** new classes for a `switch` that names every one:
+  `SshPromptsOff`, an `SshLog` saying why ssh can't ask, and
+  `SshLoginCancelledException`, thrown after a cancelled prompt.
+- **Breaking:** a class that implements `SshClient`, such as a test fake,
+  adds `SshPromptHandler? onPrompt` to its four `open*` methods.
 
 ## 0.11.0
 
