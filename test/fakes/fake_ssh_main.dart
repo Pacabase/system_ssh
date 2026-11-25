@@ -4,8 +4,11 @@ import 'dart:io';
 
 /// How the fake plays one tunnel attempt. `hang` connects forever, saying
 /// nothing; `held`, for a master, says only what a test has it say, so the
-/// test finishes its login.
+/// test finishes its login, or ends it with [sayExit].
 enum AttemptMode { ready, fail, notFound, bindFailure, hang, held }
+
+/// A line a test has a master say to exit with the code after it.
+const sayExit = '<exit>';
 
 /// How the fake's server key plays, before any [AttemptMode]: `unknown` until
 /// the fake's own `known_hosts` holds [fakeHostKeyEntry], `changed`, or
@@ -168,6 +171,10 @@ Future<void> _run(List<String> steps) async {
           final file = File(value);
           final lines = file.existsSync() ? file.readAsLinesSync() : <String>[];
           for (final line in lines.skip(said)) {
+            if (line.startsWith(sayExit)) {
+              await stderr.flush();
+              exit(int.parse(line.substring(sayExit.length)));
+            }
             stderr.writeln(line);
           }
           said = lines.length;

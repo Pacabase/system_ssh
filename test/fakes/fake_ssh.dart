@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-import 'fake_ssh_main.dart' show AttemptMode, HostKeyMode, TrustMode;
+import 'fake_ssh_main.dart' show AttemptMode, HostKeyMode, TrustMode, sayExit;
 import 'fakes.dart';
 
 export 'fake_ssh_main.dart'
@@ -106,6 +106,12 @@ final class FakeSsh {
   /// Has a master that is up write [line] to its stderr.
   void masterSays(String line) =>
       _file('master_say').writeAsStringSync('$line\n', mode: FileMode.append);
+
+  /// Has a master that is up exit with [code], after what it was told to say.
+  void masterExits(int code) => masterSays('$sayExit$code');
+
+  /// Forgets what masters were told to say, so the next one starts afresh.
+  void forgetMasterSays() => _file('master_say').writeAsStringSync('');
 
   /// The arguments of each `ssh -O` command, in order.
   List<List<String>> get muxCommands => [

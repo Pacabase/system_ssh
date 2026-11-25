@@ -294,7 +294,7 @@ void main() {
   });
 
   test('a failed login fails every tunnel waiting on it, once', () async {
-    fake.attemptModes([AttemptMode.fail, AttemptMode.ready]);
+    fake.attemptModes([AttemptMode.held, AttemptMode.ready]);
     final failure = throwsA(
       isA<SshUnreachableException>().having(
         (exception) => exception.message,
@@ -302,12 +302,29 @@ void main() {
         contains('Connection refused'),
       ),
     );
+    final firstLogs = <SshLog>[];
+    final secondLogs = <SshLog>[];
 
-    await Future.wait([
-      expectLater(open(), failure),
-      expectLater(open(), failure),
+    final failing = Future.wait([
+      expectLater(open(onLog: firstLogs.add), failure),
+      expectLater(open(onLog: secondLogs.add), failure),
     ]);
+    await eventually(() => fake.attemptPid(1));
+    // Fails only once both wait on the login.
+    await eventually(() {
+      if (firstLogs.isNotEmpty && secondLogs.isNotEmpty) return true;
+      fake.masterSays('debug1: Connecting to ssh.example.com port 22.');
+      return null;
+    });
+    fake
+      ..masterSays(
+        'ssh: connect to host ssh.example.com port 22: Connection refused',
+      )
+      ..masterExits(255);
+    await failing;
     expect(fake.attempts, hasLength(1));
+
+    fake.forgetMasterSays();
 
     await open();
     expect(fake.attempts, hasLength(2));
