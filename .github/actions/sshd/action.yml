@@ -105,6 +105,9 @@ runs:
           # The runner's sshd_config may let in only the groups AllowGroups names.
           New-LocalGroup sshtesters | Out-Null
           Add-LocalGroupMember sshtesters -Member sshtest
+          # Its first logon makes its profile, which takes longer than a test waits.
+          $credential = [pscredential]::new('sshtest', (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force))
+          Start-Process cmd.exe -ArgumentList '/c', 'exit' -Credential $credential -LoadUserProfile -Wait -WorkingDirectory $env:SystemRoot
         }
         Start-Service sshd
         "log=$env:ProgramData\ssh\logs\sshd.log" >> $env:GITHUB_OUTPUT
