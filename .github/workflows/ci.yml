@@ -155,7 +155,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       SSH_TEST_PORT: 2222
-      SSH_TEST_PASSWORD: correct-horse-staple
+      # Windows wants a mix of cases and digits.
+      SSH_TEST_PASSWORD: Correct-Horse-Staple-42
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

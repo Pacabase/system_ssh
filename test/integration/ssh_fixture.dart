@@ -505,6 +505,8 @@ final _harmlessLines = [
     r'^No \S+ host key is known for \S+ and you have requested strict '
     r'checking\.$',
   ),
+  // A wrong password, before ssh asks again.
+  RegExp(r'^Permission denied, please try again\.$'),
   // An IdentityFile that doesn't exist, which ssh skips.
   RegExp(r'^no such identity: .+: No such file or directory$'),
   // Windows' ssh, as UpdateHostKeys learns the server's other keys.

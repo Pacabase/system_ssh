@@ -7,7 +7,7 @@ inputs:
     default: '2222'
   password:
     description: "The password of sshtest, a throwaway user the sshd lets log in."
-    default: 'correct-horse-staple'
+    default: 'Correct-Horse-Staple-42'
 
 outputs:
   log:
@@ -38,7 +38,15 @@ runs:
         cat ~/.ssh/id_ed25519_passphrase.pub >> "$dir/authorized_keys"
         # A throwaway user that logs in with a password.
         if [ "$(uname)" = Darwin ]; then
-          id sshtest >/dev/null 2>&1 || sudo sysadminctl -addUser sshtest -password "$PASSWORD" 2>/dev/null
+          if ! id sshtest >/dev/null 2>&1; then
+            sudo dscl . -create /Users/sshtest
+            sudo dscl . -create /Users/sshtest UserShell /bin/zsh
+            sudo dscl . -create /Users/sshtest UniqueID 5001
+            sudo dscl . -create /Users/sshtest PrimaryGroupID 20
+            sudo dscl . -create /Users/sshtest NFSHomeDirectory /Users/sshtest
+            sudo createhomedir -c -u sshtest >/dev/null
+          fi
+          sudo dscl . -passwd /Users/sshtest "$PASSWORD"
         else
           id sshtest >/dev/null 2>&1 || sudo useradd --create-home sshtest
           echo "sshtest:$PASSWORD" | sudo chpasswd
