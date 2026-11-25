@@ -4,12 +4,25 @@ import 'ssh_target.dart';
 String bracketIPv6(String host) =>
     host.contains(':') && !host.startsWith('[') ? '[$host]' : host;
 
-/// `-p`, `-l` and the host, as both `ssh -G` and the tunnel pass them.
+/// `-p`, `-l`, the key and the host, as both `ssh -G` and the tunnel pass
+/// them.
 List<String> destinationArguments(SshTarget server) => [
   if (server.port case final port?) ...['-p', '$port'],
   if (server.user case final user?) ...['-l', user],
+  ...identityArguments(server),
   '--',
   server.host,
+];
+
+/// `-i` and `IdentitiesOnly=yes` for [SshTarget.identityFile], or nothing.
+List<String> identityArguments(SshTarget server) => [
+  // ssh reads %-tokens in the path, and %% as a plain %.
+  if (server.identityFile case final file?) ...[
+    '-i',
+    file.replaceAll('%', '%%'),
+    '-o',
+    'IdentitiesOnly=yes',
+  ],
 ];
 
 // ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped, and a

@@ -21,6 +21,15 @@ void main() {
       ('missing port', const SshTarget('ssh.example.com', user: 'alice')),
       ('user', const SshTarget('ssh.example.com', port: 2222, user: 'bob')),
       ('missing user', const SshTarget('ssh.example.com', port: 2222)),
+      (
+        'identity file',
+        const SshTarget(
+          'ssh.example.com',
+          port: 2222,
+          user: 'alice',
+          identityFile: '~/.ssh/id_work',
+        ),
+      ),
     ]) {
       test('fails on a different $name', () {
         expect(
@@ -79,6 +88,16 @@ void main() {
       expect(
         const SshTarget('fd00::5', port: 2222, user: 'alice').toString(),
         'SshTarget(alice@[fd00::5]:2222)',
+      );
+    });
+
+    test('names the identity file', () {
+      expect(
+        const SshTarget(
+          'ssh.example.com',
+          identityFile: '~/.ssh/id_work',
+        ).toString(),
+        'SshTarget(ssh.example.com, identityFile: ~/.ssh/id_work)',
       );
     });
 

@@ -1,5 +1,12 @@
 ## Unreleased
 
+- `SshTarget` takes an `identityFile`: ssh logs in with that key alone,
+  from the file or your agent, so a server that allows few attempts doesn't
+  refuse you after other keys.
+
+  ```dart
+  const SshTarget('myserver', identityFile: '~/.ssh/id_work');
+  ```
 - The `open*` methods take an `onPrompt` that answers what ssh asks while it
   logs in: a key's passphrase, a password, or a 2FA code. Answer null to
   cancel. Without it, nothing changes. See the README's "Passwords and

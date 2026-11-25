@@ -79,6 +79,29 @@ void main() {
       );
     });
 
+    test('passes a key file with IdentitiesOnly, before the host', () {
+      expect(
+        destinationArguments(
+          const SshTarget('ssh.example.com', identityFile: '~/.ssh/id_work'),
+        ),
+        [
+          ...['-i', '~/.ssh/id_work'],
+          ...['-o', 'IdentitiesOnly=yes'],
+          '--',
+          'ssh.example.com',
+        ],
+      );
+    });
+
+    test("doubles a key file's %, which ssh would read as a token", () {
+      expect(
+        destinationArguments(
+          const SshTarget('ssh.example.com', identityFile: '/keys/100%/id'),
+        ),
+        containsAllInOrder(['-i', '/keys/100%%/id']),
+      );
+    });
+
     test('keeps a host that looks like an option after --', () {
       expect(destinationArguments(const SshTarget('-oProxyCommand=x')), [
         '--',

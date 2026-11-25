@@ -59,6 +59,26 @@ void main() {
       expect(prompts, everyElement(isA<SshPassphrasePrompt>()));
     });
 
+    test('logs in with only the key file the target names', () async {
+      final prompts = <SshPrompt>[];
+
+      // The runner's own key, which the sshd also trusts, isn't offered.
+      final tunnel = await open(
+        (prompt) async {
+          prompts.add(prompt);
+          return fixture.keyPassphrase;
+        },
+        via: SshTarget(
+          '127.0.0.1',
+          port: fixture.target.port,
+          identityFile: fixture.passphraseKeyPath,
+        ),
+      );
+
+      expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
+      expect(prompts.single, isA<SshPassphrasePrompt>());
+    });
+
     test('throws SshLoginCancelledException when onPrompt cancels', () async {
       var asked = 0;
 

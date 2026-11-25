@@ -15,6 +15,19 @@ void main() {
       );
     });
 
+    test('names the key file', () {
+      expect(
+        tunnelCommand(
+          const SshTarget('ssh.example.com', identityFile: '/keys/id work'),
+          remoteHost: 'db.example.com',
+          remotePort: 5432,
+          localPort: 15432,
+        ),
+        'ssh -N -L 127.0.0.1:15432:db.example.com:5432 '
+        "-i '/keys/id work' -o IdentitiesOnly=yes ssh.example.com",
+      );
+    });
+
     test('names the user and port, and brackets an IPv6 destination', () {
       expect(
         tunnelCommand(

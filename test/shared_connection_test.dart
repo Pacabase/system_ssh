@@ -127,6 +127,23 @@ void main() {
     expect(operations(), [forwardOf(first), forwardOf(second)]);
   });
 
+  test('gives a tunnel with another key file a login of its own', () async {
+    fake.attemptModes([AttemptMode.ready]);
+    await open();
+
+    final other = await openSystemForward(
+      const SshTarget('ssh.example.com', identityFile: '~/.ssh/id_work'),
+      forward: localForwardTo('db.example.com', 3306),
+      freePort: CountingPorts().next,
+      executable: fake.path,
+      pool: pool,
+    );
+    addTearDown(other.close);
+
+    expect(fake.attempts, hasLength(2));
+    expect(fake.attempts.last, containsAllInOrder(['-i', '~/.ssh/id_work']));
+  });
+
   test("runs -O commands without the user's config or ControlMaster", () async {
     fake.attemptModes([AttemptMode.ready]);
 

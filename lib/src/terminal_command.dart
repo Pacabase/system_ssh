@@ -109,6 +109,7 @@ String _command(SshTarget server, Forward forward) {
     '-N',
     ...forward.arguments,
     if (server.port case final port?) ...['-p', '$port'],
+    ...identityArguments(server),
     if (server.user case final user?) '$user@${server.host}' else server.host,
   ].map(_quoted).join(' ');
 }
