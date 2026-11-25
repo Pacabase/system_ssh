@@ -31,6 +31,23 @@ jobs:
       - run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints platform
       - run: dart analyze --fatal-infos && dart test --exclude-tags integration
 
+  # The shipped Windows helper must be what its source builds to.
+  windows-helper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: tool/build_windows_helper.sh
+      # Lists any file that differs from, or is missing in, the commit.
+      - run: test -z "$(git status --porcelain windows/ | tee /dev/stderr)"
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-helper
+          path: windows/
+
   # The oldest supported SDK on each OS; integration runs the newest.
   unit:
     name: unit (${{ matrix.os }}, 3.10)
@@ -92,7 +109,7 @@ jobs:
   # The one required check, so the matrix can change without touching branch rules.
   ci:
     if: always()
-    needs: [analyze, unit, integration]
+    needs: [analyze, windows-helper, unit, integration]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

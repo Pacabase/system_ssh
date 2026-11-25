@@ -7,8 +7,8 @@ import 'package:ffi/ffi.dart';
 external Pointer<Utf16> _locator();
 
 /// The password helper program the build hook bundled on Windows, or null
-/// where there is none: on other systems, or when the app was built without
-/// a C compiler. Tests set it to null to try the `.cmd` helper.
+/// where there is none: on other systems, 32-bit Windows, or an app shipped
+/// without it. Tests set it to null to see what happens then.
 String? bundledWindowsHelper = _find();
 
 String? _find() {
@@ -18,7 +18,7 @@ String? _find() {
     if (library.isEmpty) return null;
     final helper = '${File(library).parent.path}\\system_ssh_askpass.exe';
     return File(helper).existsSync() ? helper : null;
-  } on Object {
+  } catch (exception) {
     // No locator library was bundled, so its function doesn't resolve.
     return null;
   }

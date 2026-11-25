@@ -60,7 +60,8 @@ final class SshMessage extends SshLog {
   String toString() => 'SshMessage($line)';
 }
 
-/// The tunnel was given an `onPrompt`, but ssh won't ask through it, so a
+/// The tunnel was given an `onPrompt`, but ssh can't ask through it on this
+/// Windows computer, so a
 /// login that needs a password or passphrase is refused; [reason] says why.
 /// Unlike the others, its [line] is this package's, not ssh's.
 ///
@@ -74,9 +75,8 @@ final class SshPromptsOff extends SshLog {
   /// would report it.
   const SshPromptsOff(this.reason) : super('Not asking for passwords: $reason');
 
-  /// Why ssh won't ask, such as
-  /// `the app was built without its Windows helper, so ssh can't ask safely
-  /// when the config sets a proxyjump`.
+  /// Why ssh can't ask, such as
+  /// `system_ssh_askpass.exe isn't with the app, so ssh can't ask`.
   final String reason;
 
   @override

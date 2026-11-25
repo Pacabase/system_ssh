@@ -302,7 +302,6 @@ Future<SshTunnel> openSystemForward(
       config: config,
       executable: ssh,
       prompts: prompts.enabled,
-      ownPromptsOnly: prompts.ownOnly,
     );
     logger.info(command.join(' '));
 
@@ -362,7 +361,6 @@ Future<SshTunnel> openSystemForward(
     return await withPrompts(
       onPrompt,
       executable: ssh,
-      config: config,
       environment: environment,
       onLog: onLog,
       open: (prompts) => checkingHostKeys(config, () => open(prompts)),
@@ -445,7 +443,6 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   return withPrompts(
     onPrompt,
     executable: ssh,
-    config: config,
     environment: environment,
     onLog: onLog,
     open: (prompts) {
@@ -455,7 +452,6 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
         config: config,
         executable: ssh,
         prompts: prompts.enabled,
-        ownPromptsOnly: prompts.ownOnly,
       );
       logger.info(command.join(' '));
 

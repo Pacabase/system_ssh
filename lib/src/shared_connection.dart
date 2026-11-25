@@ -171,7 +171,6 @@ final class _Connection {
     final master = await withPrompts(
       onPrompt,
       executable: executable,
-      config: config,
       environment: environment,
       onLog: toWaiting,
       open: (prompts) {
@@ -182,7 +181,6 @@ final class _Connection {
           executable: executable,
           masterSocket: _socket,
           prompts: prompts.enabled,
-          ownPromptsOnly: prompts.ownOnly,
         );
         logger.info(command.join(' '));
 

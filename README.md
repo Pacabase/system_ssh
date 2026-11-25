@@ -184,26 +184,28 @@ final tunnel = await client.openTunnel(
   asked, so a server asks once, not once per tunnel. A tunnel with
   `onPrompt` and one without never share a connection.
 - A config that sets `BatchMode yes` still keeps ssh from asking.
-- On Windows, ssh runs a small helper program that the package builds with
-  your app (see [Building on Windows](#building-on-windows)), so everything
-  is asked there too.
+- On Windows, ssh runs a small helper program that ships with the package
+  (see [Building on Windows](#building-on-windows)), so everything is asked
+  there too.
 - Before OpenSSH 8.5, every prompt still comes, as in a terminal, but ssh
   doesn't mark a server's questions with `(user@host)`, so a server could
   word one as ssh's own prompt. Those prompts have `isVerified` false, for
   an app that wants to say so. Before 8.4, ssh asks through `SSH_ASKPASS`
   only without a terminal, so a command-line app run from one gets ssh's
   own prompt there.
-- When the `.cmd` helper below can't ask safely, `onLog` gets an
+- If that program is missing from your app, or Windows won't run it, such
+  as under an AppLocker policy, nothing asks: `onLog` gets an
   `SshPromptsOff` with the reason, and an `SshLoginRefusedException` says it
   at the end of its message. Elsewhere prompts are never off.
 
 ### Building on Windows
 
-The package's build hook compiles the Windows helper, `system_ssh_askpass.exe`,
-when you build or run your app for Windows, and Dart or Flutter ships it
-next to your app (in `lib\` for `dart build cli`). That needs Visual
-Studio's C++ tools, which Flutter's Windows builds need anyway; nothing is
-built for macOS or Linux, where ssh runs a shell script instead.
+The package ships the Windows helper, `system_ssh_askpass.exe`, built ahead
+of time for x64 and arm64, and its build hook hands it to Dart or Flutter,
+which put it next to your app (in `lib\` for `dart build cli`). Nothing is
+compiled on your machine, and nothing ships for macOS or Linux, where ssh
+runs a shell script instead. 32-bit Windows gets no helper, so tunnels
+there don't ask.
 
 - Because the package has a build hook, a command-line app that uses it
   builds with `dart build cli`, on every system: `dart compile exe` refuses
@@ -211,19 +213,10 @@ built for macOS or Linux, where ssh runs a shell script instead.
   before.
 - If you sign your Windows release, sign `system_ssh_askpass.exe` with the
   rest of it.
-- Without a C compiler the build still works, and prompts go through a
-  `.cmd` helper instead. Windows' ssh runs that through `cmd.exe`, which
-  would read a server's words, or a `%` or `"` in a name, as commands, so
-  then only ssh's own prompts come, a passphrase or a password.
-  Keyboard-interactive logins are off, so a server that takes passwords
-  only that way, as many PAM setups do, refuses the login. Nothing asks
-  when your config sets a `ProxyJump` or `ProxyCommand`, which runs another
-  ssh, when `ssh -G` can't read your config, or when the user, host or a
-  key file's path holds one of `" % ! ^ & | < >`. Through it, every prompt
-  is ssh's own, so `isVerified` is true whatever the OpenSSH version.
-- The build doesn't stop or warn when the helper can't be compiled, and it
-  remembers that: after installing the C++ tools, run `dart clean` or
-  `flutter clean` so the next build compiles it.
+- The program is built from `src/askpass_helper.c` by
+  `tool/build_windows_helper.sh`, with a pinned compiler, so the same
+  source always gives the same bytes; CI rebuilds it and fails if the
+  shipped files differ.
 
 ## Sharing a connection
 
@@ -401,7 +394,6 @@ unattended tunnel needs:
 | `ControlPath=none` | without `shareConnections`; with it, the shared connection gets `ControlMaster=yes`, `ControlPersist=no` and a `ControlPath` of its own, and each tunnel's `ssh -O` gets `ControlMaster=no`, `BatchMode=yes` and that `ControlPath` |
 | `BatchMode=yes` | your config leaves it at `no`, without `onPrompt` |
 | `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt`; on Windows also `SYSTEM_SSH_ASKPASS_PORT` and `SYSTEM_SSH_ASKPASS_TOKEN`, for the helper to reach your app; before OpenSSH 8.4 also `DISPLAY=:0` unless one is set |
-| `KbdInteractiveAuthentication=no` | with `onPrompt` on Windows through the `.cmd` helper, whatever your config says; see [Passwords and passphrases](#passwords-and-passphrases) |
 | `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
 | `ConnectTimeout=15` | your config sets none |
 | `trustHostKey`'s ssh | `StrictHostKeyChecking=accept-new`, a `UserKnownHostsFile` of a temp file before yours, `PreferredAuthentications=none`, `ClearAllForwardings=yes`, `PermitLocalCommand=no`, `ControlPath=none` and `BatchMode=yes`: it reads the key without logging in or forwarding |
@@ -426,9 +418,7 @@ started.
 - Forwards your config sets for the host open too.
 - Without `onPrompt`, a key with a passphrase needs an agent, and password
   and keyboard-interactive logins fail. A config that sets `BatchMode no`
-  looks like the default, so it doesn't bring prompts back. On Windows, an
-  app built without a C compiler asks less; see
-  [Building on Windows](#building-on-windows).
+  looks like the default, so it doesn't bring prompts back.
 - On Windows, a child ssh starts in the instant before it joins its job object
   can outlive a crash.
 

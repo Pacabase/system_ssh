@@ -90,11 +90,9 @@ abstract interface class SshClient {
   /// },
   /// ```
   ///
-  /// On Windows, ssh asks through a program the package's build hook
-  /// compiles. An app built without a C compiler gets only ssh's own
-  /// prompts, a passphrase or a password, and none when a `ProxyJump` or
-  /// `ProxyCommand` runs another ssh; [onLog] then gets an [SshPromptsOff]
-  /// saying why. Before OpenSSH 8.5, every prompt comes, with
+  /// On Windows, ssh asks through a program that ships with the package. If
+  /// it's missing from the app, or Windows won't run it, nothing asks, and
+  /// [onLog] gets an [SshPromptsOff] saying why. Before OpenSSH 8.5, every prompt comes, with
   /// [SshPrompt.isVerified] false; see the README.
   ///
   /// Completing [abortTrigger] before the tunnel is open stops ssh; after,

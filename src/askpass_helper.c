@@ -64,13 +64,23 @@ int wmain(int argc, wchar_t **argv) {
     return 1;
   }
 
-  const wchar_t *prompt = argc > 1 ? argv[1] : L"";
+  // Windows' ssh quotes the prompt only when it holds a space, so a prompt
+  // with tabs but none arrives split there; rejoin the pieces.
+  size_t prompt_length = 1;
+  for (int i = 1; i < argc; i++) prompt_length += wcslen(argv[i]) + 1;
+  wchar_t *prompt = calloc(prompt_length, sizeof(wchar_t));
+  if (prompt == NULL) return 1;
+  for (int i = 1; i < argc; i++) {
+    if (i > 1) wcscat(prompt, L" ");
+    wcscat(prompt, argv[i]);
+  }
   int utf8_length =
       WideCharToMultiByte(CP_UTF8, 0, prompt, -1, NULL, 0, NULL, NULL);
   if (utf8_length <= 0) return 1;
   char *utf8 = malloc((size_t)utf8_length);
   if (utf8 == NULL) return 1;
   WideCharToMultiByte(CP_UTF8, 0, prompt, -1, utf8, utf8_length, NULL, NULL);
+  free(prompt);
   char *encoded = base64((const unsigned char *)utf8, (size_t)utf8_length - 1);
   free(utf8);
   if (encoded == NULL) return 1;

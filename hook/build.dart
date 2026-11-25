@@ -1,50 +1,39 @@
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
-import 'package:logging/logging.dart';
-import 'package:native_toolchain_c/native_toolchain_c.dart';
 
-/// On Windows, builds the program ssh runs as `SSH_ASKPASS`, and a library
-/// that tells Dart where it was installed. Elsewhere the package writes a
-/// shell script at runtime, so nothing is built: Dart can't bundle a program
-/// there yet (macOS rewrites a bundled file as a library; Linux drops its
-/// executable bit).
+/// On Windows, ships the program ssh runs as `SSH_ASKPASS`, and a library
+/// that tells Dart where it was installed. Both are built ahead of time into
+/// `windows/` by `tool/build_windows_helper.sh`, so building an app needs no
+/// C compiler. Elsewhere the package writes a shell script at runtime, so
+/// nothing ships: Dart can't bundle a program there yet (macOS rewrites a
+/// bundled file as a library; Linux drops its executable bit).
 void main(List<String> arguments) async {
   await build(arguments, (input, output) async {
     if (!input.config.buildCodeAssets) return;
-    final os = input.config.code.targetOS;
-    if (os != OS.windows) return;
+    final code = input.config.code;
+    if (code.targetOS != OS.windows) return;
+    final folder = switch (code.targetArchitecture) {
+      Architecture.x64 => 'x64',
+      Architecture.arm64 => 'arm64',
+      // 32-bit Windows gets no helper, so its tunnels don't ask.
+      _ => null,
+    };
+    if (folder == null) return;
 
-    final logger = Logger('system_ssh')
-      ..onRecord.listen((record) => print(record.message));
-    try {
-      // The library first, so the program never ships with nothing to find it.
-      await CBuilder.library(
-        name: 'system_ssh_askpass_locator',
-        assetName: 'src/askpass_locator.dart',
-        sources: ['src/askpass_locator.c'],
-        linkModePreference: LinkModePreference.dynamic,
-      ).run(input: input, output: output, logger: logger);
-      await CBuilder.executable(
-        name: 'system_ssh_askpass',
-        sources: ['src/askpass_helper.c'],
-        libraries: ['ws2_32'],
-      ).run(input: input, output: output, logger: logger);
+    for (final (name, file) in [
+      ('src/askpass_locator.dart', 'system_ssh_askpass_locator.dll'),
+      ('system_ssh_askpass', 'system_ssh_askpass.exe'),
+    ]) {
+      final uri = input.packageRoot.resolve('windows/$folder/$file');
       output.assets.code.add(
         CodeAsset(
           package: input.packageName,
-          name: 'system_ssh_askpass',
+          name: name,
           linkMode: DynamicLoadingBundled(),
-          file: input.outputDirectory.resolve(
-            os.executableFileName('system_ssh_askpass'),
-          ),
+          file: uri,
         ),
       );
-    } catch (exception) {
-      // Without a C compiler, prompts go through the .cmd helper instead.
-      print(
-        'system_ssh: could not build the Windows password helper, so prompts '
-        'use the .cmd helper and ask less: $exception',
-      );
+      output.dependencies.add(uri);
     }
   });
 }
