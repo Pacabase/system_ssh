@@ -180,25 +180,25 @@ final tunnel = await client.openTunnel(
   close its dialog then; the next prompt may already be on its way.
 - A tunnel on a port the package picks can be retried if another program
   takes the port while ssh logs in, and the retry asks again.
-- The helper runs from the temp folder, or, where that doesn't allow
-  running programs, `XDG_RUNTIME_DIR` or `~/.cache`.
+- On macOS and Linux, the helper is a script in the temp folder, or, where
+  that doesn't allow running programs, `XDG_RUNTIME_DIR` or `~/.cache`.
 - With `shareConnections`, only the tunnel that starts the shared login is
   asked, so a server asks once, not once per tunnel. A tunnel with
   `onPrompt` and one without never share a connection.
 - A config that sets `BatchMode yes` still keeps ssh from asking.
 - On Windows, ssh runs a small helper program that ships with the package
   (see [Building on Windows](#building-on-windows)), so everything is asked
-  there too.
+  there too. If it's missing from your app, or Windows won't run it, such
+  as under an AppLocker policy, nothing asks: `onLog` gets an
+  `SshPromptsOff` with the reason, and an `SshLoginRefusedException` says it
+  at the end of its message. 32-bit Windows has no helper, so nothing asks
+  there.
 - Before OpenSSH 8.5, every prompt still comes, as in a terminal, but ssh
   doesn't mark a server's questions with `(user@host)`, so a server could
   word one as ssh's own prompt. Those prompts have `isVerified` false, for
   an app that wants to say so. Before 8.4, ssh asks through `SSH_ASKPASS`
   only without a terminal, so a command-line app run from one gets ssh's
   own prompt there.
-- If that program is missing from your app, or Windows won't run it, such
-  as under an AppLocker policy, nothing asks: `onLog` gets an
-  `SshPromptsOff` with the reason, and an `SshLoginRefusedException` says it
-  at the end of its message. Elsewhere prompts are never off.
 
 ### Building on Windows
 

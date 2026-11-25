@@ -193,11 +193,7 @@ void main() {
     });
 
     test('passes the answer and the prompt through as they are', () async {
-      // Through the .cmd helper a `"` can't reach it, see canPrompt, and
-      // cmd.exe shows a `%NAME%` as the variable's value.
-      final prompt = Platform.isWindows && bundledWindowsHelper == null
-          ? r"Enter passphrase for key 'C:\a b&echo x^|<>(c)!\key': "
-          : r"""Code '"$(touch x)`id`\n; & | < > ^ ! %OS% \: """;
+      const prompt = r"""Code für '"$(touch x)`id`\n; & | < > ^ ! %OS% \: """;
       const answer = r"""pa ss'"$(x)`y`\n;&|<>\ %PATH% ^ ! hörse €""";
       fake.asks({prompt: answer});
       final texts = <String>[];
@@ -464,11 +460,20 @@ void main() {
       );
     });
 
-    test('cancels an answer longer than ssh reads', () async {
+    test('takes the longest answer ssh reads', () async {
+      fake.asks({passphrase: 'x' * 1023});
+
+      await open(onPrompt: (_) async => 'x' * 1023);
+
+      expect(fake.answers, ['x' * 1023]);
+    });
+
+    test('cancels an answer longer than ssh reads, in bytes', () async {
       fake.asks({passphrase: null});
 
       await expectLater(
-        open(onPrompt: (_) async => 'x' * 1024),
+        // 342 characters, but 1026 bytes.
+        open(onPrompt: (_) async => '€' * 342),
         throwsA(isA<SshLoginCancelledException>()),
       );
       expect(fake.answers, ['<cancelled>']);
@@ -522,6 +527,31 @@ void main() {
         );
         expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
         expect(logs.first, const SshPromptsOff(why));
+      });
+
+      test('asks nothing when Windows won\'t run the program', () async {
+        final folder = Directory.systemTemp.createTempSync('not_a_program');
+        addTearDown(() => folder.deleteSync(recursive: true));
+        final notAProgram = File('${folder.path}\\system_ssh_askpass.exe')
+          ..writeAsStringSync('not a program');
+        final bundled = bundledWindowsHelper;
+        bundledWindowsHelper = notAProgram.path;
+        addTearDown(() => bundledWindowsHelper = bundled);
+        fake.asks({passphrase: null});
+        final logs = <SshLog>[];
+
+        await expectLater(
+          open(onPrompt: (_) async => 'secret', onLog: logs.add),
+          throwsA(isA<SshLoginRefusedException>()),
+        );
+        expect(fake.attemptEnvironments.single['SSH_ASKPASS'], isNull);
+        expect(
+          logs.whereType<SshPromptsOff>().single.reason,
+          allOf(
+            startsWith("Windows wouldn't run ${notAProgram.path}"),
+            endsWith("so ssh can't ask"),
+          ),
+        );
       });
     }, testOn: 'windows');
 
@@ -685,6 +715,17 @@ void main() {
       expect('${result.stdout}'.trim(), 'secret');
       expect(asked, [const SshPasswordPrompt(password)]);
     });
+
+    test('joins a prompt that ssh split at its spaces', () async {
+      final result = await Process.run(askPass.environment['SSH_ASKPASS']!, [
+        'Code',
+        'for',
+        'you:',
+      ], environment: askPass.environment).timeout(const Duration(seconds: 20));
+
+      expect(result.exitCode, 0);
+      expect(asked.single.text, 'Code for you:');
+    }, testOn: 'windows');
 
     test("doesn't ask about a notice ssh doesn't wait on", () async {
       final result = await runHelper(

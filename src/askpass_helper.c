@@ -1,7 +1,6 @@
 // The SSH_ASKPASS helper ssh runs on Windows. ssh passes the prompt as an
 // argument; the helper sends it, after the token, to the app listening on
 // the loopback port in its environment, and prints the app's answer for ssh.
-// Being a program, not a .cmd, nothing reads the prompt as commands.
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <windows.h>

@@ -21,9 +21,8 @@
   );
   ```
 
-  On Windows, ssh runs a small helper program that ships with the package,
-  built ahead of time, so everything is asked there too and nothing is
-  compiled on your machine. If you sign your release, sign
+  On Windows, ssh asks through a small program that ships with the
+  package; 32-bit Windows doesn't ask. If you sign your release, sign
   `system_ssh_askpass.exe` too; see the README's "Building on Windows".
   Before OpenSSH 8.5, which doesn't mark a server's questions, every prompt
   still comes, as in a terminal, with `isVerified` false.

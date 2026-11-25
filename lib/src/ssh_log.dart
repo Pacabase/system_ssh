@@ -60,9 +60,9 @@ final class SshMessage extends SshLog {
   String toString() => 'SshMessage($line)';
 }
 
-/// The tunnel was given an `onPrompt`, but ssh can't ask through it on this
-/// Windows computer, so a
-/// login that needs a password or passphrase is refused; [reason] says why.
+/// The tunnel was given an `onPrompt`, but ssh can't ask through it on
+/// Windows, so a login that needs a password or passphrase is refused;
+/// [reason] says why.
 /// Unlike the others, its [line] is this package's, not ssh's.
 ///
 /// ```dart

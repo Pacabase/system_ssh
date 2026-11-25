@@ -52,6 +52,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The branch itself, not its merge with the base, since that's where
+          # commit-askpass commits.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Build the helper
         run: $CC $FLAGS -municode -o $OUT/system_ssh_askpass.exe src/askpass_helper.c -lws2_32
       - name: Build the locator
@@ -85,27 +88,29 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      BRANCH: ${{ github.event.pull_request.head.ref }}
-      HEAD: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: windows-askpass-*
           path: built
       - name: Commit the rebuilt files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Uploads only come from a mismatch, not from a failed build.
-          [ -d built ] || exit 0
+          shopt -s nullglob
           additions='[]'
           for file in built/windows-askpass-*/*; do
             arch=$(basename "$(dirname "$file")"); arch=${arch#windows-askpass-}
+            base64 -w0 "$file" > "$RUNNER_TEMP/contents"
             additions=$(jq -c --arg path "windows/$arch/$(basename "$file")" \
-              --arg contents "$(base64 -w0 "$file")" \
+              --rawfile contents "$RUNNER_TEMP/contents" \
               '. + [{path: $path, contents: $contents}]' <<<"$additions")
           done
+          # Uploads only come from a mismatch, not from a failed build.
+          [ "$additions" != '[]' ] || exit 0
           # GitHub signs a commit made through its API, as main's rules require.
           jq -n --arg repo "$GH_REPO" --arg branch "$BRANCH" --arg head "$HEAD" \
             --argjson additions "$additions" '{

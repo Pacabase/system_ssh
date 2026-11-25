@@ -24,10 +24,10 @@ sealed class SshPrompt {
   /// Whether ssh tells a server's questions apart from its own, so the kind
   /// is sure. False before OpenSSH 8.5, which doesn't put `(user@host)` in
   /// front of a server's question, so a server could word one as ssh's own,
-  /// such as a passphrase prompt. It goes by
-  /// the ssh the package runs, not one a `ProxyCommand` runs. A terminal
-  /// shows those prompts the same way; an app may want to say where the
-  /// prompt may come from, or not keep what's typed.
+  /// such as a passphrase prompt. It goes by the ssh this package runs, not
+  /// one a `ProxyCommand` starts. A terminal shows those prompts the same
+  /// way; an app may want to say where the prompt may come from, or not keep
+  /// what's typed.
   final bool isVerified;
 
   /// Completes once ssh no longer waits for the answer: the login went on

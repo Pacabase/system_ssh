@@ -92,8 +92,8 @@ abstract interface class SshClient {
   ///
   /// On Windows, ssh asks through a program that ships with the package. If
   /// it's missing from the app, or Windows won't run it, nothing asks, and
-  /// [onLog] gets an [SshPromptsOff] saying why. Before OpenSSH 8.5, every prompt comes, with
-  /// [SshPrompt.isVerified] false; see the README.
+  /// [onLog] gets an [SshPromptsOff] saying why. Before OpenSSH 8.5, every
+  /// prompt comes, with [SshPrompt.isVerified] false; see the README.
   ///
   /// Completing [abortTrigger] before the tunnel is open stops ssh; after,
   /// it is ignored, and [SshTunnel.close] stops it instead.

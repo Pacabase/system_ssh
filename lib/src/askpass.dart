@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 
@@ -18,17 +19,22 @@ import 'ssh_prompt.dart';
 final class AskPass {
   AskPass._(this._directory, this._onPrompt, this._verified);
 
-  /// Sets up the helper for [onPrompt] in a directory of its own, in the
-  /// first of [bases] (by default the temp directory, then
+  /// Sets up the helper for [onPrompt]. On Windows, ssh runs the program the
+  /// build hook bundled. Elsewhere the helper is a script in a directory of
+  /// its own, in the first of [bases] (by default the temp directory, then
   /// `XDG_RUNTIME_DIR`, then `~/.cache`) where it can run: a hardened `/tmp`
-  /// may forbid running programs. On Windows, ssh runs the helper program
-  /// the build hook bundled. Each prompt's
-  /// [SshPrompt.isVerified] is [verified].
+  /// may forbid running programs. Each prompt's [SshPrompt.isVerified] is
+  /// [verified].
   static Future<AskPass> start(
     SshPromptHandler onPrompt, {
     List<String>? bases,
     bool verified = true,
   }) async {
+    if (Platform.isWindows) {
+      final askPass = AskPass._(null, onPrompt, verified);
+      await askPass._startWindows();
+      return askPass;
+    }
     final failures = <String>[];
     for (final base in bases ?? _bases()) {
       final Directory directory;
@@ -41,9 +47,7 @@ final class AskPass {
 
       final askPass = AskPass._(directory, onPrompt, verified);
       try {
-        await (Platform.isWindows
-            ? askPass._startWindows()
-            : askPass._startPosix());
+        await askPass._startPosix();
         return askPass;
       } on _NotRunnable catch (exception) {
         failures.add('$base: ${exception.reason}');
@@ -62,17 +66,15 @@ final class AskPass {
     final environment = Platform.environment;
     return [
       Directory.systemTemp.path,
-      if (!Platform.isWindows) ...[
-        if (environment['XDG_RUNTIME_DIR'] case final runtime?
-            when runtime.isNotEmpty)
-          runtime,
-        if (environment['HOME'] case final home? when home.isNotEmpty)
-          if (Directory('$home/.cache').existsSync()) '$home/.cache',
-      ],
+      if (environment['XDG_RUNTIME_DIR'] case final runtime?
+          when runtime.isNotEmpty)
+        runtime,
+      if (environment['HOME'] case final home? when home.isNotEmpty)
+        if (Directory('$home/.cache').existsSync()) '$home/.cache',
     ];
   }
 
-  final Directory _directory;
+  final Directory? _directory;
   final SshPromptHandler _onPrompt;
   final bool _verified;
   late final String _helper;
@@ -171,7 +173,7 @@ final class AskPass {
     }
     if (!Platform.isWindows) _cancelWaitingHelpers();
     try {
-      _directory.deleteSync(recursive: true);
+      _directory?.deleteSync(recursive: true);
     } on FileSystemException {
       // Left to the OS's temp cleanup.
     }
@@ -236,11 +238,12 @@ final class AskPass {
   }
 
   Future<void> _startPosix() async {
-    _helper = '${_directory.path}/askpass';
-    final quoted = "'${_directory.path.replaceAll("'", r"'\''")}'";
+    final directory = _directory!;
+    _helper = '${directory.path}/askpass';
+    final quoted = "'${directory.path.replaceAll("'", r"'\''")}'";
     File(_helper).writeAsStringSync(_posixScript.replaceAll('@DIR@', quoted));
     // createTemp leaves the directory to the umask on Linux, so 755 there.
-    final chmod = await Process.run('chmod', ['700', _directory.path, _helper]);
+    final chmod = await Process.run('chmod', ['700', directory.path, _helper]);
     if (chmod.exitCode != 0) {
       throw SshFailedException(
         'could not set up the password prompt: ${chmod.stderr}',
@@ -264,7 +267,7 @@ final class AskPass {
     if (_isClosed) return;
     final List<FileSystemEntity> entries;
     try {
-      entries = _directory.listSync();
+      entries = _directory!.listSync();
     } on FileSystemException {
       return;
     }
@@ -292,7 +295,7 @@ final class AskPass {
   }
 
   void _reply(String id, String? answer) {
-    final fifo = '${_directory.path}/$id.answer';
+    final fifo = '${_directory!.path}/$id.answer';
     // Never create a file holding the answer: only a FIFO the helper made.
     if (FileSystemEntity.typeSync(fifo, followLinks: false) !=
         FileSystemEntityType.pipe) {
@@ -323,7 +326,7 @@ final class AskPass {
   void _cancelWaitingHelpers() {
     final List<FileSystemEntity> entries;
     try {
-      entries = _directory.listSync();
+      entries = _directory!.listSync();
     } on FileSystemException {
       return;
     }
@@ -508,31 +511,51 @@ bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
 /// the helper program must be with the app, and Windows must let it run.
 Future<String?> _whyNoPrompts() async {
   if (!Platform.isWindows) return null;
+  if (Abi.current() == Abi.windowsIA32) {
+    return "32-bit Windows has no password helper, so ssh can't ask";
+  }
   final helper = bundledWindowsHelper;
   if (helper == null) {
     return "system_ssh_askpass.exe isn't with the app, so ssh can't ask";
   }
-  return _windowsHelperRefusal ??= _tryWindowsHelper(helper);
+  // A refusal is tried again: the first run may be slow while antivirus
+  // scans the program, and the user may allow it later.
+  return _helperProbes[helper] ??= _probe(helper);
 }
 
-Future<String?>? _windowsHelperRefusal;
+Future<String?> _probe(String helper) async {
+  final why = await _tryWindowsHelper(helper);
+  if (why != null) _helperProbes.removeWhere((path, _) => path == helper);
+  return why;
+}
+
+final _helperProbes = <String, Future<String?>>{};
 
 // Antivirus or an AppLocker policy may block an unsigned program; ssh would
 // then fail every prompt without saying why.
 Future<String?> _tryWindowsHelper(String helper) async {
+  final Process process;
   try {
-    final result = await Process.run(
+    process = await Process.start(
       helper,
       const [],
       environment: {'SSH_ASKPASS_PROMPT': 'none'},
-    ).timeout(const Duration(seconds: 10));
-    if (result.exitCode == 0) return null;
-    return "Windows wouldn't run $helper (exit code ${result.exitCode}), so "
-        "ssh can't ask";
+    );
   } on ProcessException catch (exception) {
     return "Windows wouldn't run $helper (${exception.message}), so ssh "
         "can't ask";
+  }
+  unawaited(process.stdout.drain<void>());
+  unawaited(process.stderr.drain<void>());
+  try {
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 10),
+    );
+    if (exitCode == 0) return null;
+    return "Windows wouldn't run $helper (exit code $exitCode), so ssh "
+        "can't ask";
   } on TimeoutException {
+    process.kill();
     return "$helper didn't answer in time, so ssh can't ask";
   }
 }
