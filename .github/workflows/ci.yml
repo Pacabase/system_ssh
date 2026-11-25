@@ -60,7 +60,12 @@ jobs:
       # ignores the executable bit, and an API commit can't set it.
       - name: Check the committed files match
         id: check
-        run: test -z "$(git -c core.fileMode=false status --porcelain windows/ | tee /dev/stderr)"
+        run: |
+          # The checkout belongs to another user than the container's.
+          git config --global --add safe.directory "$PWD"
+          changes=$(git -c core.fileMode=false status --porcelain windows/)
+          echo "$changes"
+          test -z "$changes"
       - if: failure() && steps.check.outcome == 'failure'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
