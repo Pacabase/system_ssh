@@ -58,8 +58,7 @@ final class ConnectionPool {
     ].join('\u0000');
 
     var connection = _connections[key];
-    final isNew = connection == null || connection.isStopping;
-    if (isNew) {
+    if (connection == null || connection.isStopping) {
       connection = _Connection(
         this,
         key,
@@ -69,12 +68,10 @@ final class ConnectionPool {
         onPrompt: onPrompt,
       );
       _connections[key] = connection;
+      connection.start(config);
     }
 
-    // Held before it starts, so the first tunnel hears what it says at once.
-    final holding = connection.hold(onLog: onLog, abortTrigger: abortTrigger);
-    if (isNew) connection.start(config);
-    return holding;
+    return connection.hold(onLog: onLog, abortTrigger: abortTrigger);
   }
 }
 
