@@ -10,7 +10,7 @@ __declspec(dllexport) const wchar_t *system_ssh_askpass_locator(void) {
   if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                           (LPCWSTR)&system_ssh_askpass_locator, &self) ||
-      GetModuleFileNameW(self, path, 32768) == 0) {
+      GetModuleFileNameW(self, path, 32767) == 0) {
     path[0] = L'\0';
   }
   return path;
