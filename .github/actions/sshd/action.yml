@@ -47,6 +47,11 @@ runs:
             sudo createhomedir -c -u sshtest >/dev/null
           fi
           sudo dscl . -passwd /Users/sshtest "$PASSWORD"
+          # sshd's PAM lets in only this group's members, once the group exists.
+          if dscl . -read /Groups/com.apple.access_ssh >/dev/null 2>&1; then
+            sudo dseditgroup -o edit -a sshtest -t user com.apple.access_ssh
+          fi
+          dscl . -authonly sshtest "$PASSWORD"
         else
           id sshtest >/dev/null 2>&1 || sudo useradd --create-home sshtest
           echo "sshtest:$PASSWORD" | sudo chpasswd
@@ -92,10 +97,14 @@ runs:
         $config = "$env:ProgramData\ssh\sshd_config"
         (Get-Content $config) -replace '^#?Port .*', "Port $env:PORT" `
           -replace '^#?ListenAddress 0\.0\.0\.0', 'ListenAddress 127.0.0.1' `
-          -replace '^#?SyslogFacility .*', 'SyslogFacility LOCAL0' | Set-Content $config
+          -replace '^#?SyslogFacility .*', 'SyslogFacility LOCAL0' `
+          -replace '^(AllowGroups .*)$', '$1 sshtesters' | Set-Content $config
         # A throwaway user that logs in with a password.
         if (-not (Get-LocalUser sshtest -ErrorAction SilentlyContinue)) {
           New-LocalUser sshtest -Password (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+          # The runner's sshd_config may let in only the groups AllowGroups names.
+          New-LocalGroup sshtesters | Out-Null
+          Add-LocalGroupMember sshtesters -Member sshtest
         }
         Start-Service sshd
         "log=$env:ProgramData\ssh\logs\sshd.log" >> $env:GITHUB_OUTPUT
