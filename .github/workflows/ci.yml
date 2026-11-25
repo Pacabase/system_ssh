@@ -72,8 +72,8 @@ jobs:
           name: windows-askpass-${{ matrix.arch }}
           path: ${{ env.OUT }}/
 
-  # Commits a rebuilt helper to the PR's branch, then runs CI on it, since a
-  # commit made with this token starts no workflow. A fork's PR gets no write
+  # Commits a rebuilt helper to the PR's branch. GitHub holds the run for that
+  # commit until someone approves it on the PR. A fork's PR gets no write
   # token, so its author commits the uploads by hand.
   commit-askpass:
     needs: windows-askpass
@@ -85,7 +85,6 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
-      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -118,8 +117,6 @@ jobs:
                 fileChanges: {additions: $additions}
               }}
             }' | gh api graphql --input -
-      - name: Run CI on the new commit
-        run: gh workflow run ci.yml --ref "$BRANCH"
 
   # The oldest supported SDK on each OS; integration runs the newest.
   unit:
