@@ -139,6 +139,7 @@ void main() {
       SshMessage(:final line) => 'message: $line',
       SshForwardUnreachable(:final line, :final reason) => '$reason: $line',
       SshForwardProhibited(:final line) => 'forbidden: $line',
+      SshPromptsOff(:final reason) => 'no prompts: $reason',
     };
 
     expect(
@@ -153,6 +154,7 @@ void main() {
         const SshForwardProhibited(
           'channel 3: open failed: administratively prohibited: open failed',
         ),
+        const SshPromptsOff('ssh -G could not read the config'),
       ].map(describe),
       [
         startsWith('progress: '),
@@ -160,6 +162,7 @@ void main() {
         startsWith('message: '),
         startsWith('Connection refused: '),
         startsWith('forbidden: '),
+        'no prompts: ssh -G could not read the config',
       ],
     );
   });
@@ -350,6 +353,14 @@ void main() {
     );
     expect(ask(const SshPasswordPrompt("a@b's password: ")), 'password');
     expect(ask(const SshCodePrompt('Code: ')), 'code: Code: ');
+  });
+
+  test('tells a prompt ssh can vouch for from one it cannot', () {
+    const unverified = SshPasswordPrompt("a@b's password: ", isVerified: false);
+
+    expect(const SshPasswordPrompt("a@b's password: ").isVerified, isTrue);
+    expect(unverified.isVerified, isFalse);
+    expect(unverified, isNot(const SshPasswordPrompt("a@b's password: ")));
   });
 
   test('acts out an unknown host key and trusts it', () async {

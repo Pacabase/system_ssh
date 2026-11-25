@@ -688,8 +688,12 @@ void main() {
         },
       );
       await eventually(() => fake.attemptPid(1));
-      fake.masterSays('debug1: Connecting to ssh.example.com port 22.');
-      await heard.future.timeout(const Duration(seconds: 10));
+      // A line said before the second joins the login never reaches it.
+      await eventually(() {
+        if (heard.isCompleted) return true;
+        fake.masterSays('debug1: Connecting to ssh.example.com port 22.');
+        return null;
+      });
       abort.complete();
       await expectLater(first, throwsA(isA<SshTunnelAbortedException>()));
 

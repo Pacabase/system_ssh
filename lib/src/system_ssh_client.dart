@@ -364,6 +364,7 @@ Future<SshTunnel> openSystemForward(
       executable: ssh,
       config: config,
       environment: environment,
+      onLog: onLog,
       open: (prompts) => checkingHostKeys(config, () => open(prompts)),
     );
   } finally {
@@ -446,6 +447,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
     executable: ssh,
     config: config,
     environment: environment,
+    onLog: onLog,
     open: (prompts) {
       final command = sshCommand(
         server,

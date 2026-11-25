@@ -18,12 +18,23 @@
   );
   ```
 
-  Before OpenSSH 8.5, only passphrases and passwords come, not a server's
-  questions, and none through a `ProxyJump` or `ProxyCommand`. On Windows,
-  ssh runs a small helper program the package's build hook compiles with
-  your app, so everything is asked there too; see the README's "Building on
-  Windows".
+  On Windows, ssh runs a small helper program the package's build hook
+  compiles with your app, so everything is asked there too; see the
+  README's "Building on Windows". Before OpenSSH 8.5, which doesn't mark a
+  server's questions, every prompt still comes, as in a terminal, with
+  `isVerified` false.
 - **Breaking:** the package needs Dart 3.10 or newer, for its build hook.
+- **Breaking:** `onLog` gets an `SshPromptsOff`, a new kind of `SshLog`, when
+  a tunnel has an `onPrompt` but ssh won't ask through it, with the reason,
+  such as a `ProxyJump` on Windows without the helper. A refused login then
+  says the reason at the end of its message. A `switch` that names every
+  `SshLog` needs an `SshPromptsOff` case.
+
+  ```dart
+  onLog: (log) {
+    if (log is SshPromptsOff) showWarning(log.reason);
+  },
+  ```
 - **Breaking:** a cancelled prompt throws an `SshLoginCancelledException`, a
   new `SshException` that is neither permanent nor temporary. A `switch`
   that names every `SshException` needs an `SshLoginCancelledException`

@@ -6,6 +6,7 @@ import 'dart:math';
 import 'askpass_locator.dart';
 import 'exceptions.dart';
 import 'logger.dart';
+import 'ssh_log.dart';
 import 'ssh_prompt.dart';
 
 /// The helper ssh runs as `SSH_ASKPASS` for each prompt, which hands the
@@ -15,17 +16,19 @@ import 'ssh_prompt.dart';
 /// asks for a token on Windows. Once a prompt is cancelled, the rest are too,
 /// without asking, and ssh is stopped before it would send an empty password.
 final class AskPass {
-  AskPass._(this._directory, this._onPrompt);
+  AskPass._(this._directory, this._onPrompt, this._verified);
 
   /// Sets up the helper for [onPrompt] in a directory of its own, in the
   /// first of [bases] (by default the temp directory, then
   /// `XDG_RUNTIME_DIR`, then `~/.cache`) where it can run: a hardened `/tmp`
   /// may forbid running programs. On Windows, ssh runs [windowsProgram],
-  /// the helper the build hook bundled, or else a `.cmd` written there.
+  /// the helper the build hook bundled, or else a `.cmd` written there. Each
+  /// prompt's [SshPrompt.isVerified] is [verified].
   static Future<AskPass> start(
     SshPromptHandler onPrompt, {
     List<String>? bases,
     String? windowsProgram,
+    bool verified = true,
   }) async {
     windowsProgram ??= bundledWindowsHelper;
     final failures = <String>[];
@@ -38,7 +41,7 @@ final class AskPass {
         continue;
       }
 
-      final askPass = AskPass._(directory, onPrompt);
+      final askPass = AskPass._(directory, onPrompt, verified);
       try {
         await (Platform.isWindows
             ? askPass._startWindows(windowsProgram)
@@ -73,6 +76,7 @@ final class AskPass {
 
   final Directory _directory;
   final SshPromptHandler _onPrompt;
+  final bool _verified;
   late final String _helper;
   Timer? _poll;
   ServerSocket? _server;
@@ -186,7 +190,7 @@ final class AskPass {
         logger.info('Declined a host key question: $text');
         return null;
       }
-      final prompt = classifyPrompt(text);
+      final prompt = classifyPrompt(text, isVerified: _verified);
       if (_wasCancelled || _error != null) return _refuse(prompt);
       logger.info('ssh asks: $prompt');
       try {
@@ -536,47 +540,28 @@ bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
   null => false,
 };
 
-/// Whether ssh may ask through `onPrompt` with [config], what `ssh -G` said,
-/// and the OpenSSH [version] `ssh -V` reported.
+/// Whether ssh may ask through `onPrompt` with [config], what `ssh -G` said.
 ///
-/// Where ssh can't keep a server's words out of the prompts, only ssh's own
-/// prompts come: keyboard-interactive is turned off, and nothing asks when a
-/// `ProxyJump` or `ProxyCommand` runs another ssh, which wouldn't get that
-/// option, or when the config couldn't be read to tell. That is when
-/// Windows' ssh runs the `.cmd` helper ([throughCmd]: the app was built
-/// without the bundled program) through cmd.exe, which would read a
-/// server's words, or a user, host or key file holding a character it
-/// reads, as commands; and before OpenSSH 8.5, which doesn't mark a
-/// server's questions with `(user@host)`, so a server could word one as
-/// ssh's own.
-bool canPrompt(
-  Map<String, String> config, {
-  bool? throughCmd,
-  (int, int)? version,
-}) =>
-    _whyNoPrompts(
-      config,
-      throughCmd: throughCmd ?? _throughCmd,
-      version: version,
-    ) ==
-    null;
+/// When Windows' ssh runs the `.cmd` helper ([throughCmd]: the app was built
+/// without the bundled program), it runs it through cmd.exe, which would read
+/// a server's words, or a user, host or key file holding a character it
+/// reads, as commands. So only ssh's own prompts come then:
+/// keyboard-interactive is turned off, and nothing asks when a `ProxyJump` or
+/// `ProxyCommand` runs another ssh, which wouldn't get that option, or when
+/// the config couldn't be read to tell.
+bool canPrompt(Map<String, String> config, {bool? throughCmd}) =>
+    _whyNoPrompts(config, throughCmd: throughCmd ?? _throughCmd) == null;
 
 /// Whether only ssh's own prompts may come; see [canPrompt].
-bool ownPromptsOnly({bool? throughCmd, (int, int)? version}) =>
-    (throughCmd ?? _throughCmd) || _olderThan(version, 8, 5);
+bool ownPromptsOnly({bool? throughCmd}) => throughCmd ?? _throughCmd;
 
 bool get _throughCmd => Platform.isWindows && bundledWindowsHelper == null;
 
-String? _whyNoPrompts(
-  Map<String, String> config, {
-  required bool throughCmd,
-  required (int, int)? version,
-}) {
-  if (!ownPromptsOnly(throughCmd: throughCmd, version: version)) return null;
-  final who = throughCmd
-      ? "Windows' ssh, through the .cmd helper of an app built without a C "
-            'compiler,'
-      : 'OpenSSH ${version!.$1}.${version.$2}';
+String? _whyNoPrompts(Map<String, String> config, {required bool throughCmd}) {
+  if (!ownPromptsOnly(throughCmd: throughCmd)) return null;
+  const who =
+      "Windows' ssh, through the .cmd helper of an app built without a C "
+      'compiler,';
   if (config.isEmpty) {
     return "$who can't ask safely: ssh -G couldn't read the config";
   }
@@ -585,12 +570,10 @@ String? _whyNoPrompts(
       return "$who can't ask safely when the config sets a $option";
     }
   }
-  if (throughCmd) {
-    for (final option in _inPrompts) {
-      if (config[option]?.contains(_readByCmd) ?? false) {
-        return "$who can't ask safely when its $option holds one of "
-            '" % ! ^ & | < >';
-      }
+  for (final option in _inPrompts) {
+    if (config[option]?.contains(_readByCmd) ?? false) {
+      return "$who can't ask safely when its $option holds one of "
+          '" % ! ^ & | < >';
     }
   }
   return null;
@@ -609,22 +592,42 @@ final _readByCmd = RegExp(r'["%!^&|<>]');
 /// [onPrompt], or as before when [onPrompt] is null or [canPrompt] says no.
 /// A login that fails after a cancelled prompt throws an
 /// [SshLoginCancelledException], or what [onPrompt] threw.
+///
+/// When [canPrompt] says no, [onLog] gets an [SshPromptsOff], and a refused
+/// login says why in its message.
 Future<T> withPrompts<T>(
   SshPromptHandler? onPrompt, {
   required String executable,
   required Map<String, String> config,
   required Map<String, String> environment,
   required Future<T> Function(SshPrompts prompts) open,
+  void Function(SshLog log)? onLog,
 }) async {
   if (onPrompt == null) return open(SshPrompts.none(environment));
-  final version = await sshVersion(executable, environment: environment);
-  if (_whyNoPrompts(config, throughCmd: _throughCmd, version: version)
-      case final why?) {
-    logger.warning('Not asking for passwords: $why');
-    return open(SshPrompts.none(environment));
+  if (_whyNoPrompts(config, throughCmd: _throughCmd) case final why?) {
+    final off = SshPromptsOff(why);
+    logger.warning(off.line);
+    reportTo(onLog, off);
+    try {
+      return await open(SshPrompts.none(environment));
+    } on SshLoginRefusedException catch (exception, stackTrace) {
+      Error.throwWithStackTrace(
+        SshLoginRefusedException(
+          '${exception.message} (not asking for passwords: $why)',
+          log: exception.log,
+          exitCode: exception.exitCode,
+        ),
+        stackTrace,
+      );
+    }
   }
 
-  final askPass = await AskPass.start(onPrompt);
+  final version = await sshVersion(executable, environment: environment);
+  final askPass = await AskPass.start(
+    onPrompt,
+    // ssh's own prompts are all that come through the .cmd helper.
+    verified: _throughCmd || !_olderThan(version, 8, 5),
+  );
   try {
     return await open(
       SshPrompts._(
@@ -640,7 +643,7 @@ Future<T> withPrompts<T>(
             'DISPLAY': ':0',
         },
         enabled: true,
-        ownOnly: ownPromptsOnly(version: version),
+        ownOnly: ownPromptsOnly(),
         stop: askPass.stop,
       ),
     );
