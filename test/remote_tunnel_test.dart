@@ -13,13 +13,14 @@ import 'fakes/fakes.dart';
 void main() {
   const server = SshTarget('ssh.example.com');
   const session = 'debug1: Entering interactive session.';
-  const forwarded = 'debug1: remote forward success for: '
+  const forwarded =
+      'debug1: remote forward success for: '
       'listen 127.0.0.1:8080, connect localhost:3000';
 
   group('RemoteForwardReadiness', () {
     RemoteForwardReadiness readiness(int port) => RemoteForwardReadiness(
-          RemoteForward(port, localHost: 'localhost', localPort: 3000),
-        );
+      RemoteForward(port, localHost: 'localhost', localPort: 3000),
+    );
 
     test('is ready once the server accepts and the session starts', () {
       final fixed = readiness(8080);
@@ -81,7 +82,8 @@ void main() {
 
       expect(
         picked.isReadyAfter(
-            'Allocated port 41234 for remote forward to ::1:3000'),
+          'Allocated port 41234 for remote forward to ::1:3000',
+        ),
         isTrue,
       );
       expect(picked.port, 41234);
@@ -98,8 +100,11 @@ void main() {
   group('RemoteForward', () {
     test('binds the server side to 127.0.0.1', () {
       expect(
-        const RemoteForward(8080, localHost: 'localhost', localPort: 3000)
-            .arguments,
+        const RemoteForward(
+          8080,
+          localHost: 'localhost',
+          localPort: 3000,
+        ).arguments,
         ['-R', '127.0.0.1:8080:localhost:3000'],
       );
     });
@@ -141,13 +146,23 @@ void main() {
     test('rejects ports outside 1 to 65535', () {
       expect(
         open(localPort: 0),
-        throwsA(isA<RangeError>()
-            .having((exception) => exception.name, 'name', 'localPort')),
+        throwsA(
+          isA<RangeError>().having(
+            (exception) => exception.name,
+            'name',
+            'localPort',
+          ),
+        ),
       );
       expect(
         open(remotePort: 65536),
-        throwsA(isA<RangeError>()
-            .having((exception) => exception.name, 'name', 'remotePort')),
+        throwsA(
+          isA<RangeError>().having(
+            (exception) => exception.name,
+            'name',
+            'remotePort',
+          ),
+        ),
       );
       expect(open(remotePort: 0), throwsRangeError);
     });
@@ -208,8 +223,9 @@ void main() {
     test('SystemSshClient runs its executable', () async {
       fake.attemptModes([AttemptMode.ready]);
 
-      final tunnel = await SystemSshClient(executable: fake.path)
-          .openRemoteTunnel(server, localPort: 3000, remotePort: 8080);
+      final tunnel = await SystemSshClient(
+        executable: fake.path,
+      ).openRemoteTunnel(server, localPort: 3000, remotePort: 8080);
       addTearDown(tunnel.close);
 
       expect(tunnel.remotePort, 8080);
@@ -240,8 +256,11 @@ void main() {
       await expectLater(
         open(),
         throwsA(
-          isA<SshRemotePortRefusedException>()
-              .having((exception) => exception.port, 'port', 0),
+          isA<SshRemotePortRefusedException>().having(
+            (exception) => exception.port,
+            'port',
+            0,
+          ),
         ),
       );
     });

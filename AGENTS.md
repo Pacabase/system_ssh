@@ -41,4 +41,4 @@ dart test --exclude-tags integration
 dart pub publish --dry-run
 ```
 
-CI also runs the unit tests on Dart 3.5, the oldest SDK `pubspec.yaml` allows, so don't use a newer API.
+CI also runs the unit tests on Dart 3.10, the oldest SDK `pubspec.yaml` allows, so don't use a newer API.

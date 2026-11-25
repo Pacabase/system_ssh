@@ -58,19 +58,19 @@ const checkHostIpEntries = [
 ];
 
 List<String> _changedKey(String fingerprint) => [
-      'err:debug1: Server host key: ssh-ed25519 $fingerprint',
-      'err:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
-      'err:@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @',
-      'err:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
-      'err:IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!',
-      'err:The fingerprint for the ED25519 key sent by the remote host is',
-      'err:$fingerprint.',
-      'err:Please contact your system administrator.',
-      'err:Offending ED25519 key in /home/user/.ssh/known_hosts:3',
-      'err:Host key for $fakeHostKeyName has changed and you have requested strict checking.',
-      'err:Host key verification failed.',
-      'exit:255',
-    ];
+  'err:debug1: Server host key: ssh-ed25519 $fingerprint',
+  'err:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
+  'err:@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @',
+  'err:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
+  'err:IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!',
+  'err:The fingerprint for the ED25519 key sent by the remote host is',
+  'err:$fingerprint.',
+  'err:Please contact your system administrator.',
+  'err:Offending ED25519 key in /home/user/.ssh/known_hosts:3',
+  'err:Host key for $fakeHostKeyName has changed and you have requested strict checking.',
+  'err:Host key verification failed.',
+  'exit:255',
+];
 
 /// Stands in for ssh in the tests, compiled to an executable.
 ///
@@ -109,8 +109,9 @@ Future<void> _run(List<String> steps) async {
     final child = await Process.start(
       Platform.resolvedExecutable,
       ['--steps', 'record:${ready.path}', ...steps],
-      mode:
-          shareStdio ? ProcessStartMode.inheritStdio : ProcessStartMode.normal,
+      mode: shareStdio
+          ? ProcessStartMode.inheritStdio
+          : ProcessStartMode.normal,
     );
     file.writeAsStringSync('${child.pid}\n', mode: FileMode.append);
 
@@ -202,8 +203,11 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       case 'hang':
         return _run(['hang']);
       case 'hang-with-child':
-        return _run(
-            ['record:${file('config_children').path}', 'spawn', 'hang']);
+        return _run([
+          'record:${file('config_children').path}',
+          'spawn',
+          'hang',
+        ]);
       case 'fail':
         return _run(['err:fake ssh: -G failed', 'exit:1']);
     }
@@ -264,26 +268,27 @@ Future<void> _ssh(String directory, List<String> arguments) async {
   if (arguments.contains('ControlMaster=yes')) {
     return _run(switch (mode) {
       AttemptMode.ready => [
-          'err:debug1: setting up multiplex master socket',
-          'err:debug1: Entering interactive session.',
-          'say:${file('master_say').path}',
-        ],
+        'err:debug1: setting up multiplex master socket',
+        'err:debug1: Entering interactive session.',
+        'say:${file('master_say').path}',
+      ],
       AttemptMode.fail || AttemptMode.bindFailure => [
-          'err:ssh: connect to host ssh.example.com port 22: Connection refused',
-          'exit:255',
-        ],
+        'err:ssh: connect to host ssh.example.com port 22: Connection refused',
+        'exit:255',
+      ],
       AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
       AttemptMode.hang => ['hang'],
       AttemptMode.held => ['say:${file('master_say').path}'],
     });
   }
 
-  final forward =
-      arguments.indexWhere((argument) => ['-L', '-D', '-R'].contains(argument));
-  // A bracketed IPv6 address holds colons of its own.
-  final bracketed = RegExp(r'^\[([^\]]*)\]:(.*)').firstMatch(
-    arguments[forward + 1],
+  final forward = arguments.indexWhere(
+    (argument) => ['-L', '-D', '-R'].contains(argument),
   );
+  // A bracketed IPv6 address holds colons of its own.
+  final bracketed = RegExp(
+    r'^\[([^\]]*)\]:(.*)',
+  ).firstMatch(arguments[forward + 1]);
   final spec = bracketed == null
       ? arguments[forward + 1].split(':')
       : [bracketed[1]!, ...bracketed[2]!.split(':')];
@@ -297,24 +302,24 @@ Future<void> _ssh(String directory, List<String> arguments) async {
     final answer = 'listen 127.0.0.1:$port, connect $destination';
     return _run(switch (mode) {
       AttemptMode.ready => [
-          'err:debug1: Entering interactive session.',
-          'err:debug1: remote forward success for: $answer',
-          if (port == '0')
-            'err:Allocated port $listen for remote forward to $destination',
-          'hang',
-        ],
+        'err:debug1: Entering interactive session.',
+        'err:debug1: remote forward success for: $answer',
+        if (port == '0')
+          'err:Allocated port $listen for remote forward to $destination',
+        'hang',
+      ],
       AttemptMode.fail => [
-          'err:ssh: connect to host ssh.example.com port 22: Connection refused',
-          'exit:255',
-        ],
+        'err:ssh: connect to host ssh.example.com port 22: Connection refused',
+        'exit:255',
+      ],
       AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
       AttemptMode.hang || AttemptMode.held => ['hang'],
       AttemptMode.bindFailure => [
-          'err:debug1: Entering interactive session.',
-          'err:debug1: remote forward failure for: $answer',
-          'err:Error: remote port forwarding failed for listen port $port',
-          'exit:255',
-        ],
+        'err:debug1: Entering interactive session.',
+        'err:debug1: remote forward failure for: $answer',
+        'err:Error: remote port forwarding failed for listen port $port',
+        'exit:255',
+      ],
     });
   }
 
@@ -323,23 +328,23 @@ Future<void> _ssh(String directory, List<String> arguments) async {
 
   await _run(switch (mode) {
     AttemptMode.ready => [
-        'err:$listening',
-        'err:debug1: Entering interactive session.',
-        'hang',
-      ],
+      'err:$listening',
+      'err:debug1: Entering interactive session.',
+      'hang',
+    ],
     AttemptMode.fail => [
-        'err:ssh: connect to host ssh.example.com port 22: Connection refused',
-        'exit:255',
-      ],
+      'err:ssh: connect to host ssh.example.com port 22: Connection refused',
+      'exit:255',
+    ],
     AttemptMode.notFound => ['err:sh: 1: ssh: not found', 'exit:127'],
     AttemptMode.hang || AttemptMode.held => ['hang'],
     AttemptMode.bindFailure => [
-        'err:$listening',
-        'err:bind [$address]:$port: Address already in use',
-        'err:channel_setup_fwd_listener_tcpip: cannot listen to port: $port',
-        'err:Could not request local forwarding.',
-        'exit:255',
-      ],
+      'err:$listening',
+      'err:bind [$address]:$port: Address already in use',
+      'err:channel_setup_fwd_listener_tcpip: cannot listen to port: $port',
+      'err:Could not request local forwarding.',
+      'exit:255',
+    ],
   });
 }
 
@@ -378,44 +383,44 @@ Future<void> _trust(String directory, List<String> arguments) async {
     TrustMode.adds || TrustMode.checkHostIp => [...added, denied, 'exit:255'],
     // A man in the middle's banner, after its key exchange, claims both.
     TrustMode.addsOther => [
-        ...added,
-        ..._changedKey(fingerprint).where((step) => step != 'exit:255'),
-        denied,
-        'exit:255',
-      ],
+      ...added,
+      ..._changedKey(fingerprint).where((step) => step != 'exit:255'),
+      denied,
+      'exit:255',
+    ],
     TrustMode.viaJump => [
-        "err:debug1: Host 'jump.example.com' is known and matches the ED25519 host key.",
-        'err:Authenticated to jump.example.com ([10.0.0.2]:22) using "publickey".',
-        'sleep:200',
-        'write:${readInto.path}=$fakeHostKeyEntry',
-        ...added,
-        denied,
-        'exit:255',
-      ],
+      "err:debug1: Host 'jump.example.com' is known and matches the ED25519 host key.",
+      'err:Authenticated to jump.example.com ([10.0.0.2]:22) using "publickey".',
+      'sleep:200',
+      'write:${readInto.path}=$fakeHostKeyEntry',
+      ...added,
+      denied,
+      'exit:255',
+    ],
     TrustMode.jumpOnly => [
-        "err:debug1: Host 'jump.example.com' is known and matches the ED25519 host key.",
-        'err:Authenticated to jump.example.com ([10.0.0.2]:22) using "publickey".',
-        'err:channel 0: open failed: connect failed: Connection refused',
-        'err:kex_exchange_identification: Connection closed by remote host',
-        'exit:255',
-      ],
+      "err:debug1: Host 'jump.example.com' is known and matches the ED25519 host key.",
+      'err:Authenticated to jump.example.com ([10.0.0.2]:22) using "publickey".',
+      'err:channel 0: open failed: connect failed: Connection refused',
+      'err:kex_exchange_identification: Connection closed by remote host',
+      'exit:255',
+    ],
     TrustMode.authenticates => [
-        ...added,
-        'err:Authenticated to ssh.example.com ([10.0.0.1]:2222) using "none".',
-        'hang',
-      ],
+      ...added,
+      'err:Authenticated to ssh.example.com ([10.0.0.1]:2222) using "none".',
+      'hang',
+    ],
     TrustMode.hang => ['hang'],
     TrustMode.known => [
-        'err:debug1: Server host key: ssh-ed25519 $fingerprint',
-        "err:debug1: Host '$fakeHostKeyName' is known and matches the ED25519 host key.",
-        denied,
-        'exit:255',
-      ],
+      'err:debug1: Server host key: ssh-ed25519 $fingerprint',
+      "err:debug1: Host '$fakeHostKeyName' is known and matches the ED25519 host key.",
+      denied,
+      'exit:255',
+    ],
     TrustMode.changed => _changedKey(otherHostKeyFingerprint),
     TrustMode.unreachable => [
-        'err:ssh: connect to host ssh.example.com port 2222: Connection refused',
-        'exit:255',
-      ],
+      'err:ssh: connect to host ssh.example.com port 2222: Connection refused',
+      'exit:255',
+    ],
   });
 }
 
@@ -446,27 +451,27 @@ Future<void> _mux(String directory, List<String> arguments) async {
 
   await _run(switch (mode) {
     'fail' => [
-        'err:mux_client_forward: forwarding request failed: Port forwarding failed',
-        'err:muxclient: master forward request failed',
-        'exit:255',
-      ],
+      'err:mux_client_forward: forwarding request failed: Port forwarding failed',
+      'err:muxclient: master forward request failed',
+      'exit:255',
+    ],
     'refused' => [
-        'err:mux_client_forward: forwarding request failed: remote port forwarding failed for listen port ${spec.split(':')[1]}',
-        'err:muxclient: master forward request failed',
-        'exit:255',
-      ],
+      'err:mux_client_forward: forwarding request failed: remote port forwarding failed for listen port ${spec.split(':')[1]}',
+      'err:muxclient: master forward request failed',
+      'exit:255',
+    ],
     'silent-fail' => [
-        'err:mux_client_forward: forwarding request failed: port not forwarded',
-        'err:muxclient: master cancel forward request failed',
-        'exit:0',
-      ],
+      'err:mux_client_forward: forwarding request failed: port not forwarded',
+      'err:muxclient: master cancel forward request failed',
+      'exit:0',
+    ],
     'hang' => ['hang'],
     'quiet' => ['exit:0'],
     _ => [
-        if (mode == 'slow') 'sleep:300',
-        if (operation == 'forward' && spec.startsWith('127.0.0.1:0:'))
-          'echo:41234',
-        'exit:0',
-      ],
+      if (mode == 'slow') 'sleep:300',
+      if (operation == 'forward' && spec.startsWith('127.0.0.1:0:'))
+        'echo:41234',
+      'exit:0',
+    ],
   });
 }

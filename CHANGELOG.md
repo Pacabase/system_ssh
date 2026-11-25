@@ -1,3 +1,8 @@
+## Unreleased
+
+- **Breaking:** the package needs Dart 3.10 or newer. Raise your `sdk`
+  constraint to `^3.10.0`, or keep the previous release.
+
 ## 0.11.0
 
 - **Breaking:** `onLog` gets an `SshLoginStarted`, a new kind of `SshLog`,
