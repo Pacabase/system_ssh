@@ -188,7 +188,11 @@ final class AskPass {
         logger.info('Declined a host key question: $text');
         return null;
       }
-      final prompt = classifyPrompt(text, isVerified: _verified);
+      final prompt = classifyPrompt(
+        text,
+        isVerified: _verified,
+        withdrawn: _closed.future,
+      );
       if (_wasCancelled || _error != null) return _refuse(prompt);
       logger.info('ssh asks: $prompt');
       try {

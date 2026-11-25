@@ -6,7 +6,8 @@
   take an `onPrompt` that answers what ssh asks while it logs in: a key's
   passphrase without an agent, a password, or the server's own question,
   such as a 2FA code. Answering null cancels the login. Without it, nothing
-  changes: ssh asks nothing.
+  changes: ssh asks nothing. A prompt's `withdrawn` completes once ssh no
+  longer waits for its answer, for closing the dialog.
 
   ```dart
   final tunnel = await client.openTunnel(

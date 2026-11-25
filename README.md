@@ -175,8 +175,9 @@ final tunnel = await client.openTunnel(
   in, a `ProxyJump` host included. A jump host's unknown host key is never
   asked about: it fails with an `SshHostKeyRefusedException`. The package
   doesn't time prompts out; the server ends a login nobody answers, usually
-  after two minutes. A tunnel that fails or is aborted while its prompt
-  shows lets the next one come, so close its dialog when the open throws.
+  after two minutes. Each prompt's `withdrawn` completes once ssh stops
+  waiting for its answer, such as when its tunnel fails or is aborted, so
+  close its dialog then; the next prompt may already be on its way.
 - A tunnel on a port the package picks can be retried if another program
   takes the port while ssh logs in, and the retry asks again.
 - The helper runs from the temp folder, or, where that doesn't allow
