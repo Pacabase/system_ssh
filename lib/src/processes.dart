@@ -14,12 +14,11 @@ import 'wrapped_process.dart';
 Future<Process> startWatched(
   List<String> command, {
   Map<String, String> environment = const {},
-}) =>
-    _start(
-      () => Platform.isWindows
-          ? startInJob(command, environment: environment)
-          : _WatchedChild.start(command, environment: environment),
-    );
+}) => _start(
+  () => Platform.isWindows
+      ? startInJob(command, environment: environment)
+      : _WatchedChild.start(command, environment: environment),
+);
 
 /// A command beside a shell that stops it, and its children, once the shell's
 /// stdin hits EOF however this process dies. Linux's own parent-death signal is
@@ -35,25 +34,28 @@ final class _WatchedChild extends WrappedProcess {
     List<String> command, {
     required Map<String, String> environment,
   }) async {
-    final process = await Process.start(
-      '/bin/sh',
-      ['-c', _execOnceWatched, 'sh', ...command],
-      environment: environment,
-    );
+    final process = await Process.start('/bin/sh', [
+      '-c',
+      _execOnceWatched,
+      'sh',
+      ...command,
+    ], environment: environment);
 
     final Process watcher;
     try {
-      watcher = await Process.start(
-        '/bin/sh',
-        ['-c', _stopOnEof, 'sh', '${process.pid}'],
-        environment: environment,
-      );
+      watcher = await Process.start('/bin/sh', [
+        '-c',
+        _stopOnEof,
+        'sh',
+        '${process.pid}',
+      ], environment: environment);
     } on ProcessException {
       unawaited(process.stdout.drain<void>());
       unawaited(process.stderr.drain<void>());
       _close(process.stdin);
       throw const SshFailedException(
-          'could not start the shell that watches ssh');
+        'could not start the shell that watches ssh',
+      );
     }
     unawaited(watcher.stdout.drain<void>());
     unawaited(watcher.stderr.drain<void>());
@@ -73,8 +75,8 @@ final class _WatchedChild extends WrappedProcess {
   /// signal's 128 + its number, as a shell reports them.
   @override
   Future<int> get exitCode => process.exitCode.then(
-        (code) => _isTerminated ? 143 : (code < 0 ? 128 - code : code),
-      );
+    (code) => _isTerminated ? 143 : (code < 0 ? 128 - code : code),
+  );
 
   /// TERM goes through the watcher, which stops the command's children first:
   /// ssh only stops its ProxyCommand once connected.

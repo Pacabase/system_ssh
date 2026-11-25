@@ -73,38 +73,40 @@ void main() {
       expect(await stops(childPid), isTrue);
     });
 
-    test('stops the command and what it started when this process is killed',
-        () async {
-      final command = await fakeCommand(['spawn', 'hang']);
-      final helper = await Process.start(Platform.resolvedExecutable, [
-        'test/fakes/start_watched_main.dart',
-        ...command.arguments,
-      ]);
-      addTearDown(() => helper.kill(ProcessSignal.sigkill));
-      final said = StringBuffer();
-      helper.stderr.transform(utf8.decoder).listen(said.write);
-      addTearDown(() => printOnFailure('helper and command said:\n$said'));
-      final helperPid = int.parse(
-        (await helper.stdout
-                .transform(utf8.decoder)
-                .first
-                .timeout(const Duration(seconds: 30)))
-            .trim(),
-      );
-      final pid = await command.pid;
-      final childPid = await command.childPid;
+    test(
+      'stops the command and what it started when this process is killed',
+      () async {
+        final command = await fakeCommand(['spawn', 'hang']);
+        final helper = await Process.start(Platform.resolvedExecutable, [
+          'test/fakes/start_watched_main.dart',
+          ...command.arguments,
+        ]);
+        addTearDown(() => helper.kill(ProcessSignal.sigkill));
+        final said = StringBuffer();
+        helper.stderr.transform(utf8.decoder).listen(said.write);
+        addTearDown(() => printOnFailure('helper and command said:\n$said'));
+        final helperPid = int.parse(
+          (await helper.stdout
+                  .transform(utf8.decoder)
+                  .first
+                  .timeout(const Duration(seconds: 30)))
+              .trim(),
+        );
+        final pid = await command.pid;
+        final childPid = await command.childPid;
 
-      expect(
-        isRunning(pid),
-        isTrue,
-        reason: 'the child ${isRunning(childPid) ? 'is' : 'is not'} running',
-      );
+        expect(
+          isRunning(pid),
+          isTrue,
+          reason: 'the child ${isRunning(childPid) ? 'is' : 'is not'} running',
+        );
 
-      Process.killPid(helperPid, ProcessSignal.sigkill);
+        Process.killPid(helperPid, ProcessSignal.sigkill);
 
-      expect(await stops(pid), isTrue);
-      expect(await stops(childPid), isTrue);
-    });
+        expect(await stops(pid), isTrue);
+        expect(await stops(childPid), isTrue);
+      },
+    );
 
     test(
       'throws SshNotFoundException for a command that does not exist',
@@ -259,9 +261,13 @@ void main() {
       () {
         expect(resolveExecutable('ssh'), 'ssh');
         expect(
-            resolveExecutable('ssh', environment: {'PATH': '/opt/bin'}), 'ssh');
-        expect(resolveExecutable('system_ssh_no_such_tool'),
-            'system_ssh_no_such_tool');
+          resolveExecutable('ssh', environment: {'PATH': '/opt/bin'}),
+          'ssh',
+        );
+        expect(
+          resolveExecutable('system_ssh_no_such_tool'),
+          'system_ssh_no_such_tool',
+        );
       },
     );
 
@@ -278,8 +284,9 @@ void main() {
 
       for (final name in ['PATH', 'Path']) {
         test('finds a bare name on the $name the environment sets', () {
-          final directory =
-              Directory.systemTemp.createTempSync('resolve_executable');
+          final directory = Directory.systemTemp.createTempSync(
+            'resolve_executable',
+          );
           addTearDown(() => deleteSoon(directory));
           File('${directory.path}\\tool.exe').createSync();
 
@@ -291,8 +298,9 @@ void main() {
       }
 
       test('looks only on the PATH the environment sets', () {
-        final directory =
-            Directory.systemTemp.createTempSync('resolve_executable');
+        final directory = Directory.systemTemp.createTempSync(
+          'resolve_executable',
+        );
         addTearDown(() => deleteSoon(directory));
 
         expect(
@@ -314,11 +322,12 @@ void main() {
 int parentOf(int pid) => int.parse(_ps(['-o', 'ppid=', '-p', '$pid']));
 
 List<int> childrenOf(int pid) => [
-      for (final line
-          in (Process.runSync('pgrep', ['-P', '$pid']).stdout as String)
-              .split('\n'))
-        if (int.tryParse(line) case final child?) child,
-    ];
+  for (final line
+      in (Process.runSync('pgrep', ['-P', '$pid']).stdout as String).split(
+        '\n',
+      ))
+    ?int.tryParse(line),
+];
 
 // Empty once the process is gone.
 String argumentsOf(int pid) => _ps(['-o', 'args=', '-p', '$pid']);

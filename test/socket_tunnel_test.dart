@@ -30,8 +30,11 @@ void main() {
         expect(
           () => checkSocketPath(path, 'remoteSocket'),
           throwsA(
-            isA<ArgumentError>()
-                .having((error) => error.name, 'name', 'remoteSocket'),
+            isA<ArgumentError>().having(
+              (error) => error.name,
+              'name',
+              'remoteSocket',
+            ),
           ),
         );
       });
@@ -39,10 +42,10 @@ void main() {
   });
 
   test('forwards the local port to the socket path', () {
-    expect(
-      const SocketForward(50000, remoteSocket: socket).arguments,
-      ['-L', '127.0.0.1:50000:/var/run/docker.sock'],
-    );
+    expect(const SocketForward(50000, remoteSocket: socket).arguments, [
+      '-L',
+      '127.0.0.1:50000:/var/run/docker.sock',
+    ]);
   });
 
   group('openSocketTunnel', () {
@@ -53,17 +56,15 @@ void main() {
     test('opens on a free port with the -L command for the socket', () async {
       fake.attemptModes([AttemptMode.ready]);
 
-      final tunnel = await SystemSshClient(executable: fake.path)
-          .openSocketTunnel(server, remoteSocket: socket);
+      final tunnel = await SystemSshClient(
+        executable: fake.path,
+      ).openSocketTunnel(server, remoteSocket: socket);
       addTearDown(tunnel.close);
 
       expect(fake.attempts, [
         sshCommand(
           server,
-          forward: SocketForward(
-            tunnel.localPort,
-            remoteSocket: socket,
-          ),
+          forward: SocketForward(tunnel.localPort, remoteSocket: socket),
         ).sublist(1),
       ]);
     });
@@ -72,8 +73,9 @@ void main() {
       fake.attemptModes([AttemptMode.ready]);
       final port = await pickFreePort();
 
-      final tunnel = await SystemSshClient(executable: fake.path)
-          .openSocketTunnel(server, remoteSocket: socket, localPort: port);
+      final tunnel = await SystemSshClient(
+        executable: fake.path,
+      ).openSocketTunnel(server, remoteSocket: socket, localPort: port);
       addTearDown(tunnel.close);
 
       expect(tunnel.localPort, port);
@@ -82,8 +84,9 @@ void main() {
 
     test('rejects a relative socket path before running ssh', () async {
       await expectLater(
-        SystemSshClient(executable: fake.path)
-            .openSocketTunnel(server, remoteSocket: 'docker.sock'),
+        SystemSshClient(
+          executable: fake.path,
+        ).openSocketTunnel(server, remoteSocket: 'docker.sock'),
         throwsArgumentError,
       );
       expect(fake.configArguments, isNull);
@@ -93,8 +96,9 @@ void main() {
       fake.attemptModes([AttemptMode.fail]);
 
       await expectLater(
-        SystemSshClient(executable: fake.path)
-            .openSocketTunnel(server, remoteSocket: socket),
+        SystemSshClient(
+          executable: fake.path,
+        ).openSocketTunnel(server, remoteSocket: socket),
         throwsA(
           isA<SshUnreachableException>().having(
             (exception) => exception.message,

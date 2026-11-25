@@ -17,10 +17,11 @@ Future<Map<String, String>> resolveConfig(
 }) async {
   final abort = AbortSignal(abortTrigger);
 
-  final process = await startWatched(
-    [executable, '-G', ...destinationArguments(server)],
-    environment: environment,
-  );
+  final process = await startWatched([
+    executable,
+    '-G',
+    ...destinationArguments(server),
+  ], environment: environment);
   unawaited(process.stderr.drain<void>());
   final output = process.stdout
       .transform(const Utf8Decoder(allowMalformed: true))
@@ -38,8 +39,7 @@ Future<Map<String, String>> resolveConfig(
 
 /// `ssh -G` output as option name to value.
 Map<String, String> parseConfig(List<String> lines) => {
-      for (final line in lines.map((line) => line.trim()))
-        if (line.indexOf(' ') case final space when space > 0)
-          line.substring(0, space).toLowerCase():
-              line.substring(space + 1).trim(),
-    };
+  for (final line in lines.map((line) => line.trim()))
+    if (line.indexOf(' ') case final space when space > 0)
+      line.substring(0, space).toLowerCase(): line.substring(space + 1).trim(),
+};

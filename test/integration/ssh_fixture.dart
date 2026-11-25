@@ -16,8 +16,8 @@ import '../fakes/fakes.dart';
 /// so it runs only in CI with SSH_TEST_PORT set.
 final class SshFixture {
   SshFixture()
-      : _port = int.tryParse(Platform.environment['SSH_TEST_PORT'] ?? ''),
-        _isCi = Platform.environment['CI'] == 'true';
+    : _port = int.tryParse(Platform.environment['SSH_TEST_PORT'] ?? ''),
+      _isCi = Platform.environment['CI'] == 'true';
 
   final int? _port;
   final bool _isCi;
@@ -45,10 +45,10 @@ final class SshFixture {
 
   /// Why the tests can't run here, or null when they can.
   String? get skip => switch ((_port, _isCi)) {
-        (null, _) => 'Needs the sshd CI starts (SSH_TEST_PORT)',
-        (_, false) => "Logs in to CI's sshd, so runs only where CI=true",
-        _ => null,
-      };
+    (null, _) => 'Needs the sshd CI starts (SSH_TEST_PORT)',
+    (_, false) => "Logs in to CI's sshd, so runs only where CI=true",
+    _ => null,
+  };
 
   /// The sshd, with host keys checked against the fixture's known_hosts,
   /// which holds the sshd's key unless a test calls [forgetHostKey].
@@ -59,10 +59,10 @@ final class SshFixture {
 
   /// The sshd as the current user, for an ssh with no config at all.
   SshTarget get bareTarget => SshTarget(
-        '127.0.0.1',
-        port: _port,
-        user: Platform.environment[Platform.isWindows ? 'USERNAME' : 'USER'],
-      );
+    '127.0.0.1',
+    port: _port,
+    user: Platform.environment[Platform.isWindows ? 'USERNAME' : 'USER'],
+  );
 
   /// Same server, with `ClearAllForwardings yes` in the config.
   SshTarget get clearForwardingsTarget => const SshTarget('clear-forwardings');
@@ -91,9 +91,9 @@ final class SshFixture {
   /// The pid of the `ssh -W` that [proxyCommandTarget]'s ProxyCommand runs,
   /// once it has started.
   Future<int> get proxyPid => eventually(() {
-        if (!_proxyPid.existsSync()) return null;
-        return int.tryParse(_proxyPid.readAsStringSync().trim());
-      });
+    if (!_proxyPid.existsSync()) return null;
+    return int.tryParse(_proxyPid.readAsStringSync().trim());
+  });
 
   /// The socket of the agent [startAgent] runs.
   String get agentSocket =>
@@ -127,9 +127,12 @@ final class SshFixture {
     final knownHosts = _knownHosts.path.replaceAll(r'\', '/');
     final home =
         Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
-    final restrictedKey =
-        '$home/.ssh/id_ed25519_no_forwarding'.replaceAll(r'\', '/');
-    String agentHost(String name, String? agent) => '''
+    final restrictedKey = '$home/.ssh/id_ed25519_no_forwarding'.replaceAll(
+      r'\',
+      '/',
+    );
+    String agentHost(String name, String? agent) =>
+        '''
 Host $name
   HostName 127.0.0.1
   Port $_port
@@ -180,8 +183,9 @@ Host 127.0.0.1
 ''');
 
     if (Platform.isWindows) {
-      File(await compileExecutable('test/integration/ssh_wrapper_main.dart'))
-          .copySync(ssh);
+      File(
+        await compileExecutable('test/integration/ssh_wrapper_main.dart'),
+      ).copySync(ssh);
     } else {
       // ssh runs a ProxyCommand as `exec <command>`, so $$ ends up ssh -W's pid.
       File(ssh).writeAsStringSync('''
@@ -192,7 +196,7 @@ exec ssh -F '${directory.path}/config' "\$@"
       await Process.run('chmod', ['+x', ssh]);
     }
 
-    for (var attempt = 1;; attempt++) {
+    for (var attempt = 1; ; attempt++) {
       try {
         (await Socket.connect(InternetAddress.loopbackIPv4, _port!)).destroy();
         break;
@@ -202,10 +206,11 @@ exec ssh -F '${directory.path}/config' "\$@"
       }
     }
 
-    final scan = await Process.run(
-      'ssh-keyscan',
-      ['-p', '$_port', '127.0.0.1'],
-    );
+    final scan = await Process.run('ssh-keyscan', [
+      '-p',
+      '$_port',
+      '127.0.0.1',
+    ]);
     final keys = '${scan.stdout}';
     if (keys.trim().isEmpty) throw StateError('ssh-keyscan: ${scan.stderr}');
     _scannedHostKeys = keys;
@@ -216,18 +221,20 @@ exec ssh -F '${directory.path}/config' "\$@"
 
   /// The runner's own known_hosts, which ssh with no config checks.
   File get runnerKnownHosts => File(
-        '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}'
-        '/.ssh/known_hosts',
-      );
+    '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}'
+    '/.ssh/known_hosts',
+  );
 
   /// Adds the sshd's keys to [runnerKnownHosts] unless it has them. Only
   /// one test file may call it: files run at once, and one re-adding the keys
   /// while another has removed them breaks that other's test.
   Future<void> rememberHostKeyForBareTarget() async {
-    final found = await Process.run(
-      'ssh-keygen',
-      ['-F', _hostKeyName, '-f', runnerKnownHosts.path],
-    );
+    final found = await Process.run('ssh-keygen', [
+      '-F',
+      _hostKeyName,
+      '-f',
+      runnerKnownHosts.path,
+    ]);
     if (found.exitCode == 0) return;
 
     final file = runnerKnownHosts..parent.createSync(recursive: true);
@@ -241,10 +248,12 @@ exec ssh -F '${directory.path}/config' "\$@"
 
   /// Removes the sshd's keys from [runnerKnownHosts].
   Future<void> forgetHostKeyForBareTarget() async {
-    await Process.run(
-      'ssh-keygen',
-      ['-R', _hostKeyName, '-f', runnerKnownHosts.path],
-    );
+    await Process.run('ssh-keygen', [
+      '-R',
+      _hostKeyName,
+      '-f',
+      runnerKnownHosts.path,
+    ]);
   }
 
   /// Empties the fixture's known_hosts, so [target]'s key is unknown.

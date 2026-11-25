@@ -57,8 +57,9 @@ final class FakeSsh {
   void failConfig() => _file('config_mode').writeAsStringSync('fail');
 
   /// One mode per attempt; attempts past the end repeat the last.
-  void attemptModes(List<AttemptMode> modes) => _file('modes')
-      .writeAsStringSync(modes.map((mode) => mode.name).join('\n'));
+  void attemptModes(List<AttemptMode> modes) => _file(
+    'modes',
+  ).writeAsStringSync(modes.map((mode) => mode.name).join('\n'));
 
   /// Has every tunnel attempt play [mode] first.
   void hostKeyMode(HostKeyMode mode) =>
@@ -89,9 +90,9 @@ final class FakeSsh {
 
   /// The arguments of each `ssh -O` command, in order.
   List<List<String>> get muxCommands => [
-        for (var command = 1; _file('mux.$command').existsSync(); command++)
-          _file('mux.$command').readAsLinesSync(),
-      ];
+    for (var command = 1; _file('mux.$command').existsSync(); command++)
+      _file('mux.$command').readAsLinesSync(),
+  ];
 
   /// What `ssh -G` was run with, or null if it wasn't.
   List<String>? get configArguments {
@@ -103,26 +104,26 @@ final class FakeSsh {
   Map<String, String>? get configEnvironment => _environment('config_env');
 
   List<Map<String, String>> get attemptEnvironments => [
-        for (var attempt = 1; _file('env.$attempt').existsSync(); attempt++)
-          _environment('env.$attempt')!,
-      ];
+    for (var attempt = 1; _file('env.$attempt').existsSync(); attempt++)
+      _environment('env.$attempt')!,
+  ];
 
   /// The pid of `ssh -G`, once it has started.
   Future<int> get configPid => eventually(() => _pid('config_pid'));
 
   /// The pid of the child [hangOnConfigWithChild] makes `ssh -G` start.
   Future<int> get configChildPid => eventually(() {
-        final file = _file('config_children');
-        return file.existsSync()
-            ? file.readAsLinesSync().map(int.tryParse).elementAtOrNull(1)
-            : null;
-      });
+    final file = _file('config_children');
+    return file.existsSync()
+        ? file.readAsLinesSync().map(int.tryParse).elementAtOrNull(1)
+        : null;
+  });
 
   /// The arguments of each tunnel attempt, in order.
   List<List<String>> get attempts => [
-        for (var attempt = 1; _file('argv.$attempt').existsSync(); attempt++)
-          _file('argv.$attempt').readAsLinesSync(),
-      ];
+    for (var attempt = 1; _file('argv.$attempt').existsSync(); attempt++)
+      _file('argv.$attempt').readAsLinesSync(),
+  ];
 
   /// The fake's own pid in tunnel [attempt], counting from 1.
   int? attemptPid(int attempt) => _pid('pid.$attempt');
@@ -133,7 +134,7 @@ final class FakeSsh {
     final file = _file(name);
     return file.existsSync()
         ? (jsonDecode(file.readAsStringSync()) as Map<String, dynamic>)
-            .cast<String, String>()
+              .cast<String, String>()
         : null;
   }
 

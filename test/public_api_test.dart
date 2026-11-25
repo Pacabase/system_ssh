@@ -37,8 +37,7 @@ final class _FakeSshClient implements SshClient {
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      _FakeTunnel(localPort ?? 50000);
+  }) async => _FakeTunnel(localPort ?? 50000);
 
   @override
   Future<SshTunnel> openSocketTunnel(
@@ -48,8 +47,7 @@ final class _FakeSshClient implements SshClient {
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      _FakeTunnel(localPort ?? 50002);
+  }) async => _FakeTunnel(localPort ?? 50002);
 
   @override
   Future<SshRemoteTunnel> openRemoteTunnel(
@@ -59,8 +57,7 @@ final class _FakeSshClient implements SshClient {
     int? remotePort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      _FakeRemoteTunnel(remotePort ?? 41234);
+  }) async => _FakeRemoteTunnel(remotePort ?? 41234);
 
   @override
   Future<SshTunnel> openSocksProxy(
@@ -69,8 +66,7 @@ final class _FakeSshClient implements SshClient {
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      _FakeTunnel(localPort ?? 50001);
+  }) async => _FakeTunnel(localPort ?? 50001);
 
   @override
   Future<List<String>> configuredHosts() async => const ['ssh.example.com'];
@@ -82,8 +78,7 @@ final class _FakeSshClient implements SshClient {
     SshTarget server,
     SshHostKey hostKey, {
     Future<void>? abortTrigger,
-  }) async =>
-      trusted.add(hostKey);
+  }) async => trusted.add(hostKey);
 }
 
 const _hostKey = SshHostKey(
@@ -110,8 +105,10 @@ void main() {
   test('reads back the target it was given', () {
     const target = SshTarget('ssh.example.com', port: 2222, user: 'alice');
 
-    expect((target.host, target.port, target.user),
-        ('ssh.example.com', 2222, 'alice'));
+    expect(
+      (target.host, target.port, target.user),
+      ('ssh.example.com', 2222, 'alice'),
+    );
   });
 
   test('waits on a tunnel and closes it', () async {
@@ -133,12 +130,12 @@ void main() {
 
   test('switches over every kind of log line', () {
     String describe(SshLog log) => switch (log) {
-          SshProgress(:final line) => 'progress: $line',
-          SshLoginStarted(:final line) => 'login: $line',
-          SshMessage(:final line) => 'message: $line',
-          SshForwardUnreachable(:final line, :final reason) => '$reason: $line',
-          SshForwardProhibited(:final line) => 'forbidden: $line',
-        };
+      SshProgress(:final line) => 'progress: $line',
+      SshLoginStarted(:final line) => 'login: $line',
+      SshMessage(:final line) => 'message: $line',
+      SshForwardUnreachable(:final line, :final reason) => '$reason: $line',
+      SshForwardProhibited(:final line) => 'forbidden: $line',
+    };
 
     expect(
       [
@@ -214,24 +211,26 @@ void main() {
     expect(fixed.localPort, 1080);
   });
 
-  test('opens a remote tunnel, on a fixed server port or a picked one',
-      () async {
-    final SshClient fake = _FakeSshClient();
-    final SshRemoteTunnel picked = await fake.openRemoteTunnel(
-      const SshTarget('ssh.example.com'),
-      localPort: 3000,
-    );
-    final fixed = await fake.openRemoteTunnel(
-      const SshTarget('ssh.example.com'),
-      localHost: '127.0.0.1',
-      localPort: 3000,
-      remotePort: 8080,
-    );
+  test(
+    'opens a remote tunnel, on a fixed server port or a picked one',
+    () async {
+      final SshClient fake = _FakeSshClient();
+      final SshRemoteTunnel picked = await fake.openRemoteTunnel(
+        const SshTarget('ssh.example.com'),
+        localPort: 3000,
+      );
+      final fixed = await fake.openRemoteTunnel(
+        const SshTarget('ssh.example.com'),
+        localHost: '127.0.0.1',
+        localPort: 3000,
+        remotePort: 8080,
+      );
 
-    expect((picked.remotePort, fixed.remotePort), (41234, 8080));
-    await fixed.close();
-    await fixed.done;
-  });
+      expect((picked.remotePort, fixed.remotePort), (41234, 8080));
+      await fixed.close();
+      await fixed.done;
+    },
+  );
 
   test('holds every kind of tunnel as an SshForward', () async {
     final SshClient fake = _FakeSshClient();
@@ -309,23 +308,22 @@ void main() {
 
   test('lets a switch name every exception', () {
     String reason(SshException exception) => switch (exception) {
-          SshNotFoundException() => 'no ssh',
-          SshConfigException() => 'config',
-          SshPortInUseException(:final port) => 'port $port in use',
-          SshDuplicateForwardException(:final forward) => 'already $forward',
-          SshLoginRefusedException() => 'login refused',
-          SshHostKeyRefusedException() => 'host key refused',
-          SshUnknownHostKeyException(:final hostKey) =>
-            'unknown ${hostKey.host}',
-          SshHostKeyChangedException() => 'host key changed',
-          SshHostNotFoundException() => 'host not found',
-          SshUnreachableException() => 'unreachable',
-          SshDroppedException() => 'dropped',
-          SshAddressUnavailableException(:final address) => 'no $address',
-          SshRemotePortRefusedException(:final port) => 'server port $port',
-          SshFailedException() => 'failed',
-          SshTunnelAbortedException() => 'aborted',
-        };
+      SshNotFoundException() => 'no ssh',
+      SshConfigException() => 'config',
+      SshPortInUseException(:final port) => 'port $port in use',
+      SshDuplicateForwardException(:final forward) => 'already $forward',
+      SshLoginRefusedException() => 'login refused',
+      SshHostKeyRefusedException() => 'host key refused',
+      SshUnknownHostKeyException(:final hostKey) => 'unknown ${hostKey.host}',
+      SshHostKeyChangedException() => 'host key changed',
+      SshHostNotFoundException() => 'host not found',
+      SshUnreachableException() => 'unreachable',
+      SshDroppedException() => 'dropped',
+      SshAddressUnavailableException(:final address) => 'no $address',
+      SshRemotePortRefusedException(:final port) => 'server port $port',
+      SshFailedException() => 'failed',
+      SshTunnelAbortedException() => 'aborted',
+    };
 
     expect(reason(const SshPortInUseException(5432)), 'port 5432 in use');
     expect(
@@ -344,7 +342,9 @@ void main() {
     final changed = SshHostKeyChangedException(_hostKey);
 
     await fake.trustHostKey(
-        const SshTarget('ssh.example.com'), unknown.hostKey);
+      const SshTarget('ssh.example.com'),
+      unknown.hostKey,
+    );
 
     expect(
       [unknown, changed],
@@ -381,15 +381,17 @@ void main() {
     );
   });
 
-  test('rejects a SOCKS proxy server host that ssh would read as an option',
-      () async {
-    await expectLater(
-      const SystemSshClient().openSocksProxy(
-        const SshTarget('-oProxyCommand=false'),
-      ),
-      throwsArgumentError,
-    );
-  });
+  test(
+    'rejects a SOCKS proxy server host that ssh would read as an option',
+    () async {
+      await expectLater(
+        const SystemSshClient().openSocksProxy(
+          const SshTarget('-oProxyCommand=false'),
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
 
   test('rejects a SOCKS proxy port outside 1 to 65535', () async {
     await expectLater(

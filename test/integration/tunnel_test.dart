@@ -39,8 +39,10 @@ void main() {
     }) async {
       final tunnel = await openSystemForward(
         via ?? fixture.target,
-        forward:
-            localForwardTo(fixture.echoHost, remotePort ?? fixture.echoPort),
+        forward: localForwardTo(
+          fixture.echoHost,
+          remotePort ?? fixture.echoPort,
+        ),
         localPort: localPort,
         onLog: logged(onLog),
         abortTrigger: abortTrigger,
@@ -82,8 +84,9 @@ void main() {
 
       setUpAll(() async {
         final addresses = [
-          for (final interface
-              in await NetworkInterface.list(type: InternetAddressType.IPv4))
+          for (final interface in await NetworkInterface.list(
+            type: InternetAddressType.IPv4,
+          ))
             ...interface.addresses.where((address) => !address.isLoopback),
         ];
         lan = addresses.firstOrNull;
@@ -104,14 +107,14 @@ void main() {
       }
 
       Future<SshTunnel> openOn(String address) async {
-        final tunnel =
-            await SystemSshClient(executable: fixture.ssh).openTunnel(
-          fixture.target,
-          remoteHost: fixture.echoHost,
-          remotePort: fixture.echoPort,
-          bindAddress: address,
-          onLog: logged(),
-        );
+        final tunnel = await SystemSshClient(executable: fixture.ssh)
+            .openTunnel(
+              fixture.target,
+              remoteHost: fixture.echoHost,
+              remotePort: fixture.echoPort,
+              bindAddress: address,
+              onLog: logged(),
+            );
         addTearDown(tunnel.close);
         return tunnel;
       }
@@ -163,34 +166,42 @@ void main() {
       expect(logs.last.line, contains('Entering interactive session'));
     });
 
-    test('asks about a new host key when the config does, then trusts it',
-        () async {
-      fixture.forgetHostKey();
-      final client = SystemSshClient(executable: fixture.ssh);
+    test(
+      'asks about a new host key when the config does, then trusts it',
+      () async {
+        fixture.forgetHostKey();
+        final client = SystemSshClient(executable: fixture.ssh);
 
-      final unknown = await open().then<Object?>(
-        (_) => null,
-        onError: (Object exception) => exception,
-      );
-      expect(
-        unknown,
-        isA<SshUnknownHostKeyException>()
-            .having((exception) => exception.hostKey.host, 'host',
-                fixture.hostKeyName)
-            .having((exception) => exception.hostKey.fingerprint, 'fingerprint',
-                startsWith('SHA256:')),
-      );
-      expect(await fixture.isKnownHost(), isFalse);
+        final unknown = await open().then<Object?>(
+          (_) => null,
+          onError: (Object exception) => exception,
+        );
+        expect(
+          unknown,
+          isA<SshUnknownHostKeyException>()
+              .having(
+                (exception) => exception.hostKey.host,
+                'host',
+                fixture.hostKeyName,
+              )
+              .having(
+                (exception) => exception.hostKey.fingerprint,
+                'fingerprint',
+                startsWith('SHA256:'),
+              ),
+        );
+        expect(await fixture.isKnownHost(), isFalse);
 
-      await client.trustHostKey(
-        fixture.target,
-        (unknown! as SshUnknownHostKeyException).hostKey,
-      );
+        await client.trustHostKey(
+          fixture.target,
+          (unknown! as SshUnknownHostKeyException).hostKey,
+        );
 
-      expect(await fixture.isKnownHost(), isTrue);
-      final tunnel = await open();
-      expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
-    });
+        expect(await fixture.isKnownHost(), isTrue);
+        final tunnel = await open();
+        expect(await fixture.echoThrough(tunnel.localPort, 'ping'), 'ping');
+      },
+    );
 
     test("doesn't trust a key other than the one the server offers", () async {
       fixture.forgetHostKey();
@@ -220,11 +231,11 @@ void main() {
       addTearDown(fixture.rememberHostKeyForBareTarget);
       const client = SystemSshClient();
       Future<SshTunnel> openBare() => client.openTunnel(
-            fixture.bareTarget,
-            remoteHost: fixture.echoHost,
-            remotePort: fixture.echoPort,
-            onLog: logged(),
-          );
+        fixture.bareTarget,
+        remoteHost: fixture.echoHost,
+        remotePort: fixture.echoPort,
+        onLog: logged(),
+      );
 
       final unknown = await openBare().then<Object?>(
         (tunnel) => tunnel.close(),
@@ -249,9 +260,10 @@ void main() {
         open(via: fixture.strictTarget),
         throwsA(
           isA<SshHostKeyRefusedException>().having(
-              (exception) => exception.message,
-              'message',
-              contains('Host key verification failed')),
+            (exception) => exception.message,
+            'message',
+            contains('Host key verification failed'),
+          ),
         ),
       );
       expect(await fixture.isKnownHost(), isFalse);
@@ -268,7 +280,10 @@ void main() {
       expect(
         changed,
         isA<SshHostKeyChangedException>().having(
-            (exception) => exception.hostKey.host, 'host', fixture.hostKeyName),
+          (exception) => exception.hostKey.host,
+          'host',
+          fixture.hostKeyName,
+        ),
       );
       await expectLater(
         SystemSshClient(executable: fixture.ssh).trustHostKey(
@@ -328,8 +343,11 @@ void main() {
       await expectLater(
         open(localPort: taken.port),
         throwsA(
-          isA<SshPortInUseException>()
-              .having((exception) => exception.port, 'port', taken.port),
+          isA<SshPortInUseException>().having(
+            (exception) => exception.port,
+            'port',
+            taken.port,
+          ),
         ),
       );
     });
@@ -343,9 +361,9 @@ void main() {
       Logger.root.level = Level.ALL;
       addTearDown(() => Logger.root.level = level);
       final everything = <String>[];
-      final listening = Logger('system_ssh').onRecord.listen(
-            (record) => everything.add(record.message),
-          );
+      final listening = Logger(
+        'system_ssh',
+      ).onRecord.listen((record) => everything.add(record.message));
       addTearDown(listening.cancel);
       addTearDown(
         () => printOnFailure('all of ssh:\n${everything.join('\n')}'),
@@ -366,8 +384,11 @@ void main() {
         expect(
           logs,
           contains(
-            isA<SshForwardUnreachable>()
-                .having((log) => log.reason, 'reason', 'Connection refused'),
+            isA<SshForwardUnreachable>().having(
+              (log) => log.reason,
+              'reason',
+              'Connection refused',
+            ),
           ),
         );
       }
@@ -385,7 +406,8 @@ void main() {
       }
 
       test('with SshNotFoundException for an ssh that is not there', () {
-        final missing = '${Directory.systemTemp.path}'
+        final missing =
+            '${Directory.systemTemp.path}'
             '${Platform.pathSeparator}no_such_ssh_$pid';
 
         return expectFailure(
@@ -399,46 +421,52 @@ void main() {
         );
       });
 
-      test('with SshHostNotFoundException for a name that does not resolve',
-          () {
-        return expectFailure(
-          (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
-            const SshTarget('no-such-host.invalid'),
-            remoteHost: fixture.echoHost,
-            remotePort: fixture.echoPort,
-            onLog: onLog,
-          ),
-          isA<SshHostNotFoundException>(),
-        );
-      });
+      test(
+        'with SshHostNotFoundException for a name that does not resolve',
+        () {
+          return expectFailure(
+            (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
+              const SshTarget('no-such-host.invalid'),
+              remoteHost: fixture.echoHost,
+              remotePort: fixture.echoPort,
+              onLog: onLog,
+            ),
+            isA<SshHostNotFoundException>(),
+          );
+        },
+      );
 
-      test('with SshUnreachableException for a port nothing listens on',
-          () async {
-        final closed = await pickFreePort();
+      test(
+        'with SshUnreachableException for a port nothing listens on',
+        () async {
+          final closed = await pickFreePort();
 
-        await expectFailure(
-          (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
-            SshTarget('127.0.0.1', port: closed),
-            remoteHost: fixture.echoHost,
-            remotePort: fixture.echoPort,
-            onLog: onLog,
-          ),
-          isA<SshUnreachableException>(),
-        );
-      });
+          await expectFailure(
+            (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
+              SshTarget('127.0.0.1', port: closed),
+              remoteHost: fixture.echoHost,
+              remotePort: fixture.echoPort,
+              onLog: onLog,
+            ),
+            isA<SshUnreachableException>(),
+          );
+        },
+      );
 
-      test('with SshConfigException for a config that clears every forward',
-          () {
-        return expectFailure(
-          (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
-            fixture.clearForwardingsTarget,
-            remoteHost: fixture.echoHost,
-            remotePort: fixture.echoPort,
-            onLog: onLog,
-          ),
-          isA<SshConfigException>(),
-        );
-      });
+      test(
+        'with SshConfigException for a config that clears every forward',
+        () {
+          return expectFailure(
+            (onLog) => SystemSshClient(executable: fixture.ssh).openTunnel(
+              fixture.clearForwardingsTarget,
+              remoteHost: fixture.echoHost,
+              remotePort: fixture.echoPort,
+              onLog: onLog,
+            ),
+            isA<SshConfigException>(),
+          );
+        },
+      );
 
       test('with SshAddressUnavailableException for an address not here', () {
         // TEST-NET-1, which no computer has.
@@ -458,25 +486,27 @@ void main() {
         );
       });
 
-      test('with SshForwardProhibited when the server forbids the forward',
-          () async {
-        final logs = <SshLog>[];
-        final tunnel =
-            await SystemSshClient(executable: fixture.ssh).openTunnel(
-          fixture.noForwardingTarget,
-          remoteHost: fixture.echoHost,
-          remotePort: fixture.echoPort,
-          onLog: logged(logs.add),
-        );
-        addTearDown(tunnel.close);
+      test(
+        'with SshForwardProhibited when the server forbids the forward',
+        () async {
+          final logs = <SshLog>[];
+          final tunnel = await SystemSshClient(executable: fixture.ssh)
+              .openTunnel(
+                fixture.noForwardingTarget,
+                remoteHost: fixture.echoHost,
+                remotePort: fixture.echoPort,
+                onLog: logged(logs.add),
+              );
+          addTearDown(tunnel.close);
 
-        expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
-        for (var waited = 0; waited < 50; waited++) {
-          if (logs.any((log) => log is SshForwardFailed)) break;
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        }
-        expect(logs, contains(isA<SshForwardProhibited>()));
-      });
+          expect(await fixture.echoThrough(tunnel.localPort, 'ping'), isEmpty);
+          for (var waited = 0; waited < 50; waited++) {
+            if (logs.any((log) => log is SshForwardFailed)) break;
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          }
+          expect(logs, contains(isA<SshForwardProhibited>()));
+        },
+      );
     });
 
     test('aborts through abortTrigger while ssh connects', () async {
@@ -519,8 +549,10 @@ void main() {
       }
 
       Future<String> echoThroughProxy(int proxyPort, String message) async {
-        final socket =
-            await Socket.connect(InternetAddress.loopbackIPv4, proxyPort);
+        final socket = await Socket.connect(
+          InternetAddress.loopbackIPv4,
+          proxyPort,
+        );
         addTearDown(socket.destroy);
         socket.done.ignore();
         final bytes = StreamIterator(socket.expand((chunk) => chunk));
@@ -575,8 +607,11 @@ void main() {
         await expectLater(
           openProxy(localPort: taken.port),
           throwsA(
-            isA<SshPortInUseException>()
-                .having((exception) => exception.port, 'port', taken.port),
+            isA<SshPortInUseException>().having(
+              (exception) => exception.port,
+              'port',
+              taken.port,
+            ),
           ),
         );
       });

@@ -38,7 +38,8 @@ sealed class SshException implements Exception {
 
   // Spelled out, since an obfuscated build renames runtimeType.
   @override
-  String toString() => '${switch (this) {
+  String toString() =>
+      '${switch (this) {
         SshNotFoundException() => 'SshNotFoundException',
         SshConfigException() => 'SshConfigException',
         SshPortInUseException() => 'SshPortInUseException',
@@ -103,7 +104,7 @@ final class SshConfigException extends SshPermanentException {
 final class SshPortInUseException extends SshPermanentException {
   /// An error saying [port] on [address] is already in use.
   const SshPortInUseException(this.port, {this.address = '127.0.0.1'})
-      : super('$address:$port is already in use');
+    : super('$address:$port is already in use');
 
   /// The port that is taken.
   final int port;
@@ -124,7 +125,7 @@ final class SshPortInUseException extends SshPermanentException {
 final class SshDuplicateForwardException extends SshPermanentException {
   /// An error saying another tunnel already forwards [forward].
   const SshDuplicateForwardException(this.forward)
-      : super('another tunnel on this connection already forwards $forward');
+    : super('another tunnel on this connection already forwards $forward');
 
   /// The forward, as ssh takes it after `-R`, such as
   /// `127.0.0.1:8080:localhost:3000`.
@@ -202,10 +203,10 @@ final class SshHostKeyRefusedException extends SshPermanentException {
 final class SshUnknownHostKeyException extends SshPermanentException {
   /// An error saying the server offers [hostKey], which isn't known yet.
   SshUnknownHostKeyException(this.hostKey, {super.log, super.exitCode})
-      : super(
-          '${hostKey.host} is not a known host; its ${hostKey.type} key '
-          'fingerprint is ${hostKey.fingerprint}',
-        );
+    : super(
+        '${hostKey.host} is not a known host; its ${hostKey.type} key '
+        'fingerprint is ${hostKey.fingerprint}',
+      );
 
   /// The key the server offered.
   final SshHostKey hostKey;
@@ -221,10 +222,10 @@ final class SshUnknownHostKeyException extends SshPermanentException {
 final class SshHostKeyChangedException extends SshPermanentException {
   /// An error saying [hostKey] is what the server offers now.
   SshHostKeyChangedException(this.hostKey, {super.log, super.exitCode})
-      : super(
-          'the host key for ${hostKey.host} has changed; it now offers the '
-          '${hostKey.type} key ${hostKey.fingerprint}',
-        );
+    : super(
+        'the host key for ${hostKey.host} has changed; it now offers the '
+        '${hostKey.type} key ${hostKey.fingerprint}',
+      );
 
   /// The key the server offers now.
   final SshHostKey hostKey;
@@ -258,7 +259,7 @@ final class SshDroppedException extends SshTemporaryException {
 final class SshAddressUnavailableException extends SshTemporaryException {
   /// An error saying [address] isn't on this computer.
   const SshAddressUnavailableException(this.address)
-      : super("$address isn't an address of this computer");
+    : super("$address isn't an address of this computer");
 
   /// The address the tunnel was asked to listen on.
   final String address;

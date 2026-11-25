@@ -38,20 +38,19 @@ void main() {
       SshTarget target = server,
       String remoteHost = 'db.example.com',
       int? localPort,
-    }) async =>
-        openSystemForward(
-          target,
-          forward: localForwardTo(remoteHost, 3306),
-          localPort: localPort,
-          executable: '/nonexistent/ssh',
-          portIsFree: (_) async => true,
-        );
+    }) async => openSystemForward(
+      target,
+      forward: localForwardTo(remoteHost, 3306),
+      localPort: localPort,
+      executable: '/nonexistent/ssh',
+      portIsFree: (_) async => true,
+    );
 
     Matcher throwsInvalid(String name, Object value) => throwsA(
-          isArgumentError
-              .having((error) => error.name, 'name', name)
-              .having((error) => error.invalidValue, 'invalidValue', value),
-        );
+      isArgumentError
+          .having((error) => error.name, 'name', name)
+          .having((error) => error.invalidValue, 'invalidValue', value),
+    );
 
     const unsafe = [
       ' ',
@@ -116,14 +115,14 @@ void main() {
       (
         'a DOMAIN\\user',
         const SshTarget('ssh.example.com', user: r'CORP\alice'),
-        'db.example.com'
+        'db.example.com',
       ),
       ('an IPv6 server', const SshTarget('fd00::5'), 'db.example.com'),
       ('an IPv6 remote host', server, '::1'),
       (
         'a user@ name',
         const SshTarget('ssh.example.com', user: 'alice@corp'),
-        'db.example.com'
+        'db.example.com',
       ),
     ]) {
       test('accepts $name', () async {
@@ -146,20 +145,19 @@ void main() {
     test('rejects a bind address that is not an IP address', () async {
       for (final open in [
         () => SystemSshClient(executable: '/nonexistent/ssh').openTunnel(
-              server,
-              remoteHost: 'db.example.com',
-              remotePort: 3306,
-              bindAddress: 'localhost',
-            ),
+          server,
+          remoteHost: 'db.example.com',
+          remotePort: 3306,
+          bindAddress: 'localhost',
+        ),
         () => SystemSshClient(executable: '/nonexistent/ssh').openSocketTunnel(
-              server,
-              remoteSocket: '/run/d.sock',
-              bindAddress: '*',
-            ),
-        () => SystemSshClient(executable: '/nonexistent/ssh').openSocksProxy(
-              server,
-              bindAddress: 'my-laptop',
-            ),
+          server,
+          remoteSocket: '/run/d.sock',
+          bindAddress: '*',
+        ),
+        () => SystemSshClient(
+          executable: '/nonexistent/ssh',
+        ).openSocksProxy(server, bindAddress: 'my-laptop'),
       ]) {
         await expectLater(open(), throwsInvalid('bindAddress', anything));
       }
@@ -178,14 +176,13 @@ void main() {
       Future<SshTunnel> openProxy({
         SshTarget target = server,
         int? localPort,
-      }) async =>
-          openSystemForward(
-            target,
-            forward: DynamicForward.new,
-            localPort: localPort,
-            executable: '/nonexistent/ssh',
-            portIsFree: (_) async => true,
-          );
+      }) async => openSystemForward(
+        target,
+        forward: DynamicForward.new,
+        localPort: localPort,
+        executable: '/nonexistent/ssh',
+        portIsFree: (_) async => true,
+      );
 
       test('rejects a server host starting with -', () async {
         await expectLater(
@@ -279,51 +276,54 @@ void main() {
     group('a bind address', () {
       SystemSshClient client() => SystemSshClient(executable: fake.path);
 
-      final methods = <(
-        String,
-        Future<SshTunnel> Function(String address, int? localPort),
-        Forward Function(String address, int port),
-      )>[
-        (
-          'openTunnel',
-          (address, localPort) => client().openTunnel(
+      final methods =
+          <
+            (
+              String,
+              Future<SshTunnel> Function(String address, int? localPort),
+              Forward Function(String address, int port),
+            )
+          >[
+            (
+              'openTunnel',
+              (address, localPort) => client().openTunnel(
                 server,
                 remoteHost: 'db.example.com',
                 remotePort: 3306,
                 bindAddress: address,
                 localPort: localPort,
               ),
-          (address, port) => LocalForward(
+              (address, port) => LocalForward(
                 port,
                 bindAddress: address,
                 remoteHost: 'db.example.com',
                 remotePort: 3306,
               ),
-        ),
-        (
-          'openSocketTunnel',
-          (address, localPort) => client().openSocketTunnel(
+            ),
+            (
+              'openSocketTunnel',
+              (address, localPort) => client().openSocketTunnel(
                 server,
                 remoteSocket: '/run/d.sock',
                 bindAddress: address,
                 localPort: localPort,
               ),
-          (address, port) => SocketForward(
+              (address, port) => SocketForward(
                 port,
                 bindAddress: address,
                 remoteSocket: '/run/d.sock',
               ),
-        ),
-        (
-          'openSocksProxy',
-          (address, localPort) => client().openSocksProxy(
+            ),
+            (
+              'openSocksProxy',
+              (address, localPort) => client().openSocksProxy(
                 server,
                 bindAddress: address,
                 localPort: localPort,
               ),
-          (address, port) => DynamicForward(port, bindAddress: address),
-        ),
-      ];
+              (address, port) => DynamicForward(port, bindAddress: address),
+            ),
+          ];
 
       for (final (name, open, forward) in methods) {
         test('$name listens there', () async {
@@ -333,28 +333,31 @@ void main() {
           addTearDown(tunnel.close);
 
           expect(fake.attempts, [
-            sshCommand(server, forward: forward('0.0.0.0', tunnel.localPort))
-                .sublist(1),
+            sshCommand(
+              server,
+              forward: forward('0.0.0.0', tunnel.localPort),
+            ).sublist(1),
           ]);
         });
 
         for (final localPort in [null, 5432]) {
           test(
-              '$name says 192.0.2.1 is not this computer\'s '
-              '(${localPort == null ? 'a picked port' : 'a fixed port'})',
-              () async {
-            await expectLater(
-              open('192.0.2.1', localPort),
-              throwsA(
-                isA<SshAddressUnavailableException>().having(
-                  (exception) => exception.message,
-                  'message',
-                  "192.0.2.1 isn't an address of this computer",
+            '$name says 192.0.2.1 is not this computer\'s '
+            '(${localPort == null ? 'a picked port' : 'a fixed port'})',
+            () async {
+              await expectLater(
+                open('192.0.2.1', localPort),
+                throwsA(
+                  isA<SshAddressUnavailableException>().having(
+                    (exception) => exception.message,
+                    'message',
+                    "192.0.2.1 isn't an address of this computer",
+                  ),
                 ),
-              ),
-            );
-            expect(fake.attempts, isEmpty);
-          });
+              );
+              expect(fake.attempts, isEmpty);
+            },
+          );
         }
       }
 
@@ -377,8 +380,11 @@ void main() {
       await expectLater(
         openSystemForward(
           server,
-          forward:
-              localForwardTo('db.example.com', 3306, bindAddress: '0.0.0.0'),
+          forward: localForwardTo(
+            'db.example.com',
+            3306,
+            bindAddress: '0.0.0.0',
+          ),
           bindAddress: '0.0.0.0',
           localPort: 5432,
           executable: fake.path,
@@ -406,8 +412,11 @@ void main() {
       expect(fake.attempts, [
         sshCommand(
           target,
-          forward: LocalForward(port,
-              remoteHost: 'db.example.com', remotePort: 3306),
+          forward: LocalForward(
+            port,
+            remoteHost: 'db.example.com',
+            remotePort: 3306,
+          ),
         ).sublist(1),
       ]);
     });
@@ -415,11 +424,9 @@ void main() {
     test('SystemSshClient runs its executable', () async {
       fake.attemptModes([AttemptMode.ready]);
 
-      final tunnel = await SystemSshClient(executable: fake.path).openTunnel(
-        server,
-        remoteHost: 'db.example.com',
-        remotePort: 3306,
-      );
+      final tunnel = await SystemSshClient(
+        executable: fake.path,
+      ).openTunnel(server, remoteHost: 'db.example.com', remotePort: 3306);
       addTearDown(tunnel.close);
 
       expect(fake.configArguments, isNotNull);
@@ -442,8 +449,7 @@ void main() {
       );
     });
 
-    test('adds the environment to the inherited one in every attempt',
-        () async {
+    test('adds the environment to the inherited one in every attempt', () async {
       fake.attemptModes([AttemptMode.bindFailure, AttemptMode.ready]);
       final ports = CountingPorts(
         (pick) async => pick == 1 ? taken.port : pickFreePort(),
@@ -483,8 +489,10 @@ void main() {
       await open(
         executable: 'ssh',
         environment: {
-          'PATH': [fake.directory, Platform.environment['PATH']]
-              .join(Platform.isWindows ? ';' : ':'),
+          'PATH': [
+            fake.directory,
+            Platform.environment['PATH'],
+          ].join(Platform.isWindows ? ';' : ':'),
         },
       );
 
@@ -541,8 +549,11 @@ void main() {
 
       final command = sshCommand(
         server,
-        forward:
-            LocalForward(port, remoteHost: 'db.example.com', remotePort: 3306),
+        forward: LocalForward(
+          port,
+          remoteHost: 'db.example.com',
+          remotePort: 3306,
+        ),
         executable: fake.path,
       );
       expect(
@@ -648,9 +659,12 @@ void main() {
 
     group('with a fixed local port', () {
       Matcher throwsPortInUse(int port) => throwsA(
-            isA<SshPortInUseException>()
-                .having((exception) => exception.port, 'port', port),
-          );
+        isA<SshPortInUseException>().having(
+          (exception) => exception.port,
+          'port',
+          port,
+        ),
+      );
 
       test('forwards it without picking one', () async {
         fake.attemptModes([AttemptMode.ready]);
@@ -664,8 +678,11 @@ void main() {
         expect(fake.attempts, [
           sshCommand(
             server,
-            forward: LocalForward(port,
-                remoteHost: 'db.example.com', remotePort: 3306),
+            forward: LocalForward(
+              port,
+              remoteHost: 'db.example.com',
+              remotePort: 3306,
+            ),
           ).sublist(1),
         ]);
       });
@@ -716,24 +733,26 @@ void main() {
         expect(fake.attempts, hasLength(1));
       });
 
-      test('rethrows an ssh failure while it is free, without retrying',
-          () async {
-        fake.attemptModes([AttemptMode.fail, AttemptMode.ready]);
-        final ports = CountingPorts();
+      test(
+        'rethrows an ssh failure while it is free, without retrying',
+        () async {
+          fake.attemptModes([AttemptMode.fail, AttemptMode.ready]);
+          final ports = CountingPorts();
 
-        await expectLater(
-          open(localPort: await pickFreePort(), ports: ports),
-          throwsA(
-            isA<SshUnreachableException>().having(
-              (exception) => exception.exitCode,
-              'exitCode',
-              255,
+          await expectLater(
+            open(localPort: await pickFreePort(), ports: ports),
+            throwsA(
+              isA<SshUnreachableException>().having(
+                (exception) => exception.exitCode,
+                'exitCode',
+                255,
+              ),
             ),
-          ),
-        );
-        expect(ports.picks, 0);
-        expect(fake.attempts, hasLength(1));
-      });
+          );
+          expect(ports.picks, 0);
+          expect(fake.attempts, hasLength(1));
+        },
+      );
 
       test("reads sh's exit code 127 as ssh not found", () async {
         fake.attemptModes([AttemptMode.notFound]);
@@ -780,9 +799,12 @@ void main() {
       }
 
       Matcher throwsPortInUse(int port) => throwsA(
-            isA<SshPortInUseException>()
-                .having((exception) => exception.port, 'port', port),
-          );
+        isA<SshPortInUseException>().having(
+          (exception) => exception.port,
+          'port',
+          port,
+        ),
+      );
 
       test('opens on the picked port with the -D command', () async {
         fake.attemptModes([AttemptMode.ready]);
@@ -870,10 +892,7 @@ void main() {
       test("reads sh's exit code 127 as ssh not found", () async {
         fake.attemptModes([AttemptMode.notFound, AttemptMode.ready]);
 
-        await expectLater(
-          openProxy(),
-          throwsA(isA<SshNotFoundException>()),
-        );
+        await expectLater(openProxy(), throwsA(isA<SshNotFoundException>()));
         expect(fake.attempts, hasLength(1));
       });
 
@@ -988,22 +1007,24 @@ void main() {
         );
       });
 
-      test("SystemSshClient's environment wins over the login shell's",
-          () async {
-        fake.attemptModes([AttemptMode.ready]);
+      test(
+        "SystemSshClient's environment wins over the login shell's",
+        () async {
+          fake.attemptModes([AttemptMode.ready]);
 
-        final proxy = await SystemSshClient(
-          executable: fake.path,
-          loginShell: true,
-          environment: const {'HOME': '/system_ssh/home'},
-        ).openSocksProxy(server);
-        addTearDown(proxy.close);
+          final proxy = await SystemSshClient(
+            executable: fake.path,
+            loginShell: true,
+            environment: const {'HOME': '/system_ssh/home'},
+          ).openSocksProxy(server);
+          addTearDown(proxy.close);
 
-        expect(
-          fake.attemptEnvironments.single,
-          containsPair('HOME', '/system_ssh/home'),
-        );
-      });
+          expect(
+            fake.attemptEnvironments.single,
+            containsPair('HOME', '/system_ssh/home'),
+          );
+        },
+      );
     });
 
     test('refuses a config that sets ClearAllForwardings', () async {

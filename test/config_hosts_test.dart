@@ -16,9 +16,9 @@ void main() {
 
   tearDown(() => home.deleteSync(recursive: true));
 
-  void write(String name, String content) =>
-      (File('$ssh/$name')..parent.createSync(recursive: true))
-          .writeAsStringSync(content);
+  void write(String name, String content) => (File(
+    '$ssh/$name',
+  )..parent.createSync(recursive: true)).writeAsStringSync(content);
 
   Future<List<String>> hosts() =>
       readConfigHosts('$ssh/config', sshDirectory: ssh);
@@ -43,9 +43,10 @@ Host *.internal web? !bastion db
     expect(await hosts(), ['db']);
   });
 
-  test('reads keywords in any case, with = and quotes, past comments',
-      () async {
-    write('config', '''
+  test(
+    'reads keywords in any case, with = and quotes, past comments',
+    () async {
+      write('config', '''
 # Host commented
 HOST upper
 host=equals
@@ -54,8 +55,9 @@ Match host other
   User me
 ''');
 
-    expect(await hosts(), ['upper', 'equals', 'quoted', 'spaced']);
-  });
+      expect(await hosts(), ['upper', 'equals', 'quoted', 'spaced']);
+    },
+  );
 
   test('follows Include from ~/.ssh, by path, ~ and glob, in order', () async {
     write('config', '''
@@ -87,14 +89,16 @@ Host last
     expect(await hosts(), ['one', 'two']);
   });
 
-  test('is empty without a config, and skips includes that are missing',
-      () async {
-    expect(await hosts(), isEmpty);
+  test(
+    'is empty without a config, and skips includes that are missing',
+    () async {
+      expect(await hosts(), isEmpty);
 
-    write('config', 'Include missing\nInclude nothing/*\nHost kept');
+      write('config', 'Include missing\nInclude nothing/*\nHost kept');
 
-    expect(await hosts(), ['kept']);
-  });
+      expect(await hosts(), ['kept']);
+    },
+  );
 
   test('SystemSshClient reads the config in its HOME', () async {
     write('config', 'Host dev');

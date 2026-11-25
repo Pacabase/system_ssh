@@ -105,22 +105,17 @@ final class SystemSshClient implements SshClient {
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      openSystemForward(
-        server,
-        forward: localForwardTo(
-          remoteHost,
-          remotePort,
-          bindAddress: bindAddress,
-        ),
-        bindAddress: bindAddress,
-        localPort: localPort,
-        onLog: onLog,
-        abortTrigger: abortTrigger,
-        executable: executable,
-        environment: await _sshEnvironment(),
-        pool: _pool,
-      );
+  }) async => openSystemForward(
+    server,
+    forward: localForwardTo(remoteHost, remotePort, bindAddress: bindAddress),
+    bindAddress: bindAddress,
+    localPort: localPort,
+    onLog: onLog,
+    abortTrigger: abortTrigger,
+    executable: executable,
+    environment: await _sshEnvironment(),
+    pool: _pool,
+  );
 
   @override
   Future<SshTunnel> openSocketTunnel(
@@ -130,18 +125,17 @@ final class SystemSshClient implements SshClient {
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      openSystemForward(
-        server,
-        forward: localForwardToSocketAt(remoteSocket, bindAddress: bindAddress),
-        bindAddress: bindAddress,
-        localPort: localPort,
-        onLog: onLog,
-        abortTrigger: abortTrigger,
-        executable: executable,
-        environment: await _sshEnvironment(),
-        pool: _pool,
-      );
+  }) async => openSystemForward(
+    server,
+    forward: localForwardToSocketAt(remoteSocket, bindAddress: bindAddress),
+    bindAddress: bindAddress,
+    localPort: localPort,
+    onLog: onLog,
+    abortTrigger: abortTrigger,
+    executable: executable,
+    environment: await _sshEnvironment(),
+    pool: _pool,
+  );
 
   @override
   Future<SshRemoteTunnel> openRemoteTunnel(
@@ -151,18 +145,17 @@ final class SystemSshClient implements SshClient {
     int? remotePort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      openSystemRemoteForward(
-        server,
-        localHost: localHost,
-        localPort: localPort,
-        remotePort: remotePort,
-        onLog: onLog,
-        abortTrigger: abortTrigger,
-        executable: executable,
-        environment: await _sshEnvironment(),
-        pool: _pool,
-      );
+  }) async => openSystemRemoteForward(
+    server,
+    localHost: localHost,
+    localPort: localPort,
+    remotePort: remotePort,
+    onLog: onLog,
+    abortTrigger: abortTrigger,
+    executable: executable,
+    environment: await _sshEnvironment(),
+    pool: _pool,
+  );
 
   @override
   Future<SshTunnel> openSocksProxy(
@@ -171,23 +164,22 @@ final class SystemSshClient implements SshClient {
     int? localPort,
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) async =>
-      openSystemForward(
-        server,
-        forward: dynamicForwardOn(bindAddress),
-        bindAddress: bindAddress,
-        localPort: localPort,
-        onLog: onLog,
-        abortTrigger: abortTrigger,
-        executable: executable,
-        environment: await _sshEnvironment(),
-        pool: _pool,
-      );
+  }) async => openSystemForward(
+    server,
+    forward: dynamicForwardOn(bindAddress),
+    bindAddress: bindAddress,
+    localPort: localPort,
+    onLog: onLog,
+    abortTrigger: abortTrigger,
+    executable: executable,
+    environment: await _sshEnvironment(),
+    pool: _pool,
+  );
 
   Future<Map<String, String>> _sshEnvironment() async => {
-        if (loginShell) ...await cachedLoginShellEnvironment(),
-        ...environment,
-      };
+    if (loginShell) ...await cachedLoginShellEnvironment(),
+    ...environment,
+  };
 }
 
 // ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped.
@@ -202,11 +194,11 @@ LocalForward Function(int localPort) localForwardTo(
   checkBindAddress(bindAddress);
 
   return (port) => LocalForward(
-        port,
-        bindAddress: bindAddress,
-        remoteHost: remoteHost,
-        remotePort: remotePort,
-      );
+    port,
+    bindAddress: bindAddress,
+    remoteHost: remoteHost,
+    remotePort: remotePort,
+  );
 }
 
 SocketForward Function(int localPort) localForwardToSocketAt(
@@ -215,11 +207,8 @@ SocketForward Function(int localPort) localForwardToSocketAt(
 }) {
   checkSocketPath(remoteSocket, 'remoteSocket');
   checkBindAddress(bindAddress);
-  return (port) => SocketForward(
-        port,
-        bindAddress: bindAddress,
-        remoteSocket: remoteSocket,
-      );
+  return (port) =>
+      SocketForward(port, bindAddress: bindAddress, remoteSocket: remoteSocket);
 }
 
 DynamicForward Function(int localPort) dynamicForwardOn(String bindAddress) {
@@ -332,7 +321,7 @@ Future<SshTunnel> openSystemForward(
       }
     }
 
-    for (var attempt = 1;; attempt++) {
+    for (var attempt = 1; ; attempt++) {
       abort.throwIfAborted();
 
       final port = await pickPort();
