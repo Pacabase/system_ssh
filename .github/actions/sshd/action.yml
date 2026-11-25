@@ -1,32 +1,28 @@
 name: 'Start sshd'
-description: 'An sshd on 127.0.0.1 that accepts a fresh key of the runner user, for the integration tests.'
+description: 'An sshd on 127.0.0.1 that accepts a fresh key of the runner user, and the password of a throwaway user, for the integration tests.'
 
 inputs:
   port:
     description: 'The port sshd listens on.'
     default: '2222'
-  password-port:
-    description: "The port of a second sshd, run as root, where the user sshtest logs in with a password; Windows' sshd takes passwords on port."
-    default: '2223'
   password:
-    description: "sshtest's password, a throwaway one for this runner."
+    description: "The password of sshtest, a throwaway user the sshd lets log in."
     default: 'correct-horse-staple'
 
 outputs:
   log:
-    description: "sshd's log, and the password sshd's after it."
+    description: "sshd's log."
     value: ${{ steps.unix.outputs.log || steps.windows.outputs.log }}
 
 runs:
   using: 'composite'
   steps:
-    # Runs as the runner user on a high port; only the password sshd needs root.
+    # Runs as root, as a server's sshd does, so it can check passwords.
     - id: unix
       if: runner.os != 'Windows'
       shell: bash
       env:
         PORT: ${{ inputs.port }}
-        PASSWORD_PORT: ${{ inputs.password-port }}
         PASSWORD: ${{ inputs.password }}
       run: |
         dir="$RUNNER_TEMP/sshd"
@@ -40,16 +36,7 @@ runs:
         # A key with a passphrase, which ssh asks for through SSH_ASKPASS.
         [ -f ~/.ssh/id_ed25519_passphrase ] || ssh-keygen -q -t ed25519 -N 'correct-horse-battery' -f ~/.ssh/id_ed25519_passphrase
         cat ~/.ssh/id_ed25519_passphrase.pub >> "$dir/authorized_keys"
-        options=(-o "Port=$PORT" -o ListenAddress=127.0.0.1 -o "HostKey=$dir/host_key"
-          -o "AuthorizedKeysFile=$dir/authorized_keys" -o "PidFile=$dir/sshd.pid"
-          -o StrictModes=no -o UsePAM=no)
-        # OpenSSH 9.8+ penalises clients that drop before logging in, as some tests do.
-        if /usr/sbin/sshd -t -f /dev/null "${options[@]}" -o PerSourcePenalties=no 2>/dev/null; then
-          options+=(-o PerSourcePenalties=no)
-        fi
-        /usr/sbin/sshd -f /dev/null -E "$dir/sshd.log" "${options[@]}"
-
-        # Only root can check a password, so a second sshd, for a throwaway user.
+        # A throwaway user that logs in with a password.
         if [ "$(uname)" = Darwin ]; then
           id sshtest >/dev/null 2>&1 || sudo sysadminctl -addUser sshtest -password "$PASSWORD" 2>/dev/null
         else
@@ -57,14 +44,16 @@ runs:
           echo "sshtest:$PASSWORD" | sudo chpasswd
           sudo mkdir -p /run/sshd
         fi
-        password_options=(-o "Port=$PASSWORD_PORT" -o ListenAddress=127.0.0.1 -o "HostKey=$dir/host_key"
-          -o "PidFile=$dir/sshd-password.pid" -o UsePAM=yes -o PasswordAuthentication=yes
-          -o KbdInteractiveAuthentication=yes -o AllowUsers=sshtest)
-        if [[ " ${options[*]} " == *PerSourcePenalties* ]]; then
-          password_options+=(-o PerSourcePenalties=no)
+        options=(-o "Port=$PORT" -o ListenAddress=127.0.0.1 -o "HostKey=$dir/host_key"
+          -o "AuthorizedKeysFile=$dir/authorized_keys" -o "PidFile=$dir/sshd.pid"
+          -o StrictModes=no -o UsePAM=yes -o PasswordAuthentication=yes
+          -o KbdInteractiveAuthentication=yes)
+        # OpenSSH 9.8+ penalises clients that drop before logging in, as some tests do.
+        if sudo /usr/sbin/sshd -t -f /dev/null "${options[@]}" -o PerSourcePenalties=no 2>/dev/null; then
+          options+=(-o PerSourcePenalties=no)
         fi
-        sudo /usr/sbin/sshd -f /dev/null -E "$dir/sshd-password.log" "${password_options[@]}"
-        echo "log=$dir/sshd.log $dir/sshd-password.log" >> "$GITHUB_OUTPUT"
+        sudo /usr/sbin/sshd -f /dev/null -E "$dir/sshd.log" "${options[@]}"
+        echo "log=$dir/sshd.log" >> "$GITHUB_OUTPUT"
 
     # Windows ships OpenSSH Server as a service; it reads an administrator's keys from ProgramData only.
     - id: windows

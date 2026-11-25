@@ -17,13 +17,9 @@ import '../fakes/fakes.dart';
 final class SshFixture {
   SshFixture()
     : _port = int.tryParse(Platform.environment['SSH_TEST_PORT'] ?? ''),
-      _passwordPort = int.tryParse(
-        Platform.environment['SSH_TEST_PASSWORD_PORT'] ?? '',
-      ),
       _isCi = Platform.environment['CI'] == 'true';
 
   final int? _port;
-  final int? _passwordPort;
   final bool _isCi;
   final _unknownLines = <String>[];
 
@@ -87,8 +83,8 @@ final class SshFixture {
   SshTarget get passphraseJumpTarget => const SshTarget('passphrase-jump');
 
   /// Why the password tests can't run here, or null when they can.
-  String? get passwordSkip => _passwordPort == null || password == null
-      ? 'Needs the password sshd CI starts (SSH_TEST_PASSWORD_PORT)'
+  String? get passwordSkip => password == null
+      ? 'Needs the password CI sets (SSH_TEST_PASSWORD)'
       : skip;
 
   /// The user `sshtest`, which logs in only with [password].
@@ -246,11 +242,10 @@ Host keyboard-interactive
 
 Host password keyboard-interactive
   HostName 127.0.0.1
-  Port ${_passwordPort ?? _port}
+  Port $_port
   User sshtest
   PubkeyAuthentication no
   IdentityAgent none
-  HostKeyAlias $_hostKeyName
   UserKnownHostsFile $knownHosts
 
 Host strict-host-keys
