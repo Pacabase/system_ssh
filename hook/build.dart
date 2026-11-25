@@ -17,6 +17,13 @@ void main(List<String> arguments) async {
     final logger = Logger('system_ssh')
       ..onRecord.listen((record) => print(record.message));
     try {
+      // The library first, so the program never ships with nothing to find it.
+      await CBuilder.library(
+        name: 'system_ssh_askpass_locator',
+        assetName: 'src/askpass_locator.dart',
+        sources: ['src/askpass_locator.c'],
+        linkModePreference: LinkModePreference.dynamic,
+      ).run(input: input, output: output, logger: logger);
       await CBuilder.executable(
         name: 'system_ssh_askpass',
         sources: ['src/askpass_helper.c'],
@@ -32,11 +39,6 @@ void main(List<String> arguments) async {
           ),
         ),
       );
-      await CBuilder.library(
-        name: 'system_ssh_askpass_locator',
-        assetName: 'src/askpass_locator.dart',
-        sources: ['src/askpass_locator.c'],
-      ).run(input: input, output: output, logger: logger);
     } catch (exception) {
       // Without a C compiler, prompts go through the .cmd helper instead.
       print(

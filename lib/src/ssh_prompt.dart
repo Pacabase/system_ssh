@@ -21,9 +21,11 @@ sealed class SshPrompt {
   /// Whether ssh tells a server's questions apart from its own, so the kind
   /// is sure. False before OpenSSH 8.5, which doesn't put `(user@host)` in
   /// front of a server's question, so a server could word one as ssh's own,
-  /// such as a passphrase prompt. A terminal shows those prompts the same
-  /// way; an app may want to say where the prompt may come from, or not keep
-  /// what's typed.
+  /// such as a passphrase prompt. (On Windows without the package's helper
+  /// program, only ssh's own prompts come, so it's true there.) It goes by
+  /// the ssh the package runs, not one a `ProxyCommand` runs. A terminal
+  /// shows those prompts the same way; an app may want to say where the
+  /// prompt may come from, or not keep what's typed.
   final bool isVerified;
 
   @override
@@ -83,7 +85,8 @@ final class SshCodePrompt extends SshPrompt {
 }
 
 /// Answers an [SshPrompt]: the text to send, or null to cancel the login. An
-/// answer can't hold a line break; one that does cancels too.
+/// answer can't hold a line break or be longer than 1023 bytes in UTF-8, the
+/// most ssh reads; one that does cancels too.
 typedef SshPromptHandler = Future<String?> Function(SshPrompt prompt);
 
 final _passphrase = RegExp(r"^Enter passphrase for key '(.*)': ?$");

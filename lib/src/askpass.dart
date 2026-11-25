@@ -21,16 +21,14 @@ final class AskPass {
   /// Sets up the helper for [onPrompt] in a directory of its own, in the
   /// first of [bases] (by default the temp directory, then
   /// `XDG_RUNTIME_DIR`, then `~/.cache`) where it can run: a hardened `/tmp`
-  /// may forbid running programs. On Windows, ssh runs [windowsProgram],
-  /// the helper the build hook bundled, or else a `.cmd` written there. Each
-  /// prompt's [SshPrompt.isVerified] is [verified].
+  /// may forbid running programs. On Windows, ssh runs the helper the build
+  /// hook bundled, or else a `.cmd` written there. Each prompt's
+  /// [SshPrompt.isVerified] is [verified].
   static Future<AskPass> start(
     SshPromptHandler onPrompt, {
     List<String>? bases,
-    String? windowsProgram,
     bool verified = true,
   }) async {
-    windowsProgram ??= bundledWindowsHelper;
     final failures = <String>[];
     for (final base in bases ?? _bases()) {
       final Directory directory;
@@ -44,7 +42,7 @@ final class AskPass {
       final askPass = AskPass._(directory, onPrompt, verified);
       try {
         await (Platform.isWindows
-            ? askPass._startWindows(windowsProgram)
+            ? askPass._startWindows()
             : askPass._startPosix());
         return askPass;
       } on _NotRunnable catch (exception) {
@@ -102,8 +100,8 @@ final class AskPass {
   (Object, StackTrace)? get error => _error;
   (Object, StackTrace)? _error;
 
-  /// Whether a helper reached the app on Windows, where PowerShell may be
-  /// locked down.
+  /// Whether a helper reached the app on Windows, where something may block
+  /// it from running.
   var _helperConnected = false;
 
   /// What ssh needs in its environment to ask through the helper.
@@ -201,6 +199,12 @@ final class AskPass {
         }
         if (answer.contains(RegExp('[\r\n]'))) {
           logger.warning('An answer with a line break was cancelled');
+          _wasCancelled = true;
+          return _refuse(prompt);
+        }
+        // ssh reads at most 1023 bytes of an answer and drops the rest.
+        if (utf8.encode(answer).length > 1023) {
+          logger.warning('An answer longer than ssh reads was cancelled');
           _wasCancelled = true;
           return _refuse(prompt);
         }
@@ -316,13 +320,13 @@ final class AskPass {
     }
   }
 
-  Future<void> _startWindows(String? program) async {
+  Future<void> _startWindows() async {
     _token = _randomToken();
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
     server.listen(_serveWindows);
 
-    if (program != null) {
+    if (bundledWindowsHelper case final program?) {
       _helper = program;
       return;
     }
@@ -456,7 +460,7 @@ esac
 
 // cmd.exe runs it as `cmd /c ""askpass.cmd" "<prompt>""`, which expands
 // `%NAME%` and, with delayed expansion on, `!NAME!` in the prompt before it
-// reads quotes, and a `"` there would end the quoting. So on Windows only
+// reads quotes, and a `"` there would end the quoting. So through it only
 // ssh's own prompts come, and only when the user, host and key files in them
 // hold none of those characters; see canPrompt. Inside the quotes, `&` and
 // the like are plain text. PowerShell's stderr goes nowhere: it shares ssh's,
@@ -552,16 +556,11 @@ bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
 bool canPrompt(Map<String, String> config, {bool? throughCmd}) =>
     _whyNoPrompts(config, throughCmd: throughCmd ?? _throughCmd) == null;
 
-/// Whether only ssh's own prompts may come; see [canPrompt].
-bool ownPromptsOnly({bool? throughCmd}) => throughCmd ?? _throughCmd;
-
 bool get _throughCmd => Platform.isWindows && bundledWindowsHelper == null;
 
 String? _whyNoPrompts(Map<String, String> config, {required bool throughCmd}) {
-  if (!ownPromptsOnly(throughCmd: throughCmd)) return null;
-  const who =
-      "Windows' ssh, through the .cmd helper of an app built without a C "
-      'compiler,';
+  if (!throughCmd) return null;
+  const who = 'the app was built without its Windows helper, so ssh';
   if (config.isEmpty) {
     return "$who can't ask safely: ssh -G couldn't read the config";
   }
@@ -572,7 +571,7 @@ String? _whyNoPrompts(Map<String, String> config, {required bool throughCmd}) {
   }
   for (final option in _inPrompts) {
     if (config[option]?.contains(_readByCmd) ?? false) {
-      return "$who can't ask safely when its $option holds one of "
+      return "$who can't ask safely when the config's $option holds one of "
           '" % ! ^ & | < >';
     }
   }
@@ -643,7 +642,7 @@ Future<T> withPrompts<T>(
             'DISPLAY': ':0',
         },
         enabled: true,
-        ownOnly: ownPromptsOnly(),
+        ownOnly: _throughCmd,
         stop: askPass.stop,
       ),
     );

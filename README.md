@@ -163,9 +163,10 @@ final tunnel = await client.openTunnel(
 - Answer null to cancel: nothing more is asked, and once ssh has no other
   way to log in, such as another key or your agent, it throws an
   `SshLoginCancelledException`. ssh is stopped before it would send an empty
-  password or answer, which a server counts as a failed login. If `onPrompt` throws, the login is cancelled
-  the same way and that error is thrown. An answer can't hold a line break;
-  one that does cancels.
+  password or answer, which a server counts as a failed login. If
+  `onPrompt` throws, the login is cancelled the same way and that error is
+  thrown. An answer can't hold a line break or be longer than 1023 bytes in
+  UTF-8, the most ssh reads; one that does cancels.
 - A wrong passphrase or password is asked again up to
   `NumberOfPasswordPrompts` times (3 by default); the server decides how
   often it asks its own questions. Then it throws an
@@ -192,9 +193,9 @@ final tunnel = await client.openTunnel(
   an app that wants to say so. Before 8.4, ssh asks through `SSH_ASKPASS`
   only without a terminal, so a command-line app run from one gets ssh's
   own prompt there.
-- When ssh won't ask, as through the `.cmd` helper below, `onLog` gets an
+- When the `.cmd` helper below can't ask safely, `onLog` gets an
   `SshPromptsOff` with the reason, and an `SshLoginRefusedException` says it
-  at the end of its message.
+  at the end of its message. Elsewhere prompts are never off.
 
 ### Building on Windows
 
@@ -204,6 +205,10 @@ next to your app (in `lib\` for `dart build cli`). That needs Visual
 Studio's C++ tools, which Flutter's Windows builds need anyway; nothing is
 built for macOS or Linux, where ssh runs a shell script instead.
 
+- Because the package has a build hook, a command-line app that uses it
+  builds with `dart build cli`, on every system: `dart compile exe` refuses
+  packages with build hooks. `dart run`, `dart test` and Flutter work as
+  before.
 - If you sign your Windows release, sign `system_ssh_askpass.exe` with the
   rest of it.
 - Without a C compiler the build still works, and prompts go through a
@@ -214,7 +219,11 @@ built for macOS or Linux, where ssh runs a shell script instead.
   only that way, as many PAM setups do, refuses the login. Nothing asks
   when your config sets a `ProxyJump` or `ProxyCommand`, which runs another
   ssh, when `ssh -G` can't read your config, or when the user, host or a
-  key file's path holds one of `" % ! ^ & | < >`.
+  key file's path holds one of `" % ! ^ & | < >`. Through it, every prompt
+  is ssh's own, so `isVerified` is true whatever the OpenSSH version.
+- The build doesn't stop or warn when the helper can't be compiled, and it
+  remembers that: after installing the C++ tools, run `dart clean` or
+  `flutter clean` so the next build compiles it.
 
 ## Sharing a connection
 
@@ -417,8 +426,9 @@ started.
 - Forwards your config sets for the host open too.
 - Without `onPrompt`, a key with a passphrase needs an agent, and password
   and keyboard-interactive logins fail. A config that sets `BatchMode no`
-  looks like the default, so it doesn't bring prompts back. On Windows,
-  `onPrompt` asks less; see [Passwords and passphrases](#passwords-and-passphrases).
+  looks like the default, so it doesn't bring prompts back. On Windows, an
+  app built without a C compiler asks less; see
+  [Building on Windows](#building-on-windows).
 - On Windows, a child ssh starts in the instant before it joins its job object
   can outlive a crash.
 

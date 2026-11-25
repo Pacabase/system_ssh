@@ -9,7 +9,8 @@
 #include <string.h>
 #include <wchar.h>
 
-#define MAX_ANSWER 65536
+// 'y', the most ssh reads of an answer (1023 bytes), and the newline.
+#define MAX_ANSWER 1025
 
 static const char alphabet[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -93,21 +94,20 @@ int wmain(int argc, wchar_t **argv) {
 
   static char answer[MAX_ANSWER];
   size_t length = 0;
-  for (;;) {
-    if (length == MAX_ANSWER) return 1;
+  int complete = 0;
+  while (!complete && length < MAX_ANSWER) {
     int received = recv(s, answer + length, (int)(MAX_ANSWER - length), 0);
-    if (received <= 0) return 1;
+    if (received <= 0) break;
     char *end = memchr(answer + length, '\n', (size_t)received);
     length += (size_t)received;
     if (end != NULL) {
       length = (size_t)(end - answer);
-      break;
+      complete = 1;
     }
   }
   closesocket(s);
-  WSACleanup();
 
-  int answered = length > 0 && answer[0] == 'y';
+  int answered = complete && length > 0 && answer[0] == 'y';
   if (answered) {
     HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD written;

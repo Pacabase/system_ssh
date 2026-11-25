@@ -19,11 +19,17 @@
   ```
 
   On Windows, ssh runs a small helper program the package's build hook
-  compiles with your app, so everything is asked there too; see the
-  README's "Building on Windows". Before OpenSSH 8.5, which doesn't mark a
+  compiles with your app, so everything is asked there too. That needs
+  Visual Studio's C++ tools; without them the build still works, but only
+  passphrases and passwords are asked. If you sign your release, sign
+  `system_ssh_askpass.exe` too; see the README's "Building on Windows".
+  Before OpenSSH 8.5, which doesn't mark a
   server's questions, every prompt still comes, as in a terminal, with
   `isVerified` false.
-- **Breaking:** the package needs Dart 3.10 or newer, for its build hook.
+- **Breaking:** the package needs Dart 3.10 or newer, and has a build hook,
+  so a command-line app that uses it builds with `dart build cli` instead of
+  `dart compile exe`, which refuses packages with build hooks. Raise your
+  `sdk` constraint to `^3.10.0`.
 - **Breaking:** `onLog` gets an `SshPromptsOff`, a new kind of `SshLog`, when
   a tunnel has an `onPrompt` but ssh won't ask through it, with the reason,
   such as a `ProxyJump` on Windows without the helper. A refused login then

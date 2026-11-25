@@ -75,7 +75,8 @@ final class SshPromptsOff extends SshLog {
   const SshPromptsOff(this.reason) : super('Not asking for passwords: $reason');
 
   /// Why ssh won't ask, such as
-  /// `Windows' ssh can't ask safely when the config sets a proxyjump`.
+  /// `the app was built without its Windows helper, so ssh can't ask safely
+  /// when the config sets a proxyjump`.
   final String reason;
 
   @override
