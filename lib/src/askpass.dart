@@ -179,7 +179,8 @@ final class AskPass {
 
   /// The answer to [text], or null to cancel. Never throws.
   Future<String?> _answer(String text) {
-    final answer = _queue.then((_) async {
+    final previous = _queue;
+    final answer = previous.then((_) async {
       if (_isClosed) return null;
       // An unknown ProxyJump host's key, which the jump's own ssh asks
       // about; host keys are for trustHostKey to settle.
@@ -209,11 +210,16 @@ final class AskPass {
         }
         return answer;
       } catch (exception, stackTrace) {
+        logger.warning('onPrompt threw', exception, stackTrace);
         _error ??= (exception, stackTrace);
         return _refuse(prompt);
       }
     });
-    _queue = Future.any([answer.then((_) {}), _closed.future]);
+    // A closed helper stops holding the line, but not before the prompt
+    // ahead of it is answered.
+    _queue = previous.then(
+      (_) => Future.any([answer.then((_) {}), _closed.future]),
+    );
     return answer;
   }
 
@@ -298,6 +304,12 @@ final class AskPass {
         file.writeStringSync(answer == null ? 'n\n' : 'y$answer\n');
       } finally {
         file.closeSync();
+      }
+      // The helper's watchdog can remove the FIFO the instant before the
+      // open, which then creates a plain file instead; it mustn't stay.
+      if (FileSystemEntity.typeSync(fifo, followLinks: false) ==
+          FileSystemEntityType.file) {
+        File(fifo).deleteSync();
       }
     } on FileSystemException catch (exception) {
       logger.warning('Could not answer ssh: ${exception.message}');
@@ -557,7 +569,8 @@ Future<T> withPrompts<T>(
   final version = await sshVersion(executable, environment: environment);
   final askPass = await AskPass.start(
     onPrompt,
-    verified: !_olderThan(version, 8, 5),
+    // An ssh whose version can't be read may be old.
+    verified: version != null && !_olderThan(version, 8, 5),
   );
   try {
     return await open(

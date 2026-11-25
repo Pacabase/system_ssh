@@ -108,6 +108,8 @@ bool isHostKeyQuestion(String text) =>
 /// [text], from ssh, as the kind of prompt its wording says; see
 /// [SshPrompt.isVerified].
 SshPrompt classifyPrompt(String text, {bool isVerified = true}) {
+  // A server's question, marked so since OpenSSH 8.5, whatever it says after.
+  if (text.startsWith('(')) return SshCodePrompt(text, isVerified: isVerified);
   if (_passphrase.firstMatch(text) case final match?) {
     return SshPassphrasePrompt(
       text,
