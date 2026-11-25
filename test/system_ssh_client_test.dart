@@ -111,6 +111,19 @@ void main() {
       });
     }
 
+    for (final (name, file) in [
+      ('an empty', ''),
+      ('a line break in an', 'id\nwork'),
+      ('a NUL in an', 'id\x00work'),
+    ]) {
+      test('rejects $name identity file', () async {
+        await expectLater(
+          open(target: SshTarget('ssh.example.com', identityFile: file)),
+          throwsInvalid('server', file),
+        );
+      });
+    }
+
     for (final (name, target, remoteHost) in [
       (
         'a DOMAIN\\user',

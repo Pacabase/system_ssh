@@ -479,6 +479,10 @@ void checkServer(SshTarget server) {
       when user.startsWith('-') || user.contains(_unsafeInUser)) {
     throw ArgumentError.value(user, 'server', 'is not a valid user');
   }
+  if (server.identityFile case final file?
+      when file.isEmpty || file.contains(RegExp(r'[\x00-\x1f]'))) {
+    throw ArgumentError.value(file, 'server', 'is not a valid identity file');
+  }
 }
 
 /// The ssh to run, and what `ssh -G` says the config makes of [server].

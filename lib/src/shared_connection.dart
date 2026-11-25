@@ -52,6 +52,7 @@ final class ConnectionPool {
       server.host,
       '${server.port}',
       server.user ?? '',
+      server.identityFile ?? '',
       ...[
         for (final MapEntry(:key, :value) in environment.entries) '$key=$value',
       ]..sort(),

@@ -29,7 +29,8 @@ Future<void> main() async {
 ```
 
 - **`SshTarget`** takes an optional `port` and `user`; the rest comes from
-  `~/.ssh/config`.
+  `~/.ssh/config`. Its `identityFile` logs in with that key alone, such as
+  `~/.ssh/id_work`, from the file or your agent.
 - **`localPort`** forwards a fixed port instead of a free one.
 - **`bindAddress`** listens on another address of this computer instead of
   `127.0.0.1`: Docker's bridge `172.17.0.1` on Linux, `0.0.0.0` for every
@@ -346,6 +347,7 @@ unattended tunnel needs:
 | `BatchMode=yes` | your config leaves it at `no`, without `onPrompt` |
 | `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force` | in ssh's environment, with `onPrompt`; on Windows also `SYSTEM_SSH_ASKPASS_PORT` and `SYSTEM_SSH_ASKPASS_TOKEN`, for the helper to reach your app; before OpenSSH 8.4 also `DISPLAY=:0` unless one is set |
 | `StrictHostKeyChecking=yes` | your config leaves it at `ask`; an unknown key throws an `SshUnknownHostKeyException` for you to ask about |
+| `-i <file>`, `IdentitiesOnly=yes` | with `SshTarget`'s `identityFile` |
 | `ConnectTimeout=15` | your config sets none |
 | `trustHostKey`'s ssh | `StrictHostKeyChecking=accept-new`, a `UserKnownHostsFile` of a temp file before yours, `PreferredAuthentications=none`, `ClearAllForwardings=yes`, `PermitLocalCommand=no`, `ControlPath=none` and `BatchMode=yes`: it reads the key without logging in or forwarding |
 | `ServerAliveInterval=15` | your config sets none |
