@@ -96,10 +96,7 @@ String socksProxyCommand(
 }) {
   checkLocalPort(localPort);
   checkBindAddress(bindAddress);
-  return _command(
-    server,
-    DynamicForward(localPort, bindAddress: bindAddress),
-  );
+  return _command(server, DynamicForward(localPort, bindAddress: bindAddress));
 }
 
 String _command(SshTarget server, Forward forward) {

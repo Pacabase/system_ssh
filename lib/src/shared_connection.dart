@@ -91,12 +91,7 @@ final class SharedConnection {
     Forward forward, {
     void Function(SshLog log)? onLog,
     Future<void>? abortTrigger,
-  }) =>
-      _connection.add(
-        forward,
-        onLog: onLog,
-        abortTrigger: abortTrigger,
-      );
+  }) => _connection.add(forward, onLog: onLog, abortTrigger: abortTrigger);
 
   /// Lets the master stop once no forward uses it.
   void release() {
@@ -328,8 +323,11 @@ final class _Connection {
     isStopping = true;
     _forget();
     unawaited(
-      _run('cancel', forward, timeout: _pool.cancelTimeout)
-          .then((_) {}, onError: (Object _) {}),
+      _run(
+        'cancel',
+        forward,
+        timeout: _pool.cancelTimeout,
+      ).then((_) {}, onError: (Object _) {}),
     );
   }
 
@@ -389,13 +387,13 @@ final class _Connection {
       final forwards = port == null
           ? const <_SharedForward>[]
           : _forwards
-              .where(
-                (shared) => switch (shared.forward) {
-                  ListeningForward(:final localPort) => localPort == port,
-                  RemoteForward() => false,
-                },
-              )
-              .toList();
+                .where(
+                  (shared) => switch (shared.forward) {
+                    ListeningForward(:final localPort) => localPort == port,
+                    RemoteForward() => false,
+                  },
+                )
+                .toList();
       // An onLog may close its tunnel, so each loop runs over a copy.
       for (final forward in forwards.isEmpty ? [..._forwards] : forwards) {
         forward.report(failure);
@@ -409,14 +407,14 @@ final class _Connection {
     final forwards = destination == null
         ? const <_SharedForward>[]
         : _forwards
-            .where(
-              (shared) => switch (shared.forward) {
-                RemoteForward(destination: final forwardsTo) =>
-                  forwardsTo == destination,
-                ListeningForward() => false,
-              },
-            )
-            .toList();
+              .where(
+                (shared) => switch (shared.forward) {
+                  RemoteForward(destination: final forwardsTo) =>
+                    forwardsTo == destination,
+                  ListeningForward() => false,
+                },
+              )
+              .toList();
     for (final forward in forwards.isEmpty ? [..._forwards] : forwards) {
       forward.report(classify(line));
     }
@@ -459,8 +457,9 @@ final class _Connection {
         .join();
 
     try {
-      final code =
-          await AbortSignal(abortTrigger).exitCodeOf(process, timeout: timeout);
+      final code = await AbortSignal(
+        abortTrigger,
+      ).exitCodeOf(process, timeout: timeout);
       return (exitCode: code, stdout: await stdout, stderr: await stderr);
     } on TimeoutException {
       return null;
@@ -477,8 +476,8 @@ Directory _masterDirectory() {
   final temp = Directory.systemTemp;
   final base =
       temp.path.length <= 60 && !temp.path.contains(_unsafeInSocketPath)
-          ? temp
-          : Directory('/tmp');
+      ? temp
+      : Directory('/tmp');
   try {
     return base.createTempSync('ssh');
   } on FileSystemException catch (exception) {

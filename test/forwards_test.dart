@@ -18,17 +18,26 @@ void main() {
         const RemoteForward(8080, localHost: 'localhost', localPort: 3000),
       );
       expect(
-        const RemoteForward(8080, localHost: 'localhost', localPort: 3000)
-            .hashCode,
-        const RemoteForward(8080, localHost: 'localhost', localPort: 3000)
-            .hashCode,
+        const RemoteForward(
+          8080,
+          localHost: 'localhost',
+          localPort: 3000,
+        ).hashCode,
+        const RemoteForward(
+          8080,
+          localHost: 'localhost',
+          localPort: 3000,
+        ).hashCode,
       );
     });
 
     test('to an IPv6 host with or without brackets', () {
       const bare = RemoteForward(8080, localHost: '::1', localPort: 3000);
-      const bracketed =
-          RemoteForward(8080, localHost: '[::1]', localPort: 3000);
+      const bracketed = RemoteForward(
+        8080,
+        localHost: '[::1]',
+        localPort: 3000,
+      );
       expect(bare, bracketed);
       expect(bare.hashCode, bracketed.hashCode);
       expect(bare.arguments, bracketed.arguments);
@@ -63,9 +72,7 @@ void main() {
       );
       expect(
         const RemoteForward(8080, localHost: 'localhost', localPort: 3000),
-        isNot(
-          const RemoteForward(0, localHost: 'localhost', localPort: 3000),
-        ),
+        isNot(const RemoteForward(0, localHost: 'localhost', localPort: 3000)),
       );
     });
 

@@ -111,10 +111,7 @@ void main() {
         'Connection to ssh.example.com closed by remote host.',
         SshDroppedException,
       ),
-      (
-        'Timeout, server ssh.example.com not responding.',
-        SshDroppedException,
-      ),
+      ('Timeout, server ssh.example.com not responding.', SshDroppedException),
       ('client_loop: send disconnect: Broken pipe', SshDroppedException),
       // Windows' ssh, once its ProxyCommand dies.
       ('client_loop: send disconnect: Unknown error', SshDroppedException),
@@ -140,10 +137,7 @@ void main() {
         'banner exchange: Connection to UNKNOWN port -1: Connection refused',
         SshUnreachableException,
       ),
-      (
-        'Connection timed out during banner exchange',
-        SshUnreachableException,
-      ),
+      ('Connection timed out during banner exchange', SshUnreachableException),
       (
         'ssh_exchange_identification: read: Connection reset by peer',
         SshUnreachableException,
@@ -296,10 +290,7 @@ void main() {
       const line =
           'channel 3: open failed: administratively prohibited: open failed';
 
-      expect(
-        classify(line),
-        const SshForwardProhibited(line),
-      );
+      expect(classify(line), const SshForwardProhibited(line));
     });
 
     for (final line in [
@@ -385,7 +376,9 @@ void main() {
     );
     expect(
       isListeningOn(
-          'debug1: Local forwarding listening on :: port 5000.', 5000),
+        'debug1: Local forwarding listening on :: port 5000.',
+        5000,
+      ),
       isTrue,
     );
   });

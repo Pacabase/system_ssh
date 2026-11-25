@@ -12,33 +12,31 @@ void main() {
     String strictHostKeyChecking = 'ask',
     String connectTimeout = 'none',
     String serverAliveInterval = '0',
-  }) =>
-      parseConfig([
-        'host ssh.example.com',
-        'user alice',
-        'hostname ssh.example.com',
-        'port 22',
-        'batchmode $batchMode',
-        'connecttimeout $connectTimeout',
-        'controlmaster false',
-        'controlpath none',
-        'identityfile ~/.ssh/id_ed25519',
-        'serveralivecountmax 3',
-        'serveraliveinterval $serverAliveInterval',
-        'stricthostkeychecking $strictHostKeyChecking',
-        'userknownhostsfile ~/.ssh/known_hosts ~/.ssh/known_hosts2',
-      ]);
+  }) => parseConfig([
+    'host ssh.example.com',
+    'user alice',
+    'hostname ssh.example.com',
+    'port 22',
+    'batchmode $batchMode',
+    'connecttimeout $connectTimeout',
+    'controlmaster false',
+    'controlpath none',
+    'identityfile ~/.ssh/id_ed25519',
+    'serveralivecountmax 3',
+    'serveraliveinterval $serverAliveInterval',
+    'stricthostkeychecking $strictHostKeyChecking',
+    'userknownhostsfile ~/.ssh/known_hosts ~/.ssh/known_hosts2',
+  ]);
 
   List<String> command({
     SshTarget target = server,
     String remoteHost = 'db.example.com',
     Map<String, String> config = const {},
-  }) =>
-      sshCommand(
-        target,
-        forward: LocalForward(50000, remoteHost: remoteHost, remotePort: 3306),
-        config: config,
-      );
+  }) => sshCommand(
+    target,
+    forward: LocalForward(50000, remoteHost: remoteHost, remotePort: 3306),
+    config: config,
+  );
 
   group('destinationArguments', () {
     test('passes port and user, then the host after --', () {
@@ -61,23 +59,24 @@ void main() {
 
     test('passes only the port when the user is unset', () {
       expect(
-          destinationArguments(const SshTarget('ssh.example.com', port: 2222)),
-          [
-            ...['-p', '2222'],
-            '--',
-            'ssh.example.com',
-          ]);
+        destinationArguments(const SshTarget('ssh.example.com', port: 2222)),
+        [
+          ...['-p', '2222'],
+          '--',
+          'ssh.example.com',
+        ],
+      );
     });
 
     test('passes only the user when the port is unset', () {
       expect(
-          destinationArguments(
-              const SshTarget('ssh.example.com', user: 'alice')),
-          [
-            ...['-l', 'alice'],
-            '--',
-            'ssh.example.com',
-          ]);
+        destinationArguments(const SshTarget('ssh.example.com', user: 'alice')),
+        [
+          ...['-l', 'alice'],
+          '--',
+          'ssh.example.com',
+        ],
+      );
     });
 
     test('keeps a host that looks like an option after --', () {
@@ -118,8 +117,11 @@ void main() {
       expect(
         sshCommand(
           server,
-          forward: const LocalForward(50000,
-              remoteHost: 'db.example.com', remotePort: 3306),
+          forward: const LocalForward(
+            50000,
+            remoteHost: 'db.example.com',
+            remotePort: 3306,
+          ),
           executable: '/opt/openssh/bin/ssh',
         ).first,
         '/opt/openssh/bin/ssh',
@@ -146,10 +148,7 @@ void main() {
       final result = command(config: resolvedConfig());
 
       expect(result, containsAllInOrder(['-o', 'BatchMode=yes']));
-      expect(
-        result,
-        containsAllInOrder(['-o', 'StrictHostKeyChecking=yes']),
-      );
+      expect(result, containsAllInOrder(['-o', 'StrictHostKeyChecking=yes']));
       expect(result, containsAllInOrder(['-o', 'ConnectTimeout=15']));
       expect(result, containsAllInOrder(['-o', 'ServerAliveInterval=15']));
       expect(result.last, 'ssh.example.com');
@@ -312,21 +311,26 @@ void main() {
   group('the address a forward listens on', () {
     test('goes in front of the local port, bracketed for IPv6', () {
       expect(
-        const LocalForward(5432,
-                bindAddress: '172.17.0.1', remoteHost: 'db', remotePort: 5432)
-            .arguments,
+        const LocalForward(
+          5432,
+          bindAddress: '172.17.0.1',
+          remoteHost: 'db',
+          remotePort: 5432,
+        ).arguments,
         ['-L', '172.17.0.1:5432:db:5432'],
       );
       expect(
-        const SocketForward(2375,
-                bindAddress: '::', remoteSocket: '/run/d.sock')
-            .arguments,
+        const SocketForward(
+          2375,
+          bindAddress: '::',
+          remoteSocket: '/run/d.sock',
+        ).arguments,
         ['-L', '[::]:2375:/run/d.sock'],
       );
-      expect(
-        const DynamicForward(1080, bindAddress: '0.0.0.0').arguments,
-        ['-D', '0.0.0.0:1080'],
-      );
+      expect(const DynamicForward(1080, bindAddress: '0.0.0.0').arguments, [
+        '-D',
+        '0.0.0.0:1080',
+      ]);
       expect(const DynamicForward(1080).arguments, ['-D', '127.0.0.1:1080']);
     });
 
@@ -340,14 +344,17 @@ void main() {
       '',
       '1.2.3',
       '256.0.0.1',
-      'fe80::1%en0'
+      'fe80::1%en0',
     ]) {
       test('rejects ${address.isEmpty ? 'an empty address' : address}', () {
         expect(
           () => checkBindAddress(address),
           throwsA(
             isArgumentError.having(
-                (error) => error.name, 'name', 'bindAddress'),
+              (error) => error.name,
+              'name',
+              'bindAddress',
+            ),
           ),
         );
       });

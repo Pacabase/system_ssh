@@ -166,8 +166,10 @@ void main() {
     for (final port in [1, 65535]) {
       test('accepts local port $port', () {
         expect(
-          socksProxyCommand(const SshTarget('ssh.example.com'),
-              localPort: port),
+          socksProxyCommand(
+            const SshTarget('ssh.example.com'),
+            localPort: port,
+          ),
           'ssh -N -D 127.0.0.1:$port ssh.example.com',
         );
       });

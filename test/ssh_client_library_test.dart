@@ -15,8 +15,7 @@ final class _FakeSshClient implements SshClient {
     void Function(SshLog log)? onLog,
     SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
-  }) async =>
-      throw SshNotFoundException();
+  }) async => throw SshNotFoundException();
 
   @override
   Future<SshTunnel> openSocketTunnel(
@@ -27,8 +26,7 @@ final class _FakeSshClient implements SshClient {
     void Function(SshLog log)? onLog,
     SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<SshRemoteTunnel> openRemoteTunnel(
@@ -39,8 +37,7 @@ final class _FakeSshClient implements SshClient {
     void Function(SshLog log)? onLog,
     SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<SshTunnel> openSocksProxy(
@@ -50,8 +47,7 @@ final class _FakeSshClient implements SshClient {
     void Function(SshLog log)? onLog,
     SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
-  }) =>
-      throw UnimplementedError();
+  }) => throw UnimplementedError();
 
   @override
   Future<void> trustHostKey(

@@ -195,10 +195,7 @@ void main() {
           'port 22',
           'port 2222',
         ]),
-        {
-          'identityfile': '~/.ssh/id_ed25519\n~/.ssh/id_rsa',
-          'port': '2222',
-        },
+        {'identityfile': '~/.ssh/id_ed25519\n~/.ssh/id_rsa', 'port': '2222'},
       );
     });
   });

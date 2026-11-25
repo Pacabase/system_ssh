@@ -1,5 +1,7 @@
 ## Unreleased
 
+- **Breaking:** the package needs Dart 3.10 or newer. Raise your `sdk`
+  constraint to `^3.10.0`, or keep the previous release.
 - `openTunnel`, `openSocketTunnel`, `openRemoteTunnel` and `openSocksProxy`
   take an `onPrompt` that answers what ssh asks while it logs in: a key's
   passphrase without an agent, a password, or the server's own question,

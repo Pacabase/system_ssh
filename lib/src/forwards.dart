@@ -43,8 +43,10 @@ final class LocalForward extends ListeningForward {
   final int remotePort;
 
   @override
-  List<String> get arguments =>
-      ['-L', '$_listen:${bracketIPv6(remoteHost)}:$remotePort'];
+  List<String> get arguments => [
+    '-L',
+    '$_listen:${bracketIPv6(remoteHost)}:$remotePort',
+  ];
 }
 
 final class SocketForward extends ListeningForward {
@@ -83,9 +85,9 @@ final class RemoteForward extends Forward {
 
   @override
   List<String> get arguments => [
-        '-R',
-        '127.0.0.1:$remotePort:${bracketIPv6(localHost)}:$localPort',
-      ];
+    '-R',
+    '127.0.0.1:$remotePort:${bracketIPv6(localHost)}:$localPort',
+  ];
 
   /// Where it connects, as ssh names it when that fails: without brackets
   /// around an IPv6 address.

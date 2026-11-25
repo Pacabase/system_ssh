@@ -124,7 +124,7 @@ final class SshForwardUnreachable extends SshForwardFailed {
 final class SshForwardProhibited extends SshForwardFailed {
   /// An entry for [line], as a fake [SshClient] would report it.
   const SshForwardProhibited(super.line)
-      : super(reason: 'administratively prohibited');
+    : super(reason: 'administratively prohibited');
 
   @override
   String toString() => 'SshForwardProhibited($line)';

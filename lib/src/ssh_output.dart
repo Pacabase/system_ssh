@@ -13,17 +13,15 @@ bool isProgress(String line) => _progress.hasMatch(line);
 String failureMessage(List<String> log) {
   final lines = log.where((line) => line.trim().isNotEmpty).toList();
   final errors = lines.where((line) => !isProgress(line)).toList();
-  final reason =
-      errors.isNotEmpty ? errors : lines.sublist(max(0, lines.length - 3));
+  final reason = errors.isNotEmpty
+      ? errors
+      : lines.sublist(max(0, lines.length - 3));
 
   return reason.join('\n');
 }
 
-typedef _Failure = SshException Function(
-  String message, {
-  List<String> log,
-  int? exitCode,
-});
+typedef _Failure =
+    SshException Function(String message, {List<String> log, int? exitCode});
 
 // In the order to check them: a key, login or config at fault wins over the
 // network error ssh may print after it. A server's banner can say anything,
@@ -32,9 +30,7 @@ typedef _Failure = SshException Function(
 final _failures = <(RegExp, _Failure)>[
   (_anyOf(['Host key verification failed']), SshHostKeyRefusedException.new),
   (
-    RegExp(
-      r'^(\S+: )?Permission denied \(|Too many authentication failures',
-    ),
+    RegExp(r'^(\S+: )?Permission denied \(|Too many authentication failures'),
     SshLoginRefusedException.new,
   ),
   (
@@ -136,8 +132,9 @@ final class LocalForwardReadiness implements ForwardReadiness {
 }
 
 // "debug1: remote forward success for: listen 127.0.0.1:8080, connect localhost:3000"
-final _remoteForwarded =
-    RegExp(r'remote forward success for: listen 127\.0\.0\.1:(\d+),');
+final _remoteForwarded = RegExp(
+  r'remote forward success for: listen 127\.0\.0\.1:(\d+),',
+);
 
 // "Allocated port 41234 for remote forward to localhost:3000"
 final _allocated = RegExp(r'^Allocated port (\d+) for remote forward to (.+)$');
@@ -148,9 +145,8 @@ final class RemoteForwardReadiness implements ForwardReadiness {
   /// For [forward], on the port it asks the server for, or the one the
   /// server picks when that is 0.
   RemoteForwardReadiness(RemoteForward forward)
-      : requestedPort = forward.remotePort,
-        _destination =
-            '${forward.destination.host}:${forward.destination.port}';
+    : requestedPort = forward.remotePort,
+      _destination = '${forward.destination.host}:${forward.destination.port}';
 
   final int requestedPort;
   final String _destination;
@@ -227,8 +223,9 @@ final class MasterReadiness implements ForwardReadiness {
 /// already report, such as a bind failure for a taken port.
 bool isMuxChatter(String line) => _muxChatter.hasMatch(line);
 
-final _muxChatter =
-    RegExp(r'^(mux_|bind \[|channel_setup_fwd_listener|Could not request )');
+final _muxChatter = RegExp(
+  r'^(mux_|bind \[|channel_setup_fwd_listener|Could not request )',
+);
 
 // "connect_to localhost port 3000: failed.", for a remote forward.
 final _localConnectFailed = RegExp(r'^connect_to (\S+) port (\d+): failed');
@@ -259,8 +256,8 @@ int? failedChannel(String line) =>
 (int, int?)? freedChannel(String line) =>
     switch (_channelFreed.firstMatch(line)) {
       final match? => (
-          int.parse(match[1]!),
-          int.tryParse(_listeningPort.firstMatch(match[2]!)?[1] ?? ''),
-        ),
+        int.parse(match[1]!),
+        int.tryParse(_listeningPort.firstMatch(match[2]!)?[1] ?? ''),
+      ),
       null => null,
     };

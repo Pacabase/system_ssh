@@ -70,20 +70,21 @@ void main() {
   }
 
   List<String> operations() => [
-        for (final command in fake.muxCommands)
-          [
-            command[command.indexOf('-O') + 1],
-            command[command.indexOf('-O') + 3],
-          ].join(' '),
-      ];
+    for (final command in fake.muxCommands)
+      [
+        command[command.indexOf('-O') + 1],
+        command[command.indexOf('-O') + 3],
+      ].join(' '),
+  ];
 
   String forwardOf(SshTunnel tunnel) =>
       'forward 127.0.0.1:${tunnel.localPort}:db.example.com:3306';
 
   /// The directory of master [attempt]'s socket.
   Directory socketDirectory([int attempt = 1]) {
-    final option = fake.attempts[attempt - 1]
-        .firstWhere((argument) => argument.startsWith('ControlPath='));
+    final option = fake.attempts[attempt - 1].firstWhere(
+      (argument) => argument.startsWith('ControlPath='),
+    );
     final socket = option.substring('ControlPath="'.length, option.length - 1);
     return File(socket).parent;
   }
@@ -102,8 +103,8 @@ void main() {
       port == null
           ? 'debug1: channel $channel: free: direct-tcpip, nchannels 4'
           : 'debug1: channel $channel: free: direct-tcpip: listening port '
-              '$port for db.example.com port 3306, connect from 127.0.0.1 '
-              'port 50123 to 127.0.0.1 port $port, nchannels 4',
+                '$port for db.example.com port 3306, connect from 127.0.0.1 '
+                'port 50123 to 127.0.0.1 port $port, nchannels 4',
     );
 
   const refused = SshForwardUnreachable(
@@ -131,8 +132,9 @@ void main() {
 
     await open();
 
-    final controlPath = fake.attempts.single
-        .firstWhere((argument) => argument.startsWith('ControlPath='));
+    final controlPath = fake.attempts.single.firstWhere(
+      (argument) => argument.startsWith('ControlPath='),
+    );
     final command = fake.muxCommands.single;
     expect(command.sublist(0, 2), ['-F', 'none']);
     expect(
@@ -224,10 +226,9 @@ void main() {
     await open();
 
     expect(fake.attempts, hasLength(1));
-    expect(
-      operations().where((operation) => operation.startsWith('cancel')),
-      ['cancel 127.0.0.1:${first.localPort}:db.example.com:3306'],
-    );
+    expect(operations().where((operation) => operation.startsWith('cancel')), [
+      'cancel 127.0.0.1:${first.localPort}:db.example.com:3306',
+    ]);
   });
 
   test('the last close stops the master and removes its directory', () async {
@@ -346,8 +347,11 @@ void main() {
     await expectLater(
       openRemote(remotePort: 8080),
       throwsA(
-        isA<SshRemotePortRefusedException>()
-            .having((exception) => exception.port, 'port', 8080),
+        isA<SshRemotePortRefusedException>().having(
+          (exception) => exception.port,
+          'port',
+          8080,
+        ),
       ),
     );
   });
@@ -361,22 +365,23 @@ void main() {
     expect(operations(), ['forward 127.0.0.1:0:localhost:3000']);
   });
 
-  test('cancels a remote forward whose picked port ssh never printed',
-      () async {
-    fake
-      ..attemptModes([AttemptMode.ready])
-      ..muxModes(['quiet', 'ok']);
+  test(
+    'cancels a remote forward whose picked port ssh never printed',
+    () async {
+      fake
+        ..attemptModes([AttemptMode.ready])
+        ..muxModes(['quiet', 'ok']);
 
-    await expectLater(openRemote(), throwsA(isA<SshException>()));
-    expect(operations(), [
-      'forward 127.0.0.1:0:localhost:3000',
-      'cancel 127.0.0.1:0:localhost:3000',
-    ]);
-  });
+      await expectLater(openRemote(), throwsA(isA<SshException>()));
+      expect(operations(), [
+        'forward 127.0.0.1:0:localhost:3000',
+        'cancel 127.0.0.1:0:localhost:3000',
+      ]);
+    },
+  );
 
   for (final remotePort in [8080, null]) {
-    test(
-        'refuses a second tunnel with the same remote forward, '
+    test('refuses a second tunnel with the same remote forward, '
         'remotePort $remotePort', () async {
       fake
         ..attemptModes([AttemptMode.ready])
@@ -541,8 +546,7 @@ void main() {
       expect(localLogs, [const SshMessage('Warning: the server says hello')]);
     });
 
-    test(
-        "a remote forward's failed destination not to a local tunnel to the "
+    test("a remote forward's failed destination not to a local tunnel to the "
         'same host and port', () async {
       fake.attemptModes([AttemptMode.ready]);
       final localLogs = <SshLog>[];
@@ -580,36 +584,38 @@ void main() {
       expect(localLogs, [const SshMessage('Warning: the server says hello')]);
     });
 
-    test("an IPv6 remote forward's failed destination to that tunnel only",
-        () async {
-      fake.attemptModes([AttemptMode.ready]);
-      final localLogs = <SshLog>[];
-      final remoteLogs = <SshLog>[];
-      await open(onLog: localLogs.add);
-      await openSystemRemoteForward(
-        server,
-        localHost: '::1',
-        localPort: 3000,
-        remotePort: 8080,
-        onLog: remoteLogs.add,
-        executable: fake.path,
-        pool: pool,
-      ).then((tunnel) => addTearDown(tunnel.close));
-      localLogs.clear();
-      remoteLogs.clear();
+    test(
+      "an IPv6 remote forward's failed destination to that tunnel only",
+      () async {
+        fake.attemptModes([AttemptMode.ready]);
+        final localLogs = <SshLog>[];
+        final remoteLogs = <SshLog>[];
+        await open(onLog: localLogs.add);
+        await openSystemRemoteForward(
+          server,
+          localHost: '::1',
+          localPort: 3000,
+          remotePort: 8080,
+          onLog: remoteLogs.add,
+          executable: fake.path,
+          pool: pool,
+        ).then((tunnel) => addTearDown(tunnel.close));
+        localLogs.clear();
+        remoteLogs.clear();
 
-      fake
-        ..masterSays('connect_to ::1 port 3000: failed.')
-        ..masterSays('Warning: the server says hello');
-      await eventually(() => localLogs.isEmpty ? null : true);
+        fake
+          ..masterSays('connect_to ::1 port 3000: failed.')
+          ..masterSays('Warning: the server says hello');
+        await eventually(() => localLogs.isEmpty ? null : true);
 
-      expect(operations().last, 'forward 127.0.0.1:8080:[::1]:3000');
-      expect(remoteLogs, [
-        const SshMessage('connect_to ::1 port 3000: failed.'),
-        const SshMessage('Warning: the server says hello'),
-      ]);
-      expect(localLogs, [const SshMessage('Warning: the server says hello')]);
-    });
+        expect(operations().last, 'forward 127.0.0.1:8080:[::1]:3000');
+        expect(remoteLogs, [
+          const SshMessage('connect_to ::1 port 3000: failed.'),
+          const SshMessage('Warning: the server says hello'),
+        ]);
+        expect(localLogs, [const SshMessage('Warning: the server says hello')]);
+      },
+    );
 
     test('reads the port from a socket forward that ssh freed', () {
       expect(
@@ -723,23 +729,29 @@ void main() {
     });
   });
 
-  test('an address this computer lacks fails before the shared login',
-      () async {
-    final shared =
-        SystemSshClient(executable: fake.path, shareConnections: true);
+  test(
+    'an address this computer lacks fails before the shared login',
+    () async {
+      final shared = SystemSshClient(
+        executable: fake.path,
+        shareConnections: true,
+      );
 
-    await expectLater(
-      shared.openSocksProxy(server, bindAddress: '192.0.2.1'),
-      throwsA(isA<SshException>()),
-    );
-    expect(fake.attempts, isEmpty);
-  });
+      await expectLater(
+        shared.openSocksProxy(server, bindAddress: '192.0.2.1'),
+        throwsA(isA<SshException>()),
+      );
+      expect(fake.attempts, isEmpty);
+    },
+  );
 
   test('SystemSshClient shares only when asked', () async {
     fake.attemptModes([AttemptMode.ready]);
 
-    final shared =
-        SystemSshClient(executable: fake.path, shareConnections: true);
+    final shared = SystemSshClient(
+      executable: fake.path,
+      shareConnections: true,
+    );
     final proxy = await shared.openSocksProxy(server);
     addTearDown(proxy.close);
     final tunnel = await shared.openTunnel(
@@ -754,13 +766,16 @@ void main() {
       forwardOf(tunnel),
     ]);
 
-    final elsewhere =
-        await shared.openSocksProxy(server, bindAddress: '0.0.0.0');
+    final elsewhere = await shared.openSocksProxy(
+      server,
+      bindAddress: '0.0.0.0',
+    );
     addTearDown(elsewhere.close);
     expect(operations().last, 'forward 0.0.0.0:${elsewhere.localPort}');
 
-    final own =
-        await SystemSshClient(executable: fake.path).openSocksProxy(server);
+    final own = await SystemSshClient(
+      executable: fake.path,
+    ).openSocksProxy(server);
     addTearDown(own.close);
     expect(fake.attempts, hasLength(2));
     expect(fake.attempts.last, contains('ControlPath=none'));

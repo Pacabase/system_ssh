@@ -14,12 +14,14 @@ bool _isInUse(SocketException exception) =>
 
 void main() {
   test('pickFreePort returns a loopback port that can be bound', () async {
-    for (var attempt = 1;; attempt++) {
+    for (var attempt = 1; ; attempt++) {
       final port = await pickFreePort();
       expect(port, inInclusiveRange(1024, 65535));
       try {
-        await (await ServerSocket.bind(InternetAddress.loopbackIPv4, port))
-            .close();
+        await (await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          port,
+        )).close();
         return;
       } on SocketException catch (exception) {
         if (!_isInUse(exception) || attempt == _tries) rethrow;
@@ -47,9 +49,12 @@ void main() {
 
     expect(await isPortFree(socket.port, address: '0.0.0.0'), isFalse);
     expect(
-        await isPortFree(await pickFreePort(address: '0.0.0.0'),
-            address: '0.0.0.0'),
-        isTrue);
+      await isPortFree(
+        await pickFreePort(address: '0.0.0.0'),
+        address: '0.0.0.0',
+      ),
+      isTrue,
+    );
   });
 
   test('isPortFree on :: leaves IPv4 alone, as ssh does', () async {

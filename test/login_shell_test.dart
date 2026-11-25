@@ -37,8 +37,7 @@ void main() {
       Future<Map<String, String>?> read(
         String shell, {
         Duration timeout = const Duration(seconds: 10),
-      }) =>
-          shellEnvironment(shell, timeout: timeout);
+      }) => shellEnvironment(shell, timeout: timeout);
 
       test('reads the kept variables, ignoring what rc files print', () async {
         final shell = await fakeShell(r'''
@@ -110,8 +109,9 @@ wait
         expect(await read(shell, timeout: const Duration(seconds: 1)), isNull);
         expect(stopwatch.elapsed, lessThan(const Duration(seconds: 3)));
         final started = await eventually(() {
-          final lines =
-              pids.existsSync() ? pids.readAsLinesSync() : const <String>[];
+          final lines = pids.existsSync()
+              ? pids.readAsLinesSync()
+              : const <String>[];
           return lines.length == 2 ? lines.map(int.parse).toList() : null;
         });
         for (final pid in started) {
@@ -194,7 +194,7 @@ wait
     test('reads again after a failed read', () async {
       final results = [
         null,
-        {'PATH': '/usr/bin'}
+        {'PATH': '/usr/bin'},
       ];
       var reads = 0;
       final cache = CachedEnvironment(() async => results[reads++]);

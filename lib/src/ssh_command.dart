@@ -6,11 +6,11 @@ String bracketIPv6(String host) =>
 
 /// `-p`, `-l` and the host, as both `ssh -G` and the tunnel pass them.
 List<String> destinationArguments(SshTarget server) => [
-      if (server.port case final port?) ...['-p', '$port'],
-      if (server.user case final user?) ...['-l', user],
-      '--',
-      server.host,
-    ];
+  if (server.port case final port?) ...['-p', '$port'],
+  if (server.user case final user?) ...['-l', user],
+  '--',
+  server.host,
+];
 
 // ssh before 9.6 hands %h and %r to a ProxyCommand's shell unescaped, and a
 // forward reads a `/` as the start of a socket path.
@@ -86,15 +86,12 @@ List<String> sshCommand(
       ...['-o', 'ControlPersist=no'],
     ] else ...[
       '-o',
-      'ControlPath=none'
+      'ControlPath=none',
     ],
     // No terminal answers a password prompt here; fail instead of waiting.
     if (!prompts && isDefault('batchmode', 'no')) ...['-o', 'BatchMode=yes'],
     // A -o beats the config: the server's words must never reach the helper.
-    if (prompts && ownPromptsOnly) ...[
-      '-o',
-      'KbdInteractiveAuthentication=no',
-    ],
+    if (prompts && ownPromptsOnly) ...['-o', 'KbdInteractiveAuthentication=no'],
     // No terminal answers ssh's unknown-host prompt; the caller asks instead.
     if (isDefault('stricthostkeychecking', 'ask')) ...[
       '-o',
@@ -119,17 +116,16 @@ List<String> muxCommand(
   required Forward forward,
   required String masterSocket,
   String executable = 'ssh',
-}) =>
-    [
-      executable,
-      ...['-F', 'none'],
-      ...['-o', 'ControlMaster=no'],
-      ...['-o', 'ControlPath=${controlPath(masterSocket)}'],
-      ...['-o', 'BatchMode=yes'],
-      ...['-O', operation],
-      ...forward.arguments,
-      ...destinationArguments(server),
-    ];
+}) => [
+  executable,
+  ...['-F', 'none'],
+  ...['-o', 'ControlMaster=no'],
+  ...['-o', 'ControlPath=${controlPath(masterSocket)}'],
+  ...['-o', 'BatchMode=yes'],
+  ...['-O', operation],
+  ...forward.arguments,
+  ...destinationArguments(server),
+];
 
 /// ssh splits an option's value at a space unless it's quoted, and expands
 /// `%` tokens in a ControlPath. It has no escape for `$` or `"`, so the

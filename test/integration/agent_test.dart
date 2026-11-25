@@ -12,57 +12,53 @@ import 'ssh_fixture.dart';
 void main() {
   final fixture = SshFixture();
 
-  group(
-    'An ssh agent',
-    skip: fixture.skip,
-    () {
-      setUpAll(() async {
-        await fixture.setUpAll();
-        await fixture.startAgent();
-      });
-      tearDownAll(() async {
-        await fixture.stopAgent();
-        await fixture.tearDownAll();
-      });
-      setUp(fixture.setUp);
-      tearDown(fixture.tearDown);
+  group('An ssh agent', skip: fixture.skip, () {
+    setUpAll(() async {
+      await fixture.setUpAll();
+      await fixture.startAgent();
+    });
+    tearDownAll(() async {
+      await fixture.stopAgent();
+      await fixture.tearDownAll();
+    });
+    setUp(fixture.setUp);
+    tearDown(fixture.tearDown);
 
-      Future<SshTunnel> open(
-        SshTarget via, {
-        Map<String, String> environment = const {},
-      }) async {
-        final tunnel = await openSystemForward(
-          via,
-          forward: localForwardTo(fixture.echoHost, fixture.echoPort),
-          onLog: fixture.logged(),
-          executable: fixture.ssh,
-          environment: environment,
-        );
-        addTearDown(tunnel.close);
-        return tunnel;
-      }
+    Future<SshTunnel> open(
+      SshTarget via, {
+      Map<String, String> environment = const {},
+    }) async {
+      final tunnel = await openSystemForward(
+        via,
+        forward: localForwardTo(fixture.echoHost, fixture.echoPort),
+        onLog: fixture.logged(),
+        executable: fixture.ssh,
+        environment: environment,
+      );
+      addTearDown(tunnel.close);
+      return tunnel;
+    }
 
-      test('logs in through SSH_AUTH_SOCK with no key file', () async {
-        final tunnel = await open(
-          fixture.agentOnlyTarget,
-          environment: {'SSH_AUTH_SOCK': fixture.agentSocket},
-        );
+    test('logs in through SSH_AUTH_SOCK with no key file', () async {
+      final tunnel = await open(
+        fixture.agentOnlyTarget,
+        environment: {'SSH_AUTH_SOCK': fixture.agentSocket},
+      );
 
-        expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
-      });
+      expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
+    });
 
-      test('logs in through the agent IdentityAgent names', () async {
-        final tunnel = await open(fixture.identityAgentTarget);
+    test('logs in through the agent IdentityAgent names', () async {
+      final tunnel = await open(fixture.identityAgentTarget);
 
-        expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
-      });
+      expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
+    });
 
-      test('fails at once when the agent is not there', () async {
-        await expectLater(
-          open(fixture.deadAgentTarget).timeout(const Duration(seconds: 20)),
-          throwsA(isA<SshLoginRefusedException>()),
-        );
-      });
-    },
-  );
+    test('fails at once when the agent is not there', () async {
+      await expectLater(
+        open(fixture.deadAgentTarget).timeout(const Duration(seconds: 20)),
+        throwsA(isA<SshLoginRefusedException>()),
+      );
+    });
+  });
 }

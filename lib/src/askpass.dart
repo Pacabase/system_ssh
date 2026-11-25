@@ -104,17 +104,17 @@ final class AskPass {
 
   /// What ssh needs in its environment to ask through the helper.
   Map<String, String> get environment => {
-        'SSH_ASKPASS': _helper,
-        // Without it, ssh asks on a terminal when it has one, and before
-        // OpenSSH 8.4 only uses SSH_ASKPASS with a DISPLAY set.
-        'SSH_ASKPASS_REQUIRE': 'force',
-        // The environment of another user's process is out of reach, unlike
-        // a file in a %TEMP% that may be shared.
-        if (Platform.isWindows) ...{
-          'SYSTEM_SSH_ASKPASS_PORT': '${_server!.port}',
-          'SYSTEM_SSH_ASKPASS_TOKEN': _token,
-        },
-      };
+    'SSH_ASKPASS': _helper,
+    // Without it, ssh asks on a terminal when it has one, and before
+    // OpenSSH 8.4 only uses SSH_ASKPASS with a DISPLAY set.
+    'SSH_ASKPASS_REQUIRE': 'force',
+    // The environment of another user's process is out of reach, unlike
+    // a file in a %TEMP% that may be shared.
+    if (Platform.isWindows) ...{
+      'SYSTEM_SSH_ASKPASS_PORT': '${_server!.port}',
+      'SYSTEM_SSH_ASKPASS_TOKEN': _token,
+    },
+  };
 
   /// [exception], or what the answers say happened instead: for a refused
   /// login, the error [_onPrompt] threw, or an [SshLoginCancelledException].
@@ -403,8 +403,8 @@ bool _sameToken(List<int> presented, List<int> token) {
 }
 
 List<int> _utf16le(String text) => [
-      for (final unit in text.codeUnits) ...[unit & 0xff, unit >> 8],
-    ];
+  for (final unit in text.codeUnits) ...[unit & 0xff, unit >> 8],
+];
 
 final _windowsHelper = _windowsCommand
     .replaceAll('@SCRIPT@', base64.encode(_utf16le(_windowsScript)))
@@ -509,25 +509,27 @@ Future<(int, int)?> _readVersion(
 ) async {
   final ProcessResult result;
   try {
-    result = await Process.run(executable, ['-V'], environment: environment)
-        .timeout(const Duration(seconds: 5));
+    result = await Process.run(executable, [
+      '-V',
+    ], environment: environment).timeout(const Duration(seconds: 5));
   } on ProcessException {
     return null;
   } on TimeoutException {
     return null;
   }
-  final match = RegExp(r'OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)')
-      .firstMatch('${result.stderr}${result.stdout}');
+  final match = RegExp(
+    r'OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)',
+  ).firstMatch('${result.stderr}${result.stdout}');
   if (match == null) return null;
   return (int.parse(match[1]!), int.parse(match[2]!));
 }
 
 /// Whether [version] is older than [major].[minor].
 bool _olderThan((int, int)? version, int major, int minor) => switch (version) {
-      (final versionMajor, final versionMinor) =>
-        versionMajor < major || (versionMajor == major && versionMinor < minor),
-      null => false,
-    };
+  (final versionMajor, final versionMinor) =>
+    versionMajor < major || (versionMajor == major && versionMinor < minor),
+  null => false,
+};
 
 /// Whether ssh may ask through `onPrompt` with [config], what `ssh -G` said.
 ///
@@ -650,9 +652,9 @@ final class SshPrompts {
 
   /// No prompts: ssh runs in [environment] with `BatchMode=yes`.
   SshPrompts.none(this.environment)
-      : enabled = false,
-        ownOnly = false,
-        stop = null;
+    : enabled = false,
+      ownOnly = false,
+      stop = null;
 
   final Map<String, String> environment;
 
@@ -672,8 +674,10 @@ final class SshPrompts {
     if (stop == null) return abortTrigger;
     if (abortTrigger == null) return stop;
     return Future.any([
-      abortTrigger.then((_) {},
-          onError: (Object _) => Completer<void>().future),
+      abortTrigger.then(
+        (_) {},
+        onError: (Object _) => Completer<void>().future,
+      ),
       stop,
     ]);
   }

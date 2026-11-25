@@ -37,10 +37,7 @@ void main() {
     test('gives the exit code of a process that exits', () async {
       final process = _FakeProcess()..exit(3);
 
-      expect(
-        await AbortSignal(null).exitCodeOf(process, timeout: _long),
-        3,
-      );
+      expect(await AbortSignal(null).exitCodeOf(process, timeout: _long), 3);
       expect(process.kills, 0);
     });
 
@@ -71,8 +68,9 @@ void main() {
     test('kills a process when aborted', () async {
       final trigger = Completer<void>();
       final process = _FakeProcess();
-      final exitCode =
-          AbortSignal(trigger.future).exitCodeOf(process, timeout: _long);
+      final exitCode = AbortSignal(
+        trigger.future,
+      ).exitCodeOf(process, timeout: _long);
 
       trigger.complete();
 
