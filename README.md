@@ -28,25 +28,25 @@ Future<void> main() async {
 }
 ```
 
-- `SshTarget` takes an optional `port` and `user`; the rest comes from `~/.ssh/config`.
-- `localPort` forwards a fixed port instead of a free one.
-- `bindAddress` has the tunnel listen on another IP address of this
-  computer: on Linux, Docker's bridge `172.17.0.1`, so containers can use
-  it; `0.0.0.0` for every IPv4 network, or `::` for every IPv6 one (a tunnel
-  listens on one or the other). Whatever can reach that address can use the
-  tunnel, with no login of its own, so keep the default `127.0.0.1` unless
-  that's what you want. `openSocketTunnel` and `openSocksProxy` take it too.
-  With Docker Desktop on macOS or Windows, containers reach the default
-  through `host.docker.internal` instead.
-- `onLog` gets what ssh says as an `SshLog` with its `line`: `SshProgress`
-  while it connects, `SshLoginStarted` as it connects to a server, runs a
-  `ProxyCommand` or authenticates, which is when an agent's or a
-  `ProxyCommand`'s prompt may need the app in front, `SshForwardFailed` with ssh's `reason` for a
-  connection through the open tunnel that couldn't be made (Windows' sshd
-  doesn't say), and `SshMessage` for anything else. A failed forward is
-  `SshForwardProhibited` when the server's config forbids it, else
-  `SshForwardUnreachable`. They're information: the tunnel's own
-  failures are thrown, or fail `done`.
+- **`SshTarget`** takes an optional `port` and `user`; the rest comes from
+  `~/.ssh/config`.
+- **`localPort`** forwards a fixed port instead of a free one.
+- **`bindAddress`** listens on another address of this computer instead of
+  `127.0.0.1`: Docker's bridge `172.17.0.1` on Linux, `0.0.0.0` for every
+  IPv4 network or `::` for every IPv6 one. Whatever can reach it can use the
+  tunnel with no login. `openSocketTunnel` and `openSocksProxy` take it too.
+  (Docker Desktop containers reach the default via `host.docker.internal`.)
+- **`onLog`** gets each line ssh writes as an `SshLog`. It's information
+  only: the tunnel's own failures are thrown, or fail `done`.
+  - `SshProgress` while it connects.
+  - `SshLoginStarted` as it connects, runs a `ProxyCommand` or
+    authenticates: when an agent's or `ProxyCommand`'s prompt may need your
+    app in front.
+  - `SshForwardFailed`, with ssh's `reason`, for a connection through the
+    open tunnel that couldn't be made: `SshForwardProhibited` when the
+    server's config forbids it, else `SshForwardUnreachable`. Windows' sshd
+    doesn't report these.
+  - `SshMessage` for anything else.
 
   ```dart
   onLog: (log) => switch (log) {
@@ -56,20 +56,21 @@ Future<void> main() async {
     SshProgress() || SshMessage() => print(log.line),
   },
   ```
-- `onPrompt` answers what ssh asks while it logs in; see
+- **`onPrompt`** answers what ssh asks while it logs in; see
   [Passwords and passphrases](#passwords-and-passphrases).
-- `abortTrigger` gives up while it connects.
-- `tunnel.done` completes once you `close()` the tunnel, and fails with an
-  `SshException` saying why when the connection drops, usually an
+- **`abortTrigger`** gives up while it connects.
+- **`tunnel.done`** completes once you `close()` the tunnel, and fails with
+  an `SshException` saying why when the connection drops, usually an
   `SshDroppedException`.
-- `SystemSshClient(executable: ...)` runs an `ssh` that isn't on the `PATH`.
-- `SystemSshClient(environment: ...)` adds variables to the environment ssh
-  inherits; a bare `executable` is looked up on the `PATH` it sets.
-- `tunnelCommand(...)` and `socksProxyCommand(...)` give the `ssh` command
-  that opens the same tunnel from a terminal, for an app to offer to copy:
+- **`SystemSshClient(executable: ...)`** runs an `ssh` that isn't on the
+  `PATH`.
+- **`SystemSshClient(environment: ...)`** adds variables to ssh's
+  environment; a bare `executable` is looked up on the `PATH` it sets.
+- **`tunnelCommand(...)`** and `socksProxyCommand(...)` give the terminal
+  command for the same tunnel, for an app to offer to copy:
   `ssh -N -L 127.0.0.1:15432:db.example.com:5432 ssh.example.com`.
-- `client.configuredHosts()` lists the hosts named in `~/.ssh/config` and the
-  files it includes, for offering them to pick from.
+- **`client.configuredHosts()`** lists the hosts named in `~/.ssh/config`
+  and the files it includes.
 
 ssh's output and the full command also go to the `system_ssh` logger of
 [`package:logging`](https://pub.dev/packages/logging).
@@ -188,10 +189,9 @@ Dart or Flutter put it next to your app. Nothing is compiled on your machine.
 
 ## Sharing a connection
 
-Each tunnel runs its own ssh, so five tunnels to one server mean five
-logins and five connections: five touches of a hardware key that asks for
-one on each login, or five confirmations from an agent that asks each time
-(`ssh-add -c`). `shareConnections` has tunnels to the same server share one:
+Each tunnel runs its own ssh, so five tunnels to one server mean five logins:
+five hardware-key touches, or five agent confirmations (`ssh-add -c`).
+`shareConnections` has tunnels to the same server share one:
 
 ```dart
 const client = SystemSshClient(shareConnections: true);
@@ -201,32 +201,28 @@ final cache = await client.openTunnel(server, remoteHost: 'cache', remotePort: 6
 // One login for both.
 ```
 
-- The connection is your process's own ssh master, in a private directory.
-  It never uses or becomes a `ControlMaster` from your ssh config, so your
-  terminal sessions are unaffected.
-- It starts with the first tunnel to a server and stops once the last one
-  closes, or with your process, even by a crash.
-- When it drops, every tunnel on it fails `done` together.
-- Two remote tunnels with the same forward, the same local host and port on
-  the same server port or both on one the server picks, can't share it: the
-  second throws an `SshDuplicateForwardException` rather than log in again.
-  Pass another `remotePort`, or reuse the tunnel that's open.
-- Two tunnels can't share the same remote forward (the same `remotePort`, or
-  a server-picked port to the same local one); the second throws.
-- Two tunnels on the same `localPort` but different `bindAddress`es each
-  get the other's `SshForwardFailed`, since ssh names only the port.
-- Windows' OpenSSH can't share a connection, so there each tunnel keeps its
-  own ssh.
+- **Private:** it's your process's own ssh master, in a private directory.
+  It never uses or becomes a `ControlMaster` from your ssh config.
+- **Lifetime:** it starts with the first tunnel to a server and stops when
+  the last one closes, or with your process, even by a crash. When it drops,
+  every tunnel on it fails `done` together.
+- **Same remote forward:** a second remote tunnel with the same forward (the
+  same `remotePort`, or a server-picked port to the same local one) throws
+  an `SshDuplicateForwardException` rather than log in again. Pass another
+  `remotePort`, or reuse the open tunnel.
+- **Same `localPort`:** two tunnels on one `localPort` with different
+  `bindAddress`es each get the other's `SshForwardFailed`, since ssh names
+  only the port.
+- **Windows:** its OpenSSH can't share a connection, so each tunnel keeps
+  its own ssh.
 
 ## Host keys
 
-A terminal asks before it trusts a server it hasn't seen. A tunnel has no
-terminal, so where your ssh config leaves `StrictHostKeyChecking` at `ask`,
-opening one to a host that isn't in `known_hosts` yet throws an
-`SshUnknownHostKeyException` instead. Its `hostKey` says what to show: the
-`host` as `known_hosts` names it, the key's `type` and its `fingerprint`,
-as `ssh-keygen -l` prints them. Once the user has checked the fingerprint,
-`trustHostKey` adds the key to their `known_hosts`, and the tunnel opens:
+A tunnel has no terminal to ask whether to trust a new server. So where your
+config leaves `StrictHostKeyChecking` at `ask`, a host not in `known_hosts` yet
+throws an `SshUnknownHostKeyException`. Show its `hostKey` (`host`, `type`
+and `fingerprint`, as `ssh-keygen -l` prints them), and once the user
+accepts, `trustHostKey` adds it to their `known_hosts`:
 
 ```dart
 Future<SshTunnel> open() => client.openTunnel(
@@ -247,46 +243,39 @@ try {
 }
 ```
 
-- `trustHostKey` connects again to read the key, without logging in, and
-  writes it only if the key ssh gets has the fingerprint you showed; if the
-  server offers another by then, it throws an `SshUnknownHostKeyException`
-  with that one, to ask about instead. ssh writes the
-  entry itself, as `accept-new` would: hashed if your config sets
-  `HashKnownHosts`, under the `HostKeyAlias` or `[host]:port` it checks, in the
-  first `UserKnownHostsFile` (`~/.ssh/known_hosts` by default).
-- From then on the key is known, so a reconnect doesn't ask again.
-- A key that doesn't match `known_hosts` throws an
-  `SshHostKeyChangedException`, from both the tunnel and `trustHostKey`, with
-  the key the server offers now. Nothing is written; the user removes the old
-  key (`ssh-keygen -R <host>`) once they know why it changed.
-- A config that sets `StrictHostKeyChecking` gets what it sets: `yes` fails
-  with an `SshHostKeyRefusedException` in ssh's words, and `accept-new` or `no` connects as
-  ssh does. Set `accept-new` for a host to trust its first key unseen.
-- A host behind a `ProxyCommand` is asked about like any other. A `ProxyJump`
-  host's own key is checked by the ssh it starts, which gets none of these
-  options, so an unknown one fails with ssh's `Host key verification failed.`
-  Connect to it once from a terminal to trust it.
+- **`trustHostKey`** reads the key again without logging in, and writes it
+  only if it still has the fingerprint you showed; otherwise it throws an
+  `SshUnknownHostKeyException` with the new one. ssh writes the entry as
+  `accept-new` would: hashed if your config sets `HashKnownHosts`, under the
+  name ssh checks, in your first `UserKnownHostsFile`. Later connections
+  don't ask again.
+- **A changed key** throws an `SshHostKeyChangedException` with the key
+  offered now, and nothing is written. The user removes the old one
+  (`ssh-keygen -R <host>`) once they know why it changed.
+- **Your config wins:** `StrictHostKeyChecking yes` fails with an
+  `SshHostKeyRefusedException`; `accept-new` or `no` connects as ssh does.
+- **`ProxyJump` hosts** are checked by their own ssh, so an unknown one fails
+  with ssh's `Host key verification failed.` Connect to it once from a
+  terminal. A host behind a `ProxyCommand` is asked about like any other.
 
 ## GUI apps
 
-An app started from the macOS Dock or Finder gets none of what your shell
-profile sets: its `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`. On Linux a
-desktop launcher usually reads `~/.profile`, but not `~/.bashrc`, `~/.zshrc`
-or `~/.zprofile`. A `ProxyCommand` running `cloudflared` or `aws` from
-Homebrew then isn't found, and an `SSH_AUTH_SOCK` exported in your shell
-profile isn't used. Turn on
-`loginShell` to give ssh your login shell's `PATH`, `HOME`, `DISPLAY` and
-`SSH_` variables:
+An app started from the macOS Dock or Finder doesn't get your shell
+profile: its `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`. A Linux desktop
+launcher usually reads `~/.profile` but not `~/.bashrc`, `~/.zshrc` or
+`~/.zprofile`. So a `ProxyCommand` running a Homebrew `cloudflared` isn't
+found, and an `SSH_AUTH_SOCK` from your profile isn't used. `loginShell`
+gives ssh your login shell's `PATH`, `HOME`, `DISPLAY` and `SSH_` variables:
 
 ```dart
 const client = SystemSshClient(loginShell: true);
 ```
 
-It runs your shell on the first tunnel and keeps what it reads for the rest of
-the process. If the shell fails or takes longer than 5 seconds, that tunnel
-goes without and the next one runs the shell again. It does nothing on
-Windows, where apps already get your `PATH`. `environment` adds variables on
-top, and wins on a clash:
+- **Once per process:** it runs your shell on the first tunnel and keeps
+  what it reads. If the shell fails or takes over 5 seconds, that tunnel
+  goes without and the next one tries again.
+- **Windows:** it does nothing, since apps already get your `PATH`.
+- **`environment`** adds variables on top, and wins on a clash:
 
 ```dart
 const client = SystemSshClient(
@@ -297,19 +286,14 @@ const client = SystemSshClient(
 
 ### macOS App Sandbox
 
-A macOS app that uses `system_ssh` has to run without the App Sandbox
-(`com.apple.security.app-sandbox`), which Flutter's macOS template turns on.
-Inside the sandbox, ssh can't read `~/.ssh` or reach your agent.
-
-That rules out the Mac App Store, which requires the sandbox. Ship the app
-signed with a Developer ID and notarized instead.
+Inside the App Sandbox (`com.apple.security.app-sandbox`, on in Flutter's
+macOS template), ssh can't read `~/.ssh` or reach your agent, so turn it
+off. That rules out the Mac App Store: ship with a Developer ID, notarized.
 
 ## Failures
 
-Every failure is an `SshException`, and each class is under one of two
-sealed parents. Catch `SshPermanentException` for a failure that needs the
-user to change something first, and `SshTemporaryException` for one worth
-retrying:
+Every failure is an `SshException`. Catch `SshPermanentException` for one
+the user must fix first, and `SshTemporaryException` for one worth retrying:
 
 ```dart
 try {
@@ -344,15 +328,14 @@ try {
 | `SshLoginCancelledException` | the login failed after `onPrompt` answered null |
 | `ArgumentError` | a host or user ssh could misread, such as `-oProxyCommand=…`, or a `localPort` outside 1 to 65535 |
 
-Each has the `message`, and the `log` of everything ssh wrote and its
-`exitCode` when ssh said why. A `switch` over the classes puts each in your
-own words. A later version may add a class, which breaks a `switch` that names
-every one, so it comes as a breaking release; catching the two groups keeps
-working.
+- **Details:** each has a `message`, and when ssh said why, the `log` of
+  everything it wrote and its `exitCode`.
+- **New classes** come only in a breaking release, since one breaks a
+  `switch` that names every class. Catching the two groups keeps working.
 
 ## Options it sets
 
-`system_ssh` asks `ssh -G` what your config resolves to and only adds what an
+It asks `ssh -G` what your config resolves to, and adds only what an
 unattended tunnel needs:
 
 | Option | When |
@@ -368,30 +351,28 @@ unattended tunnel needs:
 | `ServerAliveInterval=15` | your config sets none |
 | `ForkAfterAuthentication=no` | your config turns it on |
 
-If `ssh -G` fails or takes over 5 seconds, it adds every option above but
-`ForkAfterAuthentication=no`, so a `StrictHostKeyChecking accept-new` or `no`
-in your config becomes `yes`.
-
-The forward or proxy binds `127.0.0.1` unless you pass another
-`bindAddress`, and a remote forward asks the server for its `127.0.0.1`
-only, which it gets unless its sshd sets `GatewayPorts yes`. `close()`, or your process
-exiting, even by a crash, stops ssh and any `ProxyJump` or `ProxyCommand` it
-started.
+- **If `ssh -G` fails** or takes over 5 seconds, it adds every option above
+  but `ForkAfterAuthentication=no`, so `StrictHostKeyChecking accept-new` or
+  `no` in your config becomes `yes`.
+- **Local only:** the forward or proxy binds `127.0.0.1` unless you pass
+  another `bindAddress`. A remote forward asks for the server's `127.0.0.1`,
+  which it gets unless its sshd sets `GatewayPorts yes`.
+- **Dies with you:** `close()`, or your process exiting, even by a crash,
+  stops ssh and any `ProxyJump` or `ProxyCommand` it started.
 
 ## Limits
 
-- A `ProxyJump` host doesn't get these options; ssh doesn't pass them on. So
-  an unknown jump host fails with ssh's own error rather than an
-  `SshUnknownHostKeyException`.
+- A `ProxyJump` host doesn't get these options, so an unknown one fails with
+  ssh's own error, not an `SshUnknownHostKeyException`.
 - Forwards your config sets for the host open too.
 - Without `onPrompt`, a key with a passphrase needs an agent, and password
-  and keyboard-interactive logins fail. A config that sets `BatchMode no`
-  looks like the default, so it doesn't bring prompts back, and one that sets
-  `BatchMode yes` keeps ssh from asking even with `onPrompt`.
+  and keyboard-interactive logins fail. `BatchMode no` in your config looks
+  like the default, so it doesn't bring prompts back; `BatchMode yes` keeps
+  ssh from asking even with `onPrompt`.
 - Before OpenSSH 8.4, a command-line app run from a terminal gets ssh's own
   prompt there, not `onPrompt`.
-- On Windows, a child ssh starts in the instant before it joins its job object
-  can outlive a crash.
+- On Windows, a child that ssh starts in the instant before it joins its job
+  object can outlive a crash.
 
 ## Platforms
 
