@@ -279,6 +279,12 @@ void main() {
       open(onLog: secondLogs.add),
     ]);
     await eventually(() => fake.attemptPid(1));
+    // A line said before a tunnel joins the login never reaches it.
+    await eventually(() {
+      if (firstLogs.isNotEmpty && secondLogs.isNotEmpty) return true;
+      fake.masterSays('debug1: Connecting to ssh.example.com port 22.');
+      return null;
+    });
     logIn();
     await opening;
 
