@@ -1,5 +1,7 @@
 ## Unreleased
 
+- **Breaking:** the package needs Dart 3.10 or newer. Raise your `sdk`
+  constraint to `^3.10.0`, or keep the previous release.
 - `openTunnel`, `openSocketTunnel`, `openRemoteTunnel` and `openSocksProxy`
   take an `onPrompt` that answers what ssh asks while it logs in: a key's
   passphrase without an agent, a password, or the server's own question,
@@ -26,10 +28,9 @@
   Before OpenSSH 8.5, which doesn't mark a
   server's questions, every prompt still comes, as in a terminal, with
   `isVerified` false.
-- **Breaking:** the package needs Dart 3.10 or newer, and has a build hook,
-  so a command-line app that uses it builds with `dart build cli` instead of
-  `dart compile exe`, which refuses packages with build hooks. Raise your
-  `sdk` constraint to `^3.10.0`.
+- **Breaking:** the package has a build hook, so a command-line app that
+  uses it builds with `dart build cli` instead of `dart compile exe`, which
+  refuses packages with build hooks.
 - **Breaking:** `onLog` gets an `SshPromptsOff`, a new kind of `SshLog`, when
   a tunnel has an `onPrompt` but ssh won't ask through it, with the reason,
   such as a `ProxyJump` on Windows without the helper. A refused login then
