@@ -30,8 +30,8 @@ jobs:
       - run: dart pub downgrade && dart pub upgrade --unlock-transitive test lints
       - run: dart analyze --fatal-infos && dart test --exclude-tags integration
 
-  # The shipped Windows helper must be what its source builds to. A failed
-  # run uploads what it built, to commit into windows/.
+  # The shipped Windows helper must be what its source builds to. When it
+  # isn't, the run uploads what it built, and commit-askpass commits it.
   windows-askpass:
     name: windows-askpass (${{ matrix.arch }})
     runs-on: ubuntu-latest
@@ -56,14 +56,65 @@ jobs:
         run: $CC $FLAGS -municode -o $OUT/system_ssh_askpass.exe src/askpass_helper.c -lws2_32
       - name: Build the locator
         run: $CC $FLAGS -shared -o $OUT/system_ssh_askpass_locator.dll src/askpass_locator.c
-      # Lists any file that differs from, or is missing in, the commit.
+      # Lists any file that differs from, or is missing in, the commit. Windows
+      # ignores the executable bit, and an API commit can't set it.
       - name: Check the committed files match
-        run: test -z "$(git status --porcelain windows/ | tee /dev/stderr)"
-      - if: failure()
+        id: check
+        run: test -z "$(git -c core.fileMode=false status --porcelain windows/ | tee /dev/stderr)"
+      - if: failure() && steps.check.outcome == 'failure'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-askpass-${{ matrix.arch }}
           path: ${{ env.OUT }}/
+
+  # Commits a rebuilt helper to the PR's branch, then runs CI on it, since a
+  # commit made with this token starts no workflow. A fork's PR gets no write
+  # token, so its author commits the uploads by hand.
+  commit-askpass:
+    needs: windows-askpass
+    if: >-
+      always() && needs.windows-askpass.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: windows-askpass-*
+          path: built
+      - name: Commit the rebuilt files
+        run: |
+          # Uploads only come from a mismatch, not from a failed build.
+          [ -d built ] || exit 0
+          additions='[]'
+          for file in built/windows-askpass-*/*; do
+            arch=$(basename "$(dirname "$file")"); arch=${arch#windows-askpass-}
+            additions=$(jq -c --arg path "windows/$arch/$(basename "$file")" \
+              --arg contents "$(base64 -w0 "$file")" \
+              '. + [{path: $path, contents: $contents}]' <<<"$additions")
+          done
+          # GitHub signs a commit made through its API, as main's rules require.
+          jq -n --arg repo "$GH_REPO" --arg branch "$BRANCH" --arg head "$HEAD" \
+            --argjson additions "$additions" '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {input: {
+                branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+                expectedHeadOid: $head,
+                message: {headline: "Rebuild the Windows askpass helper"},
+                fileChanges: {additions: $additions}
+              }}
+            }' | gh api graphql --input -
+      - name: Run CI on the new commit
+        run: gh workflow run ci.yml --ref "$BRANCH"
 
   # The oldest supported SDK on each OS; integration runs the newest.
   unit:
