@@ -55,6 +55,7 @@ sealed class SshException implements Exception {
         SshRemotePortRefusedException() => 'SshRemotePortRefusedException',
         SshFailedException() => 'SshFailedException',
         SshTunnelAbortedException() => 'SshTunnelAbortedException',
+        SshLoginCancelledException() => 'SshLoginCancelledException',
       }}: $message';
 }
 
@@ -93,7 +94,8 @@ final class SshNotFoundException extends SshPermanentException {
 /// The user's ssh config for the host stops the tunnel: it sets
 /// `ClearAllForwardings`, ssh can't read it, for a bad option, a syntax error
 /// or the file's owner or permissions, or it allows no algorithm the server
-/// offers (`Unable to negotiate`).
+/// offers (`Unable to negotiate`). It also says when no folder lets an
+/// `onPrompt`'s password prompt run.
 final class SshConfigException extends SshPermanentException {
   /// An error saying, in [message], what in the config stops the tunnel.
   const SshConfigException(super.message, {super.log, super.exitCode});
@@ -282,4 +284,19 @@ final class SshFailedException extends SshTemporaryException {
 final class SshTunnelAbortedException extends SshException {
   /// An error saying the tunnel was aborted.
   const SshTunnelAbortedException() : super('the tunnel was aborted');
+}
+
+/// The `onPrompt` passed to [SshClient.openTunnel],
+/// [SshClient.openSocketTunnel], [SshClient.openRemoteTunnel] or
+/// [SshClient.openSocksProxy] answered null, so ssh gave up the login it was
+/// asking about.
+///
+/// The user chose this, so it's neither temporary nor permanent: open the
+/// tunnel again when they ask. A wrong answer is an
+/// [SshLoginRefusedException] instead.
+final class SshLoginCancelledException extends SshException {
+  /// An error saying the login was cancelled, with what ssh wrote in [log]
+  /// and its [exitCode].
+  const SshLoginCancelledException({super.log, super.exitCode})
+    : super('the login was cancelled');
 }

@@ -13,6 +13,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => throw SshNotFoundException();
 
@@ -23,6 +24,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) => throw UnimplementedError();
 
@@ -33,6 +35,7 @@ final class _FakeSshClient implements SshClient {
     required int localPort,
     int? remotePort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) => throw UnimplementedError();
 
@@ -42,6 +45,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) => throw UnimplementedError();
 

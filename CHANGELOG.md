@@ -1,7 +1,26 @@
 ## Unreleased
 
-- **Breaking:** the package needs Dart 3.10 or newer. Raise your `sdk`
-  constraint to `^3.10.0`, or keep the previous release.
+- The `open*` methods take an `onPrompt` that answers what ssh asks while it
+  logs in: a key's passphrase, a password, or a 2FA code. Answer null to
+  cancel. Without it, nothing changes. See the README's "Passwords and
+  passphrases".
+
+  ```dart
+  onPrompt: (prompt) => switch (prompt) {
+    SshPassphrasePrompt(:final keyPath) => askForPassphrase(keyPath),
+    SshPasswordPrompt() || SshCodePrompt() => askFor(prompt.text),
+  },
+  ```
+- **Breaking:** the package needs Dart 3.10 or newer: raise your `sdk`
+  constraint to `^3.10.0`.
+- **Breaking:** a command-line app builds with `dart build cli` instead of
+  `dart compile exe`, which refuses packages with build hooks. Flutter,
+  `dart run` and `dart test` are unaffected.
+- **Breaking:** new classes for a `switch` that names every one:
+  `SshPromptsOff`, an `SshLog` saying why ssh can't ask, and
+  `SshLoginCancelledException`, thrown after a cancelled prompt.
+- **Breaking:** a class that implements `SshClient`, such as a test fake,
+  adds `SshPromptHandler? onPrompt` to its four `open*` methods.
 
 ## 0.11.0
 

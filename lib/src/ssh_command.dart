@@ -55,12 +55,15 @@ void checkSocketPath(String path, String name) {
 ///
 /// With a [masterSocket], ssh serves the forwards `-O forward` adds there,
 /// for this process alone; without one, it serves nothing but [forward].
+///
+/// With [prompts], ssh may ask through `SSH_ASKPASS`, which the caller sets.
 List<String> sshCommand(
   SshTarget server, {
   required Forward? forward,
   Map<String, String> config = const {},
   String executable = 'ssh',
   String? masterSocket,
+  bool prompts = false,
 }) {
   bool isDefault(String name, String value) =>
       config.isEmpty || config[name] == value;
@@ -84,7 +87,7 @@ List<String> sshCommand(
       'ControlPath=none',
     ],
     // No terminal answers a password prompt here; fail instead of waiting.
-    if (isDefault('batchmode', 'no')) ...['-o', 'BatchMode=yes'],
+    if (!prompts && isDefault('batchmode', 'no')) ...['-o', 'BatchMode=yes'],
     // No terminal answers ssh's unknown-host prompt; the caller asks instead.
     if (isDefault('stricthostkeychecking', 'ask')) ...[
       '-o',

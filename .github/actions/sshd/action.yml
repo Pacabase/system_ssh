@@ -1,10 +1,13 @@
 name: 'Start sshd'
-description: 'An sshd on 127.0.0.1 that accepts a fresh key of the runner user, for the integration tests.'
+description: 'An sshd on 127.0.0.1 that accepts a fresh key of the runner user, and the password of a throwaway user, for the integration tests.'
 
 inputs:
   port:
     description: 'The port sshd listens on.'
     default: '2222'
+  password:
+    description: "The password of sshtest, a throwaway user the sshd lets log in."
+    default: 'Correct-Horse-Staple-42'
 
 outputs:
   log:
@@ -14,12 +17,13 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    # Runs as the runner user on a high port, so it needs no root.
+    # Runs as root, as a server's sshd does, so it can check passwords.
     - id: unix
       if: runner.os != 'Windows'
       shell: bash
       env:
         PORT: ${{ inputs.port }}
+        PASSWORD: ${{ inputs.password }}
       run: |
         dir="$RUNNER_TEMP/sshd"
         mkdir -p "$dir" ~/.ssh
@@ -29,14 +33,39 @@ runs:
         # A second key the sshd lets forward only to 127.0.0.1:9, so a test sees a forward it forbids.
         [ -f ~/.ssh/id_ed25519_no_forwarding ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519_no_forwarding
         echo "permitopen=\"127.0.0.1:9\" $(cat ~/.ssh/id_ed25519_no_forwarding.pub)" >> "$dir/authorized_keys"
+        # A key with a passphrase, which ssh asks for through SSH_ASKPASS.
+        [ -f ~/.ssh/id_ed25519_passphrase ] || ssh-keygen -q -t ed25519 -N 'correct-horse-battery' -f ~/.ssh/id_ed25519_passphrase
+        cat ~/.ssh/id_ed25519_passphrase.pub >> "$dir/authorized_keys"
+        # A throwaway user that logs in with a password.
+        if [ "$(uname)" = Darwin ]; then
+          if ! id sshtest >/dev/null 2>&1; then
+            sudo dscl . -create /Users/sshtest
+            sudo dscl . -create /Users/sshtest UserShell /bin/zsh
+            sudo dscl . -create /Users/sshtest UniqueID 5001
+            sudo dscl . -create /Users/sshtest PrimaryGroupID 20
+            sudo dscl . -create /Users/sshtest NFSHomeDirectory /Users/sshtest
+            sudo createhomedir -c -u sshtest >/dev/null
+          fi
+          sudo dscl . -passwd /Users/sshtest "$PASSWORD"
+          # sshd's PAM lets in only this group's members, once the group exists.
+          if dscl . -read /Groups/com.apple.access_ssh >/dev/null 2>&1; then
+            sudo dseditgroup -o edit -a sshtest -t user com.apple.access_ssh
+          fi
+          dscl . -authonly sshtest "$PASSWORD"
+        else
+          id sshtest >/dev/null 2>&1 || sudo useradd --create-home sshtest
+          echo "sshtest:$PASSWORD" | sudo chpasswd
+          sudo mkdir -p /run/sshd
+        fi
         options=(-o "Port=$PORT" -o ListenAddress=127.0.0.1 -o "HostKey=$dir/host_key"
           -o "AuthorizedKeysFile=$dir/authorized_keys" -o "PidFile=$dir/sshd.pid"
-          -o StrictModes=no -o UsePAM=no)
+          -o StrictModes=no -o UsePAM=yes -o PasswordAuthentication=yes
+          -o KbdInteractiveAuthentication=yes)
         # OpenSSH 9.8+ penalises clients that drop before logging in, as some tests do.
-        if /usr/sbin/sshd -t -f /dev/null "${options[@]}" -o PerSourcePenalties=no 2>/dev/null; then
+        if sudo /usr/sbin/sshd -t -f /dev/null "${options[@]}" -o PerSourcePenalties=no 2>/dev/null; then
           options+=(-o PerSourcePenalties=no)
         fi
-        /usr/sbin/sshd -f /dev/null -E "$dir/sshd.log" "${options[@]}"
+        sudo /usr/sbin/sshd -f /dev/null -E "$dir/sshd.log" "${options[@]}"
         echo "log=$dir/sshd.log" >> "$GITHUB_OUTPUT"
 
     # Windows ships OpenSSH Server as a service; it reads an administrator's keys from ProgramData only.
@@ -45,6 +74,7 @@ runs:
       shell: pwsh
       env:
         PORT: ${{ inputs.port }}
+        PASSWORD: ${{ inputs.password }}
       run: |
         $ErrorActionPreference = 'Stop'
         if (-not (Get-Service sshd -ErrorAction SilentlyContinue)) {
@@ -60,10 +90,24 @@ runs:
         # A second key the sshd lets forward only to 127.0.0.1:9, so a test sees a forward it forbids.
         if (-not (Test-Path ~/.ssh/id_ed25519_no_forwarding)) { ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519_no_forwarding }
         Add-Content $keys ('permitopen="127.0.0.1:9" ' + (Get-Content ~/.ssh/id_ed25519_no_forwarding.pub))
+        # A key with a passphrase, which ssh asks for through SSH_ASKPASS.
+        if (-not (Test-Path ~/.ssh/id_ed25519_passphrase)) { ssh-keygen -q -t ed25519 -N 'correct-horse-battery' -f ~/.ssh/id_ed25519_passphrase }
+        Add-Content $keys (Get-Content ~/.ssh/id_ed25519_passphrase.pub)
         icacls $keys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' | Out-Null
         $config = "$env:ProgramData\ssh\sshd_config"
         (Get-Content $config) -replace '^#?Port .*', "Port $env:PORT" `
           -replace '^#?ListenAddress 0\.0\.0\.0', 'ListenAddress 127.0.0.1' `
-          -replace '^#?SyslogFacility .*', 'SyslogFacility LOCAL0' | Set-Content $config
+          -replace '^#?SyslogFacility .*', 'SyslogFacility LOCAL0' `
+          -replace '^(AllowGroups .*)$', '$1 sshtesters' | Set-Content $config
+        # A throwaway user that logs in with a password.
+        if (-not (Get-LocalUser sshtest -ErrorAction SilentlyContinue)) {
+          New-LocalUser sshtest -Password (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force) -PasswordNeverExpires | Out-Null
+          # The runner's sshd_config may let in only the groups AllowGroups names.
+          New-LocalGroup sshtesters | Out-Null
+          Add-LocalGroupMember sshtesters -Member sshtest
+          # Its first logon makes its profile, which takes longer than a test waits.
+          $credential = [pscredential]::new('sshtest', (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force))
+          Start-Process cmd.exe -ArgumentList '/c', 'exit' -Credential $credential -LoadUserProfile -Wait -WorkingDirectory $env:SystemRoot
+        }
         Start-Service sshd
         "log=$env:ProgramData\ssh\logs\sshd.log" >> $env:GITHUB_OUTPUT

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'abort_signal.dart';
+import 'askpass.dart';
 import 'config_hosts.dart';
 import 'exceptions.dart';
 import 'forwards.dart';
@@ -17,6 +18,7 @@ import 'ssh_config.dart';
 import 'ssh_host_key.dart';
 import 'ssh_log.dart';
 import 'ssh_output.dart';
+import 'ssh_prompt.dart';
 import 'ssh_target.dart';
 import 'system_ssh_tunnel.dart';
 
@@ -104,6 +106,7 @@ final class SystemSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => openSystemForward(
     server,
@@ -111,6 +114,7 @@ final class SystemSshClient implements SshClient {
     bindAddress: bindAddress,
     localPort: localPort,
     onLog: onLog,
+    onPrompt: onPrompt,
     abortTrigger: abortTrigger,
     executable: executable,
     environment: await _sshEnvironment(),
@@ -124,6 +128,7 @@ final class SystemSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => openSystemForward(
     server,
@@ -131,6 +136,7 @@ final class SystemSshClient implements SshClient {
     bindAddress: bindAddress,
     localPort: localPort,
     onLog: onLog,
+    onPrompt: onPrompt,
     abortTrigger: abortTrigger,
     executable: executable,
     environment: await _sshEnvironment(),
@@ -144,6 +150,7 @@ final class SystemSshClient implements SshClient {
     required int localPort,
     int? remotePort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => openSystemRemoteForward(
     server,
@@ -151,6 +158,7 @@ final class SystemSshClient implements SshClient {
     localPort: localPort,
     remotePort: remotePort,
     onLog: onLog,
+    onPrompt: onPrompt,
     abortTrigger: abortTrigger,
     executable: executable,
     environment: await _sshEnvironment(),
@@ -163,6 +171,7 @@ final class SystemSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => openSystemForward(
     server,
@@ -170,6 +179,7 @@ final class SystemSshClient implements SshClient {
     bindAddress: bindAddress,
     localPort: localPort,
     onLog: onLog,
+    onPrompt: onPrompt,
     abortTrigger: abortTrigger,
     executable: executable,
     environment: await _sshEnvironment(),
@@ -224,6 +234,7 @@ Future<SshTunnel> openSystemForward(
   String bindAddress = '127.0.0.1',
   int? localPort,
   void Function(SshLog log)? onLog,
+  SshPromptHandler? onPrompt,
   Future<void>? abortTrigger,
   String executable = 'ssh',
   Map<String, String> environment = const {},
@@ -266,11 +277,12 @@ Future<SshTunnel> openSystemForward(
       environment: environment,
       config: config,
       onLog: onLog,
+      onPrompt: onPrompt,
       abortTrigger: abortTrigger,
     ),
   );
 
-  Future<SshTunnel> start(int port) async {
+  Future<SshTunnel> start(int port, SshPrompts prompts) async {
     if (shared != null) {
       final (handle, _) = await shared.forward(
         forward(port),
@@ -289,21 +301,22 @@ Future<SshTunnel> openSystemForward(
       forward: forward(port),
       config: config,
       executable: ssh,
+      prompts: prompts.enabled,
     );
     logger.info(command.join(' '));
 
     return notFoundOn127(
       () async => SystemSshTunnel.attach(
-        await startWatched(command, environment: environment),
+        await startWatched(command, environment: prompts.environment),
         localPort: port,
         bindAddress: bindAddress,
         onLog: onLog,
-        abortTrigger: abortTrigger,
+        abortTrigger: prompts.stopOr(abortTrigger),
       ),
     );
   }
 
-  Future<SshTunnel> open() async {
+  Future<SshTunnel> open(SshPrompts prompts) async {
     if (localPort != null) {
       abort.throwIfAborted();
       if (!await isFree(localPort)) {
@@ -312,7 +325,7 @@ Future<SshTunnel> openSystemForward(
       abort.throwIfAborted();
 
       try {
-        return await start(localPort);
+        return await start(localPort, prompts);
       } on SshTemporaryException catch (exception) {
         // A host key or a login that failed isn't about the port, nor is a
         // failure without ssh's exit.
@@ -328,7 +341,7 @@ Future<SshTunnel> openSystemForward(
       abort.throwIfAborted();
 
       try {
-        return await start(port);
+        return await start(port, prompts);
       } on SshTemporaryException catch (exception) {
         // Another process can take the port before ssh binds it.
         if (exception.exitCode == null || attempt == 3 || await isFree(port)) {
@@ -339,7 +352,19 @@ Future<SshTunnel> openSystemForward(
   }
 
   try {
-    return await checkingHostKeys(config, open);
+    if (shared != null) {
+      return await checkingHostKeys(
+        config,
+        () => open(SshPrompts.none(environment)),
+      );
+    }
+    return await withPrompts(
+      onPrompt,
+      executable: ssh,
+      environment: environment,
+      onLog: onLog,
+      open: (prompts) => checkingHostKeys(config, () => open(prompts)),
+    );
   } finally {
     shared?.release();
   }
@@ -352,6 +377,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
   required int localPort,
   int? remotePort,
   void Function(SshLog log)? onLog,
+  SshPromptHandler? onPrompt,
   Future<void>? abortTrigger,
   String executable = 'ssh',
   Map<String, String> environment = const {},
@@ -389,6 +415,7 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
         environment: environment,
         config: config,
         onLog: onLog,
+        onPrompt: onPrompt,
         abortTrigger: abortTrigger,
       ),
     );
@@ -413,24 +440,33 @@ Future<SshRemoteTunnel> openSystemRemoteForward(
     }
   }
 
-  final command = sshCommand(
-    server,
-    forward: forward,
-    config: config,
+  return withPrompts(
+    onPrompt,
     executable: ssh,
-  );
-  logger.info(command.join(' '));
+    environment: environment,
+    onLog: onLog,
+    open: (prompts) {
+      final command = sshCommand(
+        server,
+        forward: forward,
+        config: config,
+        executable: ssh,
+        prompts: prompts.enabled,
+      );
+      logger.info(command.join(' '));
 
-  return checkingHostKeys(
-    config,
-    () => notFoundOn127(
-      () async => SystemSshRemoteTunnel.attach(
-        await startWatched(command, environment: environment),
-        readiness: RemoteForwardReadiness(forward),
-        onLog: onLog,
-        abortTrigger: abortTrigger,
-      ),
-    ),
+      return checkingHostKeys(
+        config,
+        () => notFoundOn127(
+          () async => SystemSshRemoteTunnel.attach(
+            await startWatched(command, environment: prompts.environment),
+            readiness: RemoteForwardReadiness(forward),
+            onLog: onLog,
+            abortTrigger: prompts.stopOr(abortTrigger),
+          ),
+        ),
+      );
+    },
   );
 }
 

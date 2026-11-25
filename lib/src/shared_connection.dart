@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'abort_signal.dart';
+import 'askpass.dart';
 import 'exceptions.dart';
 import 'forwards.dart';
 import 'logger.dart';
@@ -10,6 +11,7 @@ import 'processes.dart';
 import 'ssh_command.dart';
 import 'ssh_log.dart';
 import 'ssh_output.dart';
+import 'ssh_prompt.dart';
 import 'ssh_target.dart';
 import 'system_ssh_tunnel.dart';
 
@@ -31,17 +33,21 @@ final class ConnectionPool {
   final _connections = <String, _Connection>{};
 
   /// A hold on the master for [server], started first unless one is up.
-  /// [onLog] gets its lines while it connects. Release it once its forwards
-  /// are added; each forward holds the master until it closes.
+  /// [onLog] gets its lines while it connects, and [onPrompt] what it asks
+  /// when this hold starts it. Release it once its forwards are added; each
+  /// forward holds the master until it closes.
   Future<SharedConnection> connect(
     SshTarget server, {
     required String executable,
     required Map<String, String> environment,
     required Map<String, String> config,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async {
     final key = [
+      // A master that can't ask would fail a login this tunnel could answer.
+      if (onPrompt != null) 'prompts',
       executable,
       server.host,
       '${server.port}',
@@ -59,6 +65,7 @@ final class ConnectionPool {
         server,
         executable: executable,
         environment: environment,
+        onPrompt: onPrompt,
       );
       _connections[key] = connection;
       connection.start(config);
@@ -101,6 +108,7 @@ final class _Connection {
     this._server, {
     required this.executable,
     required this.environment,
+    this.onPrompt,
   });
 
   final ConnectionPool _pool;
@@ -108,6 +116,7 @@ final class _Connection {
   final SshTarget _server;
   final String executable;
   final Map<String, String> environment;
+  final SshPromptHandler? onPrompt;
 
   final _ready = Completer<void>();
   final _abortStart = Completer<void>();
@@ -153,28 +162,39 @@ final class _Connection {
 
   Future<void> _start(Map<String, String> config) async {
     _directory = _masterDirectory();
-    final command = sshCommand(
-      _server,
-      forward: null,
-      config: config,
-      executable: executable,
-      masterSocket: _socket,
-    );
-    logger.info(command.join(' '));
+    void toWaiting(SshLog log) {
+      for (final onLog in [..._waiting]) {
+        reportTo(onLog, log);
+      }
+    }
 
-    final master = await notFoundOn127(
-      () async => ForwardProcess.attach(
-        await startWatched(command, environment: environment),
-        readiness: MasterReadiness(),
-        describe: () => 'the shared connection to ${_server.host}',
-        onLog: (log) {
-          for (final onLog in [..._waiting]) {
-            reportTo(onLog, log);
-          }
-        },
-        onLineAfterReady: _route,
-        abortTrigger: _abortStart.future,
-      ),
+    final master = await withPrompts(
+      onPrompt,
+      executable: executable,
+      environment: environment,
+      onLog: toWaiting,
+      open: (prompts) {
+        final command = sshCommand(
+          _server,
+          forward: null,
+          config: config,
+          executable: executable,
+          masterSocket: _socket,
+          prompts: prompts.enabled,
+        );
+        logger.info(command.join(' '));
+
+        return notFoundOn127(
+          () async => ForwardProcess.attach(
+            await startWatched(command, environment: prompts.environment),
+            readiness: MasterReadiness(),
+            describe: () => 'the shared connection to ${_server.host}',
+            onLog: toWaiting,
+            onLineAfterReady: _route,
+            abortTrigger: prompts.stopOr(_abortStart.future),
+          ),
+        );
+      },
     );
     _master = master;
     unawaited(master.done.then((_) {}, onError: _dropped));

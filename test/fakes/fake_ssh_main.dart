@@ -4,8 +4,11 @@ import 'dart:io';
 
 /// How the fake plays one tunnel attempt. `hang` connects forever, saying
 /// nothing; `held`, for a master, says only what a test has it say, so the
-/// test finishes its login.
+/// test finishes its login, or ends it with [sayExit].
 enum AttemptMode { ready, fail, notFound, bindFailure, hang, held }
+
+/// A line a test has a master say to exit with the code after it.
+const sayExit = '<exit>';
 
 /// How the fake's server key plays, before any [AttemptMode]: `unknown` until
 /// the fake's own `known_hosts` holds [fakeHostKeyEntry], `changed`, or
@@ -168,6 +171,10 @@ Future<void> _run(List<String> steps) async {
           final file = File(value);
           final lines = file.existsSync() ? file.readAsLinesSync() : <String>[];
           for (final line in lines.skip(said)) {
+            if (line.startsWith(sayExit)) {
+              await stderr.flush();
+              exit(int.parse(line.substring(sayExit.length)));
+            }
             stderr.writeln(line);
           }
           said = lines.length;
@@ -193,6 +200,11 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       file(name).existsSync() ? file(name).readAsStringSync() : null;
 
   file('pids').writeAsStringSync('$pid\n', mode: FileMode.append);
+
+  if (arguments.first == '-V') {
+    stderr.writeln(read('version') ?? 'OpenSSH_9.9p1, LibreSSL 3.3.6');
+    return _run([]);
+  }
 
   if (arguments.first == '-G') {
     file('config_argv').writeAsStringSync(arguments.join('\n'));
@@ -234,6 +246,13 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       .map(AttemptMode.values.byName)
       .toList();
   final mode = attempt <= modes.length ? modes[attempt - 1] : modes.last;
+
+  if (!await _ask(directory, arguments)) {
+    return _run([
+      'err:user@ssh.example.com: Permission denied (publickey,password).',
+      'exit:255',
+    ]);
+  }
 
   final knownHosts = read('known_hosts') ?? '';
   final hostKeyMode = switch (read('host_key_mode')) {
@@ -346,6 +365,48 @@ Future<void> _ssh(String directory, List<String> arguments) async {
       'exit:255',
     ],
   });
+}
+
+/// Asks each prompt in the `prompts` file through `SSH_ASKPASS`, as ssh does,
+/// and records what came back in `answers`, one line per prompt: the answer,
+/// or `<cancelled>` for a non-zero exit. Each line of `prompts` is the answer
+/// to expect, a tab, then the prompt; an empty expectation takes any answer.
+/// Like ssh, it asks nothing under `BatchMode=yes`, or without
+/// `SSH_ASKPASS_REQUIRE=force` and a `DISPLAY`, and goes on to the next
+/// prompt after a cancelled or wrong one, as ssh goes on to its next key or
+/// method. Whether every answer was the expected one.
+Future<bool> _ask(String directory, List<String> arguments) async {
+  final prompts = File('$directory/prompts');
+  if (!prompts.existsSync()) return true;
+
+  final environment = Platform.environment;
+  final helper = environment['SSH_ASKPASS'];
+  final mayAsk =
+      helper != null &&
+      !arguments.contains('BatchMode=yes') &&
+      (environment['SSH_ASKPASS_REQUIRE'] == 'force' ||
+          environment['DISPLAY'] != null);
+  if (!mayAsk) return false;
+
+  var allAnswered = true;
+  for (final line in prompts.readAsLinesSync()) {
+    final tab = line.indexOf('\t');
+    final expected = line.substring(0, tab);
+    final prompt = line.substring(tab + 1);
+
+    // ssh reads the answer as bytes, not in the system's code page.
+    final result = await Process.run(helper, [prompt], stdoutEncoding: utf8);
+    // ssh takes the answer up to its first line break.
+    final answered = '${result.stdout}'.split(RegExp('[\r\n]')).first;
+    File('$directory/answers').writeAsStringSync(
+      '${result.exitCode == 0 ? answered : '<cancelled>'}\n',
+      mode: FileMode.append,
+    );
+    if (result.exitCode != 0 || (expected.isNotEmpty && answered != expected)) {
+      allAnswered = false;
+    }
+  }
+  return allAnswered;
 }
 
 /// The ssh that reads a host key to trust it: records its arguments as

@@ -71,6 +71,42 @@ final class SshFixture {
   /// 127.0.0.1:9, which `.github/actions/sshd` sets up.
   SshTarget get noForwardingTarget => const SshTarget('no-forwarding');
 
+  /// Same server, logged in only with a key whose passphrase is
+  /// [keyPassphrase], which `.github/actions/sshd` sets up.
+  SshTarget get passphraseTarget => const SshTarget('passphrase-key');
+
+  /// Like [passphraseTarget], but ssh asks for the passphrase only once.
+  SshTarget get passphraseOnceTarget => const SshTarget('passphrase-key-once');
+
+  /// [passphraseTarget] reached through a `ProxyJump` to itself, so both
+  /// hops ask for the passphrase.
+  SshTarget get passphraseJumpTarget => const SshTarget('passphrase-jump');
+
+  /// Why the password tests can't run here, or null when they can.
+  String? get passwordSkip => password == null
+      ? 'Needs the password CI sets (SSH_TEST_PASSWORD)'
+      : skip;
+
+  /// The user `sshtest`, which logs in only with [password].
+  SshTarget get passwordTarget => const SshTarget('password');
+
+  /// Like [passwordTarget], but the server asks for the password itself,
+  /// through keyboard-interactive, as it would for a 2FA code.
+  SshTarget get keyboardInteractiveTarget =>
+      const SshTarget('keyboard-interactive');
+
+  /// [passwordTarget]'s password.
+  String? get password => Platform.environment['SSH_TEST_PASSWORD'];
+
+  /// [passphraseTarget]'s key file.
+  String get passphraseKeyPath =>
+      '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}'
+      '${Platform.pathSeparator}.ssh${Platform.pathSeparator}'
+      'id_ed25519_passphrase';
+
+  /// The passphrase of [passphraseTarget]'s key.
+  String get keyPassphrase => 'correct-horse-battery';
+
   /// Same server, but `StrictHostKeyChecking yes` in the config.
   SshTarget get strictTarget => const SshTarget('strict-host-keys');
 
@@ -131,6 +167,10 @@ final class SshFixture {
       r'\',
       '/',
     );
+    final passphraseKey = '$home/.ssh/id_ed25519_passphrase'.replaceAll(
+      r'\',
+      '/',
+    );
     String agentHost(String name, String? agent) =>
         '''
 Host $name
@@ -169,6 +209,42 @@ Host no-forwarding
   Port $_port
   IdentityFile $restrictedKey
   IdentitiesOnly yes
+  IdentityAgent none
+  UserKnownHostsFile $knownHosts
+
+Host passphrase-key-once
+  NumberOfPasswordPrompts 1
+
+Host passphrase-key passphrase-key-once
+  HostName 127.0.0.1
+  Port $_port
+  IdentityFile $passphraseKey
+  IdentitiesOnly yes
+  IdentityAgent none
+  PreferredAuthentications publickey
+  UserKnownHostsFile $knownHosts
+
+Host passphrase-jump
+  HostName 127.0.0.1
+  Port $_port
+  ProxyJump passphrase-key
+  IdentityFile $passphraseKey
+  IdentitiesOnly yes
+  IdentityAgent none
+  PreferredAuthentications publickey
+  UserKnownHostsFile $knownHosts
+
+Host password
+  PreferredAuthentications password
+
+Host keyboard-interactive
+  PreferredAuthentications keyboard-interactive
+
+Host password keyboard-interactive
+  HostName 127.0.0.1
+  Port $_port
+  User sshtest
+  PubkeyAuthentication no
   IdentityAgent none
   UserKnownHostsFile $knownHosts
 
@@ -429,6 +505,8 @@ final _harmlessLines = [
     r'^No \S+ host key is known for \S+ and you have requested strict '
     r'checking\.$',
   ),
+  // A wrong password, before ssh asks again.
+  RegExp(r'^Permission denied, please try again\.$'),
   // An IdentityFile that doesn't exist, which ssh skips.
   RegExp(r'^no such identity: .+: No such file or directory$'),
   // Windows' ssh, as UpdateHostKeys learns the server's other keys.

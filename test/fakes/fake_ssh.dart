@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-import 'fake_ssh_main.dart' show AttemptMode, HostKeyMode, TrustMode;
+import 'fake_ssh_main.dart' show AttemptMode, HostKeyMode, TrustMode, sayExit;
 import 'fakes.dart';
 
 export 'fake_ssh_main.dart'
@@ -46,6 +46,25 @@ final class FakeSsh {
   void answerConfig(List<String> lines) =>
       _file('config').writeAsStringSync(lines.map((line) => '$line\n').join());
 
+  /// Has each tunnel attempt ask [prompts] through `SSH_ASKPASS`, in order,
+  /// before it plays its mode, and fail the login unless each answer is the
+  /// prompt's value; a null value takes any answer.
+  void asks(Map<String, String?> prompts) => _file('prompts').writeAsStringSync(
+    prompts.entries
+        .map((prompt) => '${prompt.value ?? ''}\t${prompt.key}\n')
+        .join(),
+  );
+
+  /// What each prompt [asks] got back through `SSH_ASKPASS`, in order: the
+  /// answer, or `<cancelled>`.
+  List<String> get answers {
+    final file = _file('answers');
+    return file.existsSync() ? file.readAsLinesSync() : const [];
+  }
+
+  /// Has `ssh -V` say [line].
+  void version(String line) => _file('version').writeAsStringSync(line);
+
   /// Has `ssh -G` hang.
   void hangOnConfig() => _file('config_mode').writeAsStringSync('hang');
 
@@ -87,6 +106,12 @@ final class FakeSsh {
   /// Has a master that is up write [line] to its stderr.
   void masterSays(String line) =>
       _file('master_say').writeAsStringSync('$line\n', mode: FileMode.append);
+
+  /// Has a master that is up exit with [code], after what it was told to say.
+  void masterExits(int code) => masterSays('$sayExit$code');
+
+  /// Forgets what masters were told to say, so the next one starts afresh.
+  void forgetMasterSays() => _file('master_say').writeAsStringSync('');
 
   /// The arguments of each `ssh -O` command, in order.
   List<List<String>> get muxCommands => [

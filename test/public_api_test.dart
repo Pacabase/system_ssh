@@ -36,6 +36,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => _FakeTunnel(localPort ?? 50000);
 
@@ -46,6 +47,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => _FakeTunnel(localPort ?? 50002);
 
@@ -56,6 +58,7 @@ final class _FakeSshClient implements SshClient {
     required int localPort,
     int? remotePort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => _FakeRemoteTunnel(remotePort ?? 41234);
 
@@ -65,6 +68,7 @@ final class _FakeSshClient implements SshClient {
     String bindAddress = '127.0.0.1',
     int? localPort,
     void Function(SshLog log)? onLog,
+    SshPromptHandler? onPrompt,
     Future<void>? abortTrigger,
   }) async => _FakeTunnel(localPort ?? 50001);
 
@@ -135,6 +139,7 @@ void main() {
       SshMessage(:final line) => 'message: $line',
       SshForwardUnreachable(:final line, :final reason) => '$reason: $line',
       SshForwardProhibited(:final line) => 'forbidden: $line',
+      SshPromptsOff(:final reason) => 'no prompts: $reason',
     };
 
     expect(
@@ -149,6 +154,7 @@ void main() {
         const SshForwardProhibited(
           'channel 3: open failed: administratively prohibited: open failed',
         ),
+        const SshPromptsOff('ssh -G could not read the config'),
       ].map(describe),
       [
         startsWith('progress: '),
@@ -156,6 +162,7 @@ void main() {
         startsWith('message: '),
         startsWith('Connection refused: '),
         startsWith('forbidden: '),
+        'no prompts: ssh -G could not read the config',
       ],
     );
   });
@@ -323,6 +330,7 @@ void main() {
       SshRemotePortRefusedException(:final port) => 'server port $port',
       SshFailedException() => 'failed',
       SshTunnelAbortedException() => 'aborted',
+      SshLoginCancelledException() => 'cancelled',
     };
 
     expect(reason(const SshPortInUseException(5432)), 'port 5432 in use');
@@ -330,6 +338,29 @@ void main() {
       reason(const SshRemotePortRefusedException('refused', port: 8080)),
       'server port 8080',
     );
+  });
+
+  test('lets a switch name every prompt', () {
+    String ask(SshPrompt prompt) => switch (prompt) {
+      SshPassphrasePrompt(:final keyPath) => 'passphrase for $keyPath',
+      SshPasswordPrompt() => 'password',
+      SshCodePrompt(:final text) => 'code: $text',
+    };
+
+    expect(
+      ask(const SshPassphrasePrompt('Enter passphrase', keyPath: '/k')),
+      'passphrase for /k',
+    );
+    expect(ask(const SshPasswordPrompt("a@b's password: ")), 'password');
+    expect(ask(const SshCodePrompt('Code: ')), 'code: Code: ');
+  });
+
+  test('tells a prompt ssh can vouch for from one it cannot', () {
+    const unverified = SshPasswordPrompt("a@b's password: ", isVerified: false);
+
+    expect(const SshPasswordPrompt("a@b's password: ").isVerified, isTrue);
+    expect(unverified.isVerified, isFalse);
+    expect(unverified, isNot(const SshPasswordPrompt("a@b's password: ")));
   });
 
   test('acts out an unknown host key and trusts it', () async {
