@@ -1,0 +1,27 @@
+name: OpenSSH releases
+
+# Opens an issue when OpenSSH or Win32-OpenSSH has a release CI's openssh job
+# doesn't test yet, with the matrix line to add. An issue rather than a pull
+# request, since one this workflow opened wouldn't run CI.
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: .github/actions/openssh/releases.sh

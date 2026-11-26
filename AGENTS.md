@@ -23,7 +23,7 @@ Every change must keep these promises:
 
 - **Unit tests** run everywhere. They use the fake `ssh` in `test/fakes/`, compiled to an executable, that plays a scripted attempt (ready, fail, not found, bind failure). Cover the happy path, every failure path and the edge cases: aborting while connecting, a drop, closing twice.
 - **Integration tests** are tagged `integration` and run only in CI (`SSH_TEST_PORT` set), against a real `sshd` started by `.github/actions/sshd`. Anything that depends on how real ssh behaves gets one.
-- **Another OpenSSH release** is one line in the `openssh` job's matrix in `ci.yml`: the version and its tarball's SHA-256, from the release's signed tarball. `.github/actions/openssh` builds it.
+- **Another OpenSSH release** is one line in the `openssh` job's matrix in `ci.yml`: the version and its tarball's SHA-256, from the release's signed tarball. `.github/actions/openssh` builds it. The daily `openssh-releases` workflow opens an issue with that line when a release comes out.
 
 ## Changes and releases
 
