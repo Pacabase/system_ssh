@@ -56,7 +56,7 @@ check_openssh() {
 Add it to the \`openssh\` job's matrix in \`.github/workflows/ci.yml\`, and to the README's Platforms table:
 
 \`\`\`yaml
-- { name: $version, os: ubuntu-24.04, version: $version, sha256: $sha256 }
+- { version: $version, sha256: $sha256 }
 \`\`\`
 
 Release notes: https://www.openssh.com/releasenotes.html"
