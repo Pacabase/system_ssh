@@ -166,13 +166,6 @@ final class SshFixture {
   Future<void> setUpAll() async {
     if (skip != null) return;
 
-    // "OpenSSH_9.6p1, ..." or "OpenSSH_for_Windows_9.5p2, ...", on stderr.
-    final version = RegExp(
-      r'^OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)',
-    ).firstMatch((await Process.run('ssh', ['-V'])).stderr as String);
-    if (version == null) throw StateError('ssh -V: no OpenSSH version');
-    _sshVersion = (int.parse(version[1]!), int.parse(version[2]!));
-
     final directory = Directory.systemTemp.createTempSync('system_ssh_test');
     _directory = directory;
     final knownHosts = _knownHosts.path.replaceAll(r'\', '/');
@@ -286,6 +279,14 @@ exec ssh -F '${directory.path}/config' "\$@"
 ''');
       await Process.run('chmod', ['+x', ssh]);
     }
+
+    // Read here rather than with the package's own, so a broken read there
+    // fails the tests that depend on the version.
+    final version = RegExp(
+      r'^OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)',
+    ).firstMatch((await Process.run(ssh, ['-V'])).stderr as String);
+    if (version == null) throw StateError('ssh -V: no OpenSSH version');
+    _sshVersion = (int.parse(version[1]!), int.parse(version[2]!));
 
     for (var attempt = 1; ; attempt++) {
       try {
@@ -507,7 +508,9 @@ final _harmlessLines = [
     r'^\*\* This session may be vulnerable to "store now, decrypt later" '
     r'attacks\.$',
   ),
-  RegExp(r'^\*\* The server may need to be upgraded\. See https://\S+$'),
+  RegExp(
+    r'^\*\* The server may need to be upgraded\. See https://openssh\.com/pq\.html$',
+  ),
   // ssh's warning around a changed host key, which the package reads from
   // the key ssh shows.
   RegExp(r'^@+$'),
@@ -526,7 +529,7 @@ final _harmlessLines = [
   RegExp(r'^  remove with:$'),
   RegExp(r'^  ssh-keygen -f .+ -R .+$'),
   RegExp(
-    r'^(Host|\S+ host) key for \S+ has changed and you have requested strict '
+    r'^(Host|[A-Z0-9]+ host) key for \S+ has changed and you have requested strict '
     r'checking\.$',
   ),
   // Before "Host key verification failed.", which says why.
