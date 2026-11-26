@@ -186,10 +186,91 @@ jobs:
         # On Linux and macOS, root's sshd wrote it.
         run: cat "$LOG" 2>/dev/null || sudo cat "$LOG"
 
+  # The same tests with an ssh the images don't ship: the oldest releases
+  # people still run and those newer than any image, against the runner's own
+  # sshd. A new release is one more line here.
+  openssh:
+    name: openssh (${{ matrix.version || matrix.name }})
+    needs: [analyze, unit]
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Built from source on Ubuntu 24.04; the SHA-256 is of the release tarball.
+          - { version: 7.6p1, openssl: '1.0', sha256: a323caeeddfe145baaa0db16e98d784b1fbc7dd436a6bf1f479dfd5cd1d21723 }
+          - { version: 8.0p1, sha256: bd943879e69498e8031eb6b7f44d08cdc37d59a7ab689aa0b437320c3481fd68 }
+          - { version: 8.2p1, sha256: 43925151e6cf6cee1450190c0e9af4dc36b41c12737619edff8bcebdff64e671 }
+          - { version: 8.4p1, sha256: 5a01d22e407eb1c05ba8a8f7c654d388a13e9f226e4ed33bd38748dafa1d2b24 }
+          - { version: 10.4p1, sha256: ef6026dd2aea8d56059638d5d3262902c892ceba9f88395835e0d06d3fb63238 }
+          - { version: 10.5p1, sha256: d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11 }
+          - { version: 10.6p2, sha256: 9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b }
+          # Homebrew's, which follows the newest release.
+          - { name: Homebrew, os: macos-26 }
+          # Microsoft's newest Win32-OpenSSH; the SHA-256 is of OpenSSH-Win64.zip.
+          - { name: Win32-OpenSSH 10.4.0.0p1, os: windows-2025, win32: 10.4.0.0p1-Preview, sha256: b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957 }
+    runs-on: ${{ matrix.os || 'ubuntu-24.04' }}
+    env:
+      SSH_TEST_PORT: 2222
+      SSH_TEST_PASSWORD: Correct-Horse-Staple-42
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Before the ssh under test goes on the PATH, so the sshd's keys come from the runner's own tools.
+      - name: Start sshd
+        id: sshd
+        uses: ./.github/actions/sshd
+        with:
+          port: ${{ env.SSH_TEST_PORT }}
+          password: ${{ env.SSH_TEST_PASSWORD }}
+      - if: matrix.version
+        uses: ./.github/actions/openssh
+        with:
+          version: ${{ matrix.version }}
+          sha256: ${{ matrix.sha256 }}
+          openssl: ${{ matrix.openssl }}
+      - if: runner.os == 'macOS'
+        run: |
+          brew install openssh
+          echo "$(brew --prefix openssh)/bin" >> "$GITHUB_PATH"
+          echo "SSH_UNDER_TEST=$(brew --prefix openssh)/bin/ssh" >> "$GITHUB_ENV"
+      - if: runner.os == 'Windows'
+        name: Install Win32-OpenSSH
+        shell: pwsh
+        env:
+          TAG: ${{ matrix.win32 }}
+          SHA256: ${{ matrix.sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "$env:RUNNER_TEMP\OpenSSH-Win64.zip"
+          Invoke-WebRequest "https://github.com/PowerShell/Win32-OpenSSH/releases/download/$env:TAG/OpenSSH-Win64.zip" -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $env:SHA256) { throw "OpenSSH-Win64.zip doesn't match its SHA-256" }
+          Expand-Archive $zip $env:RUNNER_TEMP
+          "$env:RUNNER_TEMP\OpenSSH-Win64" >> $env:GITHUB_PATH
+          "SSH_UNDER_TEST=$env:RUNNER_TEMP\OpenSSH-Win64\ssh.exe" >> $env:GITHUB_ENV
+      - uses: dart-lang/setup-dart@2286a0c042b44434fe26d292bbce8d34f7ec662b # v1.8.2
+      - run: dart pub get
+      # Fails if the PATH still finds the runner's own ssh. In pwsh, since
+      # Windows' Git Bash finds its own ssh first.
+      - name: Check the ssh under test
+        shell: pwsh
+        run: |
+          $ssh = (Get-Command ssh).Source
+          $ssh; ssh -V
+          if ($ssh -ne $env:SSH_UNDER_TEST) { throw "ssh is $ssh, not $env:SSH_UNDER_TEST" }
+      - run: dart test --tags integration --run-skipped
+      - name: Show sshd log
+        if: failure() && steps.sshd.outputs.log
+        shell: bash
+        env:
+          LOG: ${{ steps.sshd.outputs.log }}
+        run: cat "$LOG" 2>/dev/null || sudo cat "$LOG"
+
   # The one required check, so the matrix can change without touching branch rules.
   ci:
     if: always()
-    needs: [analyze, windows-askpass, unit, integration]
+    needs: [analyze, windows-askpass, unit, integration, openssh]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

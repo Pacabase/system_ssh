@@ -386,6 +386,14 @@ Tested in CI against a real `sshd`, with each runner's own OpenSSH:
 | macOS 15, 26 | 9.9, 10.3 |
 | Windows Server 2022, 2025 | 9.5 |
 
+And with an ssh the runners don't ship:
+
+| Runner | OpenSSH |
+|---|---|
+| Ubuntu 24.04, built from source | 7.6, 8.0, 8.2, 8.4, 10.4, 10.5, 10.6 |
+| macOS 26, Homebrew | the newest release |
+| Windows Server 2025, Win32-OpenSSH | 10.4 |
+
 ## Testing
 
 Depend on the `SshClient` interface, and pass a fake in tests. Code that only

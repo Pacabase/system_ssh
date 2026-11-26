@@ -183,7 +183,8 @@ void main() {
 
       expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
       expect(prompts.single, isA<SshPasswordPrompt>());
-      expect(prompts.single.isVerified, isTrue);
+      // Before OpenSSH 8.5, ssh doesn't say which login a prompt is for.
+      expect(prompts.single.isVerified, fixture.sshIsAtLeast(8, 5));
     });
 
     test('throws SshLoginRefusedException for a wrong password', () async {
@@ -213,7 +214,7 @@ void main() {
         expect(await fixture.echoThrough(tunnel.localPort, 'hello'), 'hello');
         expect(prompts.single, isA<SshCodePrompt>());
         expect(prompts.single.text, contains('Password'));
-        expect(prompts.single.isVerified, isTrue);
+        expect(prompts.single.isVerified, fixture.sshIsAtLeast(8, 5));
       },
       // Windows' sshd has no PAM to ask through keyboard-interactive.
       testOn: '!windows',
