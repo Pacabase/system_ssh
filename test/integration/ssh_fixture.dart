@@ -497,6 +497,17 @@ final _harmlessLines = [
   RegExp(r'^bind: (Address already in use|Permission denied)$'),
   RegExp(r'^channel_setup_fwd_listener_tcpip: cannot listen to port: \d+$'),
   RegExp(r'^Could not request local forwarding\.$'),
+  // OpenSSH 10.1+ against a server with no post-quantum key exchange, such as
+  // Windows' own sshd.
+  RegExp(
+    r'^\*\* WARNING: connection is not using a post-quantum key exchange '
+    r'algorithm\.$',
+  ),
+  RegExp(
+    r'^\*\* This session may be vulnerable to "store now, decrypt later" '
+    r'attacks\.$',
+  ),
+  RegExp(r'^\*\* The server may need to be upgraded\. See https://\S+$'),
   // ssh's warning around a changed host key, which the package reads from
   // the key ssh shows.
   RegExp(r'^@+$'),
