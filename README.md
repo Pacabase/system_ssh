@@ -378,6 +378,10 @@ unattended tunnel needs:
 
 ## Platforms
 
+Linux, macOS and Windows. Mobile and the web have no system `ssh`, so
+there's no support there: see [When to use dartssh2
+instead](#when-to-use-dartssh2-instead).
+
 Tested in CI against a real `sshd`, with each runner's own OpenSSH:
 
 | Runner | OpenSSH |
@@ -393,6 +397,23 @@ And with an ssh the runners don't ship:
 | Ubuntu 24.04, built from source | 7.6, 8.0, 8.2, 8.4, 10.4, 10.5, 10.6 |
 | macOS 26, Homebrew | the newest release |
 | Windows Server 2025, Win32-OpenSSH | 10.4 |
+
+## When to use dartssh2 instead
+
+system_ssh only opens tunnels, and only where an `ssh` is installed. Use it
+when a tunnel should open exactly as it does from your terminal, with what
+your `ssh` already has:
+
+- `Host` aliases, `ProxyJump`, `Include` and `Match` in `~/.ssh/config`
+- your identity files, and your agent, including `IdentityAgent` sockets
+  such as 1Password's
+- hardware keys, such as a FIDO2 security key (`ed25519-sk`), and
+  certificates
+- the hosts you already trust in `known_hosts`
+
+For commands, a shell or SFTP, or for iOS, Android or the web, use
+[dartssh2](https://pub.dev/packages/dartssh2), an SSH client written in Dart
+that needs no `ssh`.
 
 ## Testing
 
