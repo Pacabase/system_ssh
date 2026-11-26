@@ -24,4 +24,10 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: .github/actions/openssh/releases.sh
+        run: .github/actions/openssh/releases.sh openssh
+      # Even when the OpenSSH check failed.
+      - if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: .github/actions/openssh/releases.sh win32
