@@ -15,25 +15,26 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - id: paths
-      shell: bash
-      run: echo "prefix=$RUNNER_TEMP/openssh-${{ inputs.version }}" >> "$GITHUB_OUTPUT"
     # The binaries link the image's own libraries, so a new image builds again.
     - id: cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ steps.paths.outputs.prefix }}
-        key: openssh-${{ inputs.version }}-${{ inputs.sha256 }}-${{ runner.os }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ hashFiles('.github/actions/openssh/build.sh') }}
+        path: ${{ runner.temp }}/openssh-${{ inputs.version }}
+        key: openssh-${{ inputs.version }}-${{ inputs.sha256 }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ hashFiles('.github/actions/openssh/build.sh') }}
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         VERSION: ${{ inputs.version }}
         SHA256: ${{ inputs.sha256 }}
         OPENSSL: ${{ inputs.openssl }}
-        PREFIX: ${{ steps.paths.outputs.prefix }}
+        PREFIX: ${{ runner.temp }}/openssh-${{ inputs.version }}
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq --no-install-recommends libssl-dev zlib1g-dev
         "$GITHUB_ACTION_PATH/build.sh"
     - shell: bash
-      run: echo "${{ steps.paths.outputs.prefix }}/bin" >> "$GITHUB_PATH"
+      env:
+        BIN: ${{ runner.temp }}/openssh-${{ inputs.version }}/bin
+      run: |
+        echo "$BIN" >> "$GITHUB_PATH"
+        echo "SSH_UNDER_TEST=$BIN/ssh" >> "$GITHUB_ENV"
