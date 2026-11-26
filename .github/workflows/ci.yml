@@ -208,7 +208,7 @@ jobs:
           # Homebrew's, which follows the newest release.
           - { name: Homebrew, os: macos-26 }
           # Microsoft's newest Win32-OpenSSH; the SHA-256 is of OpenSSH-Win64.zip.
-          - { name: Win32-OpenSSH 10.4.0.0p1, os: windows-2025, win32: 10.4.0.0p1-Preview, expect: OpenSSH_for_Windows_10.4, sha256: b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957 }
+          - { name: Win32-OpenSSH 10.4.0.0p1, os: windows-2025, win32: 10.4.0.0p1-Preview, sha256: b67ff8becd203502190ec42ac7787c24c2cd3325ed7700485fe7a1c83d2a7957 }
     runs-on: ${{ matrix.os }}
     env:
       SSH_TEST_PORT: 2222
@@ -251,16 +251,25 @@ jobs:
       - run: dart pub get
       # Fails if the PATH still finds the runner's own ssh.
       - name: Check the ssh under test
-        shell: bash
+        if: runner.os != 'Windows'
         env:
-          EXPECTED: ${{ matrix.expect || format('OpenSSH_{0},', matrix.version) }}
+          EXPECTED: OpenSSH_${{ matrix.version }},
         run: |
           command -v ssh
           ssh -V
-          case "$RUNNER_OS" in
-            macOS) [ "$(command -v ssh)" = "$(brew --prefix openssh)/bin/ssh" ] ;;
-            *) ssh -V 2>&1 | grep -q "^$EXPECTED" ;;
-          esac
+          if [ "$RUNNER_OS" = macOS ]; then
+            [ "$(command -v ssh)" = "$(brew --prefix openssh)/bin/ssh" ]
+          else
+            ssh -V 2>&1 | grep -q "^$EXPECTED"
+          fi
+      # In pwsh, since Git Bash finds its own ssh first.
+      - name: Check the ssh under test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ssh = (Get-Command ssh).Source
+          $ssh; ssh -V
+          if ($ssh -ne "$env:RUNNER_TEMP\OpenSSH-Win64\ssh.exe") { throw "ssh is $ssh" }
       - run: dart test --tags integration --run-skipped
       - name: Show sshd log
         if: failure() && steps.sshd.outputs.log

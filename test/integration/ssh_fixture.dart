@@ -39,6 +39,7 @@ final class SshFixture {
   }
 
   Directory? _directory;
+  (int, int)? _sshVersion;
   ServerSocket? _echo;
   final _accepted = <Socket>[];
   Process? _agent;
@@ -56,6 +57,13 @@ final class SshFixture {
 
   /// How ssh names [target] in known_hosts.
   String get hostKeyName => _hostKeyName;
+
+  /// Whether the ssh under test is OpenSSH [major].[minor] or newer.
+  bool sshIsAtLeast(int major, int minor) {
+    final (actualMajor, actualMinor) = _require(_sshVersion, 'setUpAll');
+    return actualMajor > major ||
+        (actualMajor == major && actualMinor >= minor);
+  }
 
   /// The sshd as the current user, for an ssh with no config at all.
   SshTarget get bareTarget => SshTarget(
@@ -157,6 +165,13 @@ final class SshFixture {
   /// Writes the config and the ssh that reads it, and waits for the sshd.
   Future<void> setUpAll() async {
     if (skip != null) return;
+
+    // "OpenSSH_9.6p1, ..." or "OpenSSH_for_Windows_9.5p2, ...", on stderr.
+    final version = RegExp(
+      r'^OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)',
+    ).firstMatch((await Process.run('ssh', ['-V'])).stderr as String);
+    if (version == null) throw StateError('ssh -V: no OpenSSH version');
+    _sshVersion = (int.parse(version[1]!), int.parse(version[2]!));
 
     final directory = Directory.systemTemp.createTempSync('system_ssh_test');
     _directory = directory;
@@ -478,6 +493,8 @@ bool isKnownLine(String line) =>
 final _harmlessLines = [
   // A taken local port, which the package finds by checking the port.
   RegExp(r'^bind \[[^\]]+\]:\d+: (Address already in use|Permission denied)$'),
+  // The same from older releases, such as 7.6, which don't name the address.
+  RegExp(r'^bind: (Address already in use|Permission denied)$'),
   RegExp(r'^channel_setup_fwd_listener_tcpip: cannot listen to port: \d+$'),
   RegExp(r'^Could not request local forwarding\.$'),
   // ssh's warning around a changed host key, which the package reads from
@@ -498,7 +515,8 @@ final _harmlessLines = [
   RegExp(r'^  remove with:$'),
   RegExp(r'^  ssh-keygen -f .+ -R .+$'),
   RegExp(
-    r'^Host key for \S+ has changed and you have requested strict checking\.$',
+    r'^(Host|\S+ host) key for \S+ has changed and you have requested strict '
+    r'checking\.$',
   ),
   // Before "Host key verification failed.", which says why.
   RegExp(
